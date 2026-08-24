@@ -5812,40 +5812,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         }
                     }
 
-                    // Export layout: make each rendered system fluid (no fixed pixel width).
-                    try {
-                        const systemEls = Array.from(clone.querySelectorAll('[data-system-index]')) as HTMLElement[];
-                        for (const el of systemEls) {
-                            el.style.width = '100%';
-                            el.style.maxWidth = '100%';
-                            el.style.overflow = 'visible';
-                        }
-                    } catch {
-                        // ignore
-                    }
-
-                    // Critical for PDF: without viewBox, shrinking width clips SVG content.
-                    // Add a viewBox from the original width/height and make width fluid.
-                    try {
-                        const svgs = Array.from(clone.querySelectorAll('svg')) as SVGSVGElement[];
-                        for (const svg of svgs) {
-                            const w = Number(svg.getAttribute('width') || svg.clientWidth || 0);
-                            const h = Number(svg.getAttribute('height') || svg.clientHeight || 0);
-                            if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
-                                if (!svg.getAttribute('viewBox')) {
-                                    svg.setAttribute('viewBox', `0 0 ${Math.round(w)} ${Math.round(h)}`);
-                                }
-                                svg.setAttribute('preserveAspectRatio', 'xMinYMin meet');
-                            }
-                            svg.setAttribute('width', '100%');
-                            svg.style.width = '100%';
-                            svg.style.maxWidth = '100%';
-                            svg.style.height = 'auto';
-                        }
-                    } catch {
-                        // ignore
-                    }
-
+                    // ── NIENTE LARGHEZZE FLUIDE: LA PAGINA SI RIMPICCIOLISCE INTERA ──
+                    //
+                    // Qui si stirava ogni `<svg>` a `width:100%`. Sembra ragionevole e non lo
+                    // e', perche' i righi NON sono un solo disegno: sopra il pentagramma ci
+                    // sono STRATI sovrapposti — le parentesi delle terzine, le etichette
+                    // d'analisi — che sono `<svg>` a se', larghi quanto il sistema ma appesi
+                    // a un contenitore diverso. Un «100%» misurato su contenitori diversi da'
+                    // larghezze diverse: lo strato veniva stirato piu' del pentagramma, e i
+                    // segni scivolavano verso destra tanto piu' quanto piu' erano a destra —
+                    // fino a uscire dalla musica. Restava anche una striscia vuota a destra,
+                    // che era la differenza fra le due larghezze.
+                    //
+                    // Il rimpicciolimento non si fa qui, elemento per elemento: si fa una
+                    // volta sola sull'INTERA pagina, con `zoom`, dopo aver misurato quanto
+                    // sta nel foglio (vedi `adattaPaginaAllaCarta` in electron/main.js e
+                    // `adattaFinestraDiStampa` qui sotto). Cosi' pentagramma e strati
+                    // rimpiccioliscono INSIEME, come si vede a video: la geometria fra loro
+                    // non cambia mai, perche' nessuno la ricalcola.
                     return clone.innerHTML;
                 } catch {
                     return container.innerHTML;
@@ -5856,11 +5840,22 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                               @page { size: A4 ${canvasFormat === 'page' ? 'portrait' : 'landscape'}; margin: 8mm; }
                               html{overflow:visible !important;}
                               body{background:white;margin:0;padding:8px;overflow:visible !important;width:100% !important;box-sizing:border-box;}
-                              .ht-staff-container{width:100% !important;max-width:100% !important;overflow:visible !important;}
+                              .ht-staff-container{overflow:visible !important;}
                               /* Keep each staff system (a row of music) whole on one page —
                                  the print engine must not cut a system across a page break. */
-                              [data-system-index]{width:100% !important;max-width:100% !important;overflow:visible !important;break-inside:avoid;page-break-inside:avoid;}
-                              svg{max-width:100%;width:100%;height:auto;overflow:visible !important;}
+                              /* E OGNI SISTEMA SI CENTRA DA SE'. Il centraggio va messo QUI,
+                                 sui sistemi, non sul contenitore: l'esportazione clona il
+                                 contenitore e ne prende solo il CONTENUTO, cioe' i figli —
+                                 il contenitore nella pagina esportata NON ESISTE, e una
+                                 regola scritta su di lui non trova niente da centrare.
+                                 (E niente apici inversi in questo commento: sta dentro una
+                                 stringa template, e li' un apice inverso la chiude.)
+                                 Quel che avanza si divide fra i due lati: l'altezza e' quasi
+                                 sempre il vincolo piu' stretto, quindi un filo di margine in
+                                 larghezza resta comunque — ma tutto da un lato sembra un
+                                 errore di centratura, diviso a meta' sembra un margine. */
+                              [data-system-index]{overflow:visible !important;break-inside:avoid;page-break-inside:avoid;width:fit-content;margin-left:auto;margin-right:auto;}
+                              svg{overflow:visible !important;}
               /* Export/print mode: hide interactive overlays and analysis layers */
               .export-exclude{display:none !important;}
               input, textarea, select{display:none !important;}
@@ -5871,6 +5866,51 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [exportIncludeTitle, projectTitle, projectComposer, titleFontFamily, titleFontSize, canvasFormat]);
 
     // Print handler (moved above menu handler to avoid temporal dead zone): opens a print window for the staff container
+    /** Rimpicciolisce la finestra di stampa finche' un SISTEMA INTERO ci sta nel foglio.
+     *
+     *  Gemella di `adattaPaginaAllaCarta` (electron/main.js), che fa lo stesso per PDF e
+     *  PNG: la pagina esportata porta misure in pixel del video — su una partitura a molte
+     *  parti un sistema e' piu' largo E piu' alto di un A4 — e senza adattamento esce
+     *  tagliata a destra, con i sistemi spezzati fra le pagine.
+     *
+     *  Si usa `zoom` e non `transform: scale`: `zoom` cambia la DISPOSIZIONE, quindi
+     *  l'impaginazione avviene sui contenuti gia' rimpiccioliti e «non spezzare un sistema»
+     *  puo' essere rispettato. `transform` rimpicciolirebbe il disegno lasciando
+     *  l'impaginazione ai numeri di prima. */
+    const adattaFinestraDiStampa = useCallback((w: Window) => {
+        try {
+            const MM = 96 / 25.4;
+            const MARGINE_MM = 8; // uguale al `@page { margin }` della pagina esportata
+            const verticale = canvasFormat === 'page';
+            const largMm = (verticale ? 210 : 297) - 2 * MARGINE_MM;
+            const altMm = (verticale ? 297 : 210) - 2 * MARGINE_MM;
+            const utileL = Math.floor(largMm * MM);
+            const utileA = Math.floor(altMm * MM);
+
+            let larghezza = 0;
+            let altezza = 0;
+            const sistemi = Array.from(w.document.querySelectorAll('[data-system-index]')) as HTMLElement[];
+            for (const el of sistemi) {
+                // Si misura il blocco NEL FLUSSO, cioe' la musica: gli strati sovrapposti
+                // (parentesi, etichette) stanno in posizione assoluta e possono sporgere.
+                // Contarli vorrebbe dire rimpicciolire per far stare qualcosa che non si
+                // vede, e ritrovarsi quei pixel come banda bianca da un lato solo.
+                const dentro = el.firstElementChild as HTMLElement | null;
+                const r = (dentro ?? el).getBoundingClientRect();
+                if (r.height > altezza) altezza = Math.ceil(r.height);
+                if (Math.ceil(r.width) > larghezza) larghezza = Math.ceil(r.width);
+            }
+            if (!larghezza || !altezza) return;
+
+            const RESPIRO = 0.98; // cadere esatti sulla misura del foglio produce pagine bianche
+            const fattore = Math.max(0.2, Math.min(1, Math.min(utileL / larghezza, utileA / altezza) * RESPIRO));
+            if (fattore < 0.999) (w.document.documentElement.style as any).zoom = String(fattore);
+        } catch {
+            // Senza adattamento si stampa come prima: meglio una stampa da correggere a mano
+            // che nessuna stampa.
+        }
+    }, [canvasFormat]);
+
     const handlePrint = useCallback(() => {
         const html = buildExportHtml();
         if (!html) return;
@@ -5890,12 +5930,15 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             printWindow.addEventListener('afterprint', onAfterPrint);
             printWindow.addEventListener('load', () => {
                 try { printWindow.focus(); } catch { /* ignore */ }
+                // L'adattamento va fatto QUI, a pagina caricata: prima non ci sarebbe niente
+                // da misurare, e dopo la stampa sarebbe gia' partita.
+                try { adattaFinestraDiStampa(printWindow); } catch { /* ignore */ }
                 try { printWindow.print(); } catch { /* ignore */ }
             }, { once: true });
         } catch {
             // ignore
         }
-    }, [buildExportHtml]);
+    }, [buildExportHtml, adattaFinestraDiStampa]);
 
     const projectExtrasRef = useRef<Record<string, unknown>>(EMPTY_EXTRAS);
     const draftArgsRef = useRef<any>(null);

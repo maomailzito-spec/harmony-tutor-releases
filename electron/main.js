@@ -61,19 +61,32 @@ function safeStdioWrite(stream, line) {
 // In some environments (especially on certain macOS setups), Chromium GPU process
 // can crash and leave the renderer as a white screen. Disable hardware acceleration
 // to make the app robust.
-try {
-  app.disableHardwareAcceleration();
-} catch {
-  // ignore
-}
+//
+// PERO' SI PAGA IN DISEGNO. Senza scheda grafica, il pentagramma — che e' SVG, e su un
+// brano lungo sono centinaia di righi — lo ridipinge la CPU, la stessa che deve gia'
+// reggere l'editor e l'audio. Finche' non e' misurato non si cambia niente: questa
+// protezione e' li' per un bianco schermo vero, e riaccendere la scheda grafica alla
+// cieca vorrebbe dire scambiare un rallentamento con un difetto peggiore.
+//
+// Per poterlo MISURARE invece di discuterne: `HT_GPU=1` nell'ambiente riaccende la scheda
+// grafica per quell'avvio. Serve a confrontare lo stesso brano nei due modi; il difetto
+// resta spento, come sempre.
+const gpuChiestaDallUtente = String(process.env.HT_GPU || '') === '1';
+if (!gpuChiestaDallUtente) {
+  try {
+    app.disableHardwareAcceleration();
+  } catch {
+    // ignore
+  }
 
-// Extra hardening: force-disable Chromium GPU features.
-// (Safe even when hardware acceleration is already disabled.)
-try {
-  app.commandLine.appendSwitch('disable-gpu');
-  app.commandLine.appendSwitch('disable-gpu-compositing');
-} catch {
-  // ignore
+  // Extra hardening: force-disable Chromium GPU features.
+  // (Safe even when hardware acceleration is already disabled.)
+  try {
+    app.commandLine.appendSwitch('disable-gpu');
+    app.commandLine.appendSwitch('disable-gpu-compositing');
+  } catch {
+    // ignore
+  }
 }
 
 const {
@@ -175,11 +188,183 @@ function onceDidFinishLoad(webContents) {
   });
 }
 
+// LA PAGINA DA ESPORTARE PASSA DA UN FILE, NON DA UN INDIRIZZO.
+//
+// Prima si caricava con `data:text/html,...` + `encodeURIComponent`. Funziona sui brani
+// corti e SMETTE di funzionare su quelli lunghi, perche' un indirizzo non e' un contenitore:
+// Chromium taglia gli URL intorno ai 2 MB, e la codifica percentuale GONFIA — ogni `<`, `>`,
+// virgoletta e a capo diventa tre caratteri, e uno spartito e' SVG, cioe' quasi solo quelli.
+// Una partitura a tredici parti sfonda il limite senza avvicinarsi a niente di strano.
+//
+// Il guasto poi si presentava in modo irriconoscibile: l'errore di Chromium contiene
+// l'indirizzo che non e' riuscito a caricare, quindi il messaggio d'errore ERA la pagina
+// codificata, e in finestra compariva un muro di `%3C%2F...` invece di un PDF.
+//
+// Un file temporaneo non ha limiti di lunghezza. Il `<base href>` viaggia dentro l'HTML,
+// quindi fogli di stile e caratteri continuano a risolversi come prima, da qualunque
+// cartella si carichi la pagina.
+/** Quanto e' grande una pagina, in pixel CSS a 96 dpi, margini gia' tolti. */
+function paginaUtilePx(pageSize, landscape) {
+  const MM = 96 / 25.4;
+  const [lMm, aMm] = pageSize === 'Letter' ? [215.9, 279.4] : [210, 297];
+  const largMm = landscape ? aMm : lMm;
+  const altMm = landscape ? lMm : aMm;
+  const MARGINE_MM = 8; // deve restare uguale al `@page { margin }` della pagina esportata
+  return {
+    larghezza: Math.floor((largMm - 2 * MARGINE_MM) * MM),
+    altezza: Math.floor((altMm - 2 * MARGINE_MM) * MM),
+  };
+}
+
+/**
+ * RIMPICCIOLISCE LA PAGINA FINCHE' UN SISTEMA CI STA DENTRO.
+ *
+ * La pagina esportata NON e' fluida come sembra: il contenitore di ogni sistema prende
+ * `width:100%`, ma il blocco che ha dentro conserva le misure in pixel del video — su una
+ * partitura a tredici parti sono ~1440 di larghezza e ~2170 di altezza. Su un A4
+ * orizzontale ce ne stanno 1063 × 734: il quarto di destra resta fuori, e un sistema alto
+ * tre pagine non puo' stare intero da nessuna parte — con «non spezzare un sistema» il
+ * motore lo sposta e lo taglia lo stesso, e i segni disegnati negli strati sovrapposti
+ * finiscono sulla pagina che corrisponde alla loro altezza, da soli, senza le note.
+ *
+ * Si misura il sistema PIU' GRANDE cosi' com'e' stato impaginato — non lo si deduce dai
+ * numeri dell'editor, che sono un'altra cosa — e si sceglie l'ingrandimento piu' grande che
+ * lo fa stare per intero, in larghezza E in altezza.
+ *
+ * Lo strumento e' `zoom`, non `transform: scale`: `zoom` cambia la DISPOSIZIONE, quindi il
+ * motore di stampa impagina sui contenuti gia' rimpiccioliti e «non spezzare un sistema»
+ * torna a poter essere rispettato. `transform` sposterebbe solo il disegno, lasciando
+ * l'impaginazione ai numeri di prima.
+ */
+async function adattaPaginaAllaCarta(win, pageSize, landscape) {
+  const utile = paginaUtilePx(pageSize, landscape);
+  // SI MISURA LA MUSICA, NON TUTTO CIO' CHE LE STA INTORNO.
+  //
+  // Due tentativi sbagliati prima di questo, e per lo stesso motivo: cercavo la larghezza
+  // «piu' grande» invece di quella GIUSTA.
+  //  · scorrere i discendenti a caccia del bordo piu' a destra: gonfiava, perche' gli
+  //    strati sovrapposti sono agganciati a contenitori diversi;
+  //  · `scrollWidth`: gonfiava ancora, perche' comprende cio' che TRABOCCA — misurato,
+  //    154 px di strato che sporge oltre la musica su un sistema da 1448.
+  // In entrambi i casi si rimpicciolisce per far stare qualcosa che non si vede, e quei
+  // pixel invisibili ricompaiono sul foglio come banda bianca da un lato solo.
+  //
+  // La musica e' il blocco NEL FLUSSO — il riquadro bianco con le sue misure in pixel.
+  // Il riquadro del sistema (`fit-content`) e' esattamente quello: gli strati sovrapposti,
+  // essendo in posizione assoluta, non concorrono a dimensionarlo. Cio' che sporge puo'
+  // sconfinare nel margine: e' decorazione, e il margine e' fatto per quello.
+  const misure = await win.webContents.executeJavaScript(`(() => {
+    const sistemi = Array.from(document.querySelectorAll('[data-system-index]'));
+    let larghezza = 0, altezza = 0;
+    for (const el of sistemi) {
+      const dentro = el.firstElementChild; // il blocco della musica
+      const r = (dentro || el).getBoundingClientRect();
+      if (r.height > altezza) altezza = Math.ceil(r.height);
+      if (Math.ceil(r.width) > larghezza) larghezza = Math.ceil(r.width);
+    }
+    return { larghezza, altezza, quanti: sistemi.length };
+  })()`);
+
+  const larg = Number(misure && misure.larghezza) || 0;
+  const alt = Number(misure && misure.altezza) || 0;
+  // Misura non riuscita: si dichiara, non si finge un 1. Chi chiama deve poter tornare al
+  // comportamento di prima invece di stampare convinto che ci stia tutto.
+  if (!larg || !alt) return null;
+
+  // Un filo di respiro: cadere ESATTAMENTE sulla misura della pagina e' il modo per
+  // ritrovarsi un sistema per pagina piu' una pagina bianca, perche' basta un arrotondamento
+  // dalla parte sbagliata per sfondare di un pixel.
+  const RESPIRO = 0.98;
+  // Il pavimento evita di ridurre uno spartito a francobollo per colpa di una misura
+  // sballata: sotto un quinto non si stampa niente di leggibile, meglio accorgersene.
+  const PAVIMENTO = 0.2;
+  const fattore = Math.max(
+    PAVIMENTO,
+    Math.min(1, Math.min(utile.larghezza / larg, utile.altezza / alt) * RESPIRO),
+  );
+  if (fattore >= 0.999) return 1;
+
+  await win.webContents.executeJavaScript(
+    `document.documentElement.style.zoom = ${fattore}; true;`
+  );
+  await sleep(150);
+
+  // I NUMERI VERI, SCRITTI SU DISCO ACCANTO ALLA PAGINA ESPORTATA.
+  //
+  // Quando il foglio esce con margini diversi da quelli previsti, la differenza fra il
+  // conto e il risultato e' l'unica cosa che dice DOVE si perde: senza, si discute di
+  // centimetri misurati a occhio contro percentuali calcolate a mente. Qui si annota cosa
+  // e' stato misurato, cosa e' stato applicato, e cosa risulta DOPO l'applicazione — che e'
+  // il numero che smaschera un secondo rimpicciolimento nascosto.
+  try {
+    const dopo = await win.webContents.executeJavaScript(`(() => {
+      const el = document.querySelector('[data-system-index]');
+      const r = el ? el.getBoundingClientRect() : null;
+      return {
+        larghezzaSistemaDopoZoom: r ? Math.round(r.width) : null,
+        larghezzaCorpo: Math.round(document.body.getBoundingClientRect().width),
+        zoomLetto: document.documentElement.style.zoom,
+      };
+    })()`);
+    const nota = percorsoUltimaEsportazione().replace(/\.html$/, '.json');
+    if (nota) {
+      fs.writeFileSync(nota, JSON.stringify({
+        pagina: pageSize, orizzontale: landscape,
+        areaUtilePx: utile,
+        sistemaMisurato: { larghezza: larg, altezza: alt },
+        fattoreApplicato: fattore,
+        dopoLApplicazione: dopo,
+      }, null, 2), 'utf8');
+    }
+  } catch { /* la diagnostica non deve impedire un'esportazione */ }
+
+  return fattore;
+}
+
+/** Dove finisce la copia dell'ultima pagina esportata (vedi `loadHtmlInWindow`). */
+function percorsoUltimaEsportazione() {
+  try { return path.join(app.getPath('temp'), 'harmony-tutor-ultima-esportazione.html'); } catch { return ''; }
+}
+
 async function loadHtmlInWindow(win, html) {
-  const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(String(html || ''))}`;
+  const testo = String(html || '');
+  let fileTemporaneo = null;
+  try {
+    fileTemporaneo = path.join(
+      app.getPath('temp'),
+      `harmony-tutor-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`,
+    );
+    fs.writeFileSync(fileTemporaneo, testo, 'utf8');
+  } catch (err) {
+    // Niente scrittura possibile: si ripiega sull'indirizzo, che sui brani corti basta.
+    fileTemporaneo = null;
+  }
+
   const p = onceDidFinishLoad(win.webContents);
-  await win.loadURL(dataUrl);
+  if (fileTemporaneo) {
+    await win.loadFile(fileTemporaneo);
+  } else {
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(testo)}`);
+  }
   await p;
+
+  // A pagina caricata il file non serve piu': il PDF e il PNG si producono dal DOM
+  // gia' in memoria, non rileggendo il disco.
+  //
+  // ...ma se ne tiene UNA COPIA in un posto fisso, sempre la stessa, sovrascritta a ogni
+  // esportazione. Quando un PDF esce tagliato o con i segni fuori posto, la pagina esportata
+  // e' l'unica prova che dice COSA e' stato mandato in stampa: senza, si finisce a dedurre
+  // la causa dall'aspetto del risultato, che e' esattamente il modo di sbagliare bersaglio.
+  // Non richiede di avviare il programma in modo speciale — quella strada obbligava a
+  // passare dal Terminale, e un difetto va potuto raccogliere da chi lo incontra.
+  // Costa un file di testo nella cartella temporanea del sistema, che le fa pulire da se'.
+  if (fileTemporaneo) {
+    const copia = percorsoUltimaEsportazione();
+    if (copia) {
+      try { fs.copyFileSync(fileTemporaneo, copia); } catch { /* una copia in meno non deve far fallire un'esportazione */ }
+    }
+    try { fs.unlinkSync(fileTemporaneo); } catch { /* un temporaneo che resta non fa danno */ }
+  }
 }
 
 function sleep(ms) {
@@ -199,7 +384,15 @@ function sendAction(action, payload) {
 
 function sendError(code, message) {
   if (!mainWindow) return false;
-  return sendMenuError(mainWindow.webContents, code, message);
+  // UN MESSAGGIO D'ERRORE NON E' UN POSTO DOVE RIVERSARE UN DOCUMENTO. Gli errori di
+  // caricamento di Chromium si portano dietro l'indirizzo fallito: con una pagina passata
+  // per `data:` erano megabyte di testo codificato, e in finestra compariva un muro di
+  // `%3C%2F...` al posto di una spiegazione. Si tronca: chi legge deve capire cosa non ha
+  // funzionato, non ricevere il documento indietro.
+  const LIMITE = 300;
+  const testo = String(message == null ? '' : message);
+  const corto = testo.length > LIMITE ? `${testo.slice(0, LIMITE)}… (messaggio troncato)` : testo;
+  return sendMenuError(mainWindow.webContents, code, corto);
 }
 
 // Dev build tag (helps verify you're running the workspace build).
@@ -1792,6 +1985,11 @@ ipcMain.handle(IPC_CHANNELS.EXPORT_PDF_FROM_HTML, async (_event, html, options) 
     const landscape = !!(options && options.landscape);
     const marginsType = (options && (options.marginsType === 0 || options.marginsType === 1 || options.marginsType === 2)) ? options.marginsType : 0;
 
+    // PRIMA di misurare: si rimpicciolisce finche' un sistema intero ci sta nella pagina.
+    // L'ordine conta — misurare e poi rimpicciolire darebbe una finestra dimensionata sui
+    // numeri di prima.
+    const fattoreDiAdattamento = await adattaPaginaAllaCarta(win, pageSize, landscape);
+
     // Direct SVG→PDF path: measure content, resize the hidden window to match
     // the print area, then call printToPDF. This preserves vector quality.
     const size = await win.webContents.executeJavaScript(
@@ -1813,12 +2011,24 @@ ipcMain.handle(IPC_CHANNELS.EXPORT_PDF_FROM_HTML, async (_event, html, options) 
     // Small delay so the resized window re-lays out before printing.
     await sleep(200);
 
+    // L'adattamento ha gia' cambiato la DISPOSIZIONE. Chiederne un altro qui lo
+    // moltiplicherebbe, e per giunta agendo sul solo disegno: l'impaginazione resterebbe
+    // quella dei contenuti grandi, cioe' il problema appena risolto. Quindi 100.
+    //
+    // La richiesta che arriva dall'editor si usa SOLO se la misura non e' riuscita: e'
+    // calcolata su una larghezza utile fissa di 1060 px, che e' quella dell'A4
+    // ORIZZONTALE — su un foglio verticale ne restano 733, e infatti stampando in
+    // verticale usciva un quarto di pagina in meno. Vale come ripiego, non come regola.
+    const ingrandimento = fattoreDiAdattamento === null
+      ? Math.max(45, Math.min(100, (options && options.scaleFactor) ? options.scaleFactor : 100))
+      : 100;
+
     const pdf = await win.webContents.printToPDF({
       pageSize,
       landscape,
       marginsType,
       printBackground: true,
-      scaleFactor: Math.max(45, Math.min(100, (options && options.scaleFactor) ? options.scaleFactor : 100)),
+      scaleFactor: ingrandimento,
       preferCSSPageSize: true,
     });
 
@@ -1866,28 +2076,103 @@ ipcMain.handle(IPC_CHANNELS.EXPORT_PNG_FROM_HTML, async (_event, html, options) 
     const contentW = Math.max(1, Math.round(size && size.w ? size.w : 1280));
     const contentH = Math.max(1, Math.round(size && size.h ? size.h : 900));
 
-    // Resize viewport for better captures.
+    // ── NON SI PUO' FOTOGRAFARE PIU' DI QUANTO SI VEDE ──
+    //
+    // `capturePage` ritaglia dalla FINESTRA, non dal documento: oltre il bordo del viewport
+    // non c'e' niente da prendere. Qui la finestra veniva alzata al massimo a 2000 px e poi
+    // si chiedeva un ritaglio alto fino a 8000 (`tileMaxHeightPx`), e le fette si contavano
+    // su quel numero: per uno spartito alto meno di 8000 px il conto dava UNA fetta sola,
+    // che pero' conteneva solo i primi 2000 px. Da qui «il PNG esporta una pagina sola».
+    //
+    // Il passo di scorrimento dev'essere l'altezza VERA della finestra, non quella
+    // desiderata: `setContentSize` la puo' ridurre (lo schermo ha un limite), e fidarsi del
+    // numero chiesto invece che di quello ottenuto rifa' lo stesso errore un piano piu' su.
     try {
-      await win.setContentSize(Math.min(2200, contentW), Math.min(tileMaxHeightPx, Math.max(900, Math.min(2000, contentH))));
+      await win.setContentSize(
+        Math.min(2200, Math.max(320, contentW)),
+        Math.max(900, Math.min(tileMaxHeightPx, contentH)),
+      );
     } catch { /* ignore */ }
+    await sleep(120);
 
-    const tiles = Math.max(1, Math.ceil(contentH / tileMaxHeightPx));
+    let larghezzaVera = Math.min(2200, contentW);
+    let altezzaVera = Math.max(900, Math.min(tileMaxHeightPx, contentH));
+    try {
+      const [wv, hv] = win.getContentSize();
+      if (Number.isFinite(wv) && wv > 0) larghezzaVera = wv;
+      if (Number.isFinite(hv) && hv > 0) altezzaVera = hv;
+    } catch { /* si tiene la stima */ }
+
+    const passo = Math.max(200, altezzaVera);
+
+    // ── SI TAGLIA FRA UN SISTEMA E L'ALTRO, NON A METRO ──
+    //
+    // Tagliare ogni `passo` pixel e' comodo per chi scrive il codice e inservibile per chi
+    // guarda: i pentagrammi si spezzano dove capita, e una riga di musica finisce meta' su
+    // un'immagine e meta' sull'altra. I confini buoni sono quelli dei SISTEMI, e la pagina
+    // sa dove sono: si chiedono a lei invece di calcolarli.
+    //
+    // Un sistema piu' alto della finestra non si puo' fotografare intero — `capturePage`
+    // ritaglia dalla finestra — quindi in quel caso si prende da solo, ed e' il meglio
+    // disponibile: meglio una riga tagliata che tutte tagliate a caso.
+    let confini = [];
+    try {
+      confini = await win.webContents.executeJavaScript(`(() => {
+        const y0 = window.scrollY || document.documentElement.scrollTop || 0;
+        return Array.from(document.querySelectorAll('[data-system-index]')).map((el) => {
+          const r = el.getBoundingClientRect();
+          return { cima: Math.max(0, Math.floor(r.top + y0)), fondo: Math.ceil(r.bottom + y0) };
+        });
+      })()`);
+    } catch { /* senza confini si torna al taglio a metro */ }
+
+    /** Le fette: ognuna comincia dove finisce la precedente e si chiude sull'ultimo
+     *  sistema che ci sta per intero. */
+    const fette = [];
+    if (Array.isArray(confini) && confini.length > 0) {
+      let inizio = 0;
+      let i = 0;
+      while (i < confini.length) {
+        let fine = inizio;
+        while (i < confini.length && (confini[i].fondo - inizio) <= passo) {
+          fine = confini[i].fondo;
+          i++;
+        }
+        if (fine <= inizio) {
+          // Questo sistema da solo non ci sta: se lo prende tutto per se', tagliato.
+          fine = Math.min(confini[i].fondo, inizio + passo);
+          i++;
+        }
+        fette.push({ da: inizio, a: fine });
+        inizio = fine;
+      }
+      if (inizio < contentH) fette.push({ da: inizio, a: contentH });
+    } else {
+      for (let y = 0; y < contentH; y += passo) fette.push({ da: y, a: Math.min(contentH, y + passo) });
+    }
+
     const outFiles = [];
-
-    for (let i = 0; i < tiles; i++) {
-      const y = i * tileMaxHeightPx;
-      const h = Math.min(tileMaxHeightPx, contentH - y);
-
-      // Scroll so the requested segment is in the viewport.
+    for (let i = 0; i < fette.length; i++) {
+      // Lo scorrimento si LEGGE dopo averlo fatto: sull'ultima fetta il documento finisce
+      // prima, il browser lo blocca dove puo', e ritagliare a partire dal punto CHIESTO
+      // invece che da quello raggiunto sposterebbe l'immagine.
+      let yVero = fette[i].da;
       try {
-        await win.webContents.executeJavaScript(`window.scrollTo(0, ${y});`);
+        yVero = await win.webContents.executeJavaScript(
+          `window.scrollTo(0, ${fette[i].da}); Math.round(window.scrollY || document.documentElement.scrollTop || 0)`
+        );
       } catch { /* ignore */ }
       await sleep(80);
 
-      const image = await win.webContents.capturePage({ x: 0, y: 0, width: contentW, height: h });
+      const h = Math.max(1, Math.min(fette[i].a - yVero, altezzaVera));
+      const image = await win.webContents.capturePage({
+        x: 0, y: 0,
+        width: Math.min(larghezzaVera, contentW),
+        height: h,
+      });
       const png = image.toPNG();
 
-      const outPath = (tiles === 1) ? filePath : numberedPath(filePath, i + 1);
+      const outPath = (fette.length === 1) ? filePath : numberedPath(filePath, i + 1);
       fs.writeFileSync(outPath, png);
       outFiles.push(outPath);
     }
