@@ -7658,7 +7658,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         stablePxPerQuarterRef.current = null;
     }, [layoutWidth]);
 
-    const layoutData = useMemo(() => {
+    const layoutData = useMemo(() => misuraCosto('layoutData (impaginazione)', () => {
         // New deterministic tick-based layout:
         // Use immediate `notes` (not deferred analyzedNotes) so the layout
         // updates instantly when a note is inserted.
@@ -8025,6 +8025,56 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // densità della musica.
         const aCapoDopo = new Set<number>((systemBreaks || []).map(n => Math.max(0, Math.round(Number(n)))).filter(n => Number.isFinite(n)));
 
+        // ── I DUE CONTI DEVONO PARLARSI ────────────────────────────────────────────
+        //
+        // Piu' sotto la larghezza definitiva di un sistema esce da un MASSIMO fra minimi:
+        //   pxPerTick = max(minimo assoluto, valore di serie, respiro fra attacchi vicini,
+        //                   larghezza disponibile / tick)
+        // Se a vincere e' uno dei minimi invece dell'ultimo, il sistema diventa PIU' LARGO
+        // della pagina — e un sistema piu' largo della pagina non va a capo: sfora a destra,
+        // e le note dell'ultima misura finiscono FUORI dal pentagramma.
+        //
+        // La decisione di spezzare la riga, pero', si prendeva con un modello DIVERSO
+        // (`measureDemand`, venti pixel per attacco), che diceva «ci sta». Due conti che non
+        // si parlano: uno teneva quattro misure sulla riga, l'altro poi ne chiedeva la
+        // larghezza di cinque. Ed e' per questo che col tetto a 4 il difetto compariva e con
+        // «tetto 3 + zoom» — stesse quattro misure sulla riga, ma larghezza disponibile
+        // maggiore — no: cambiava chi vinceva il massimo.
+        //
+        // Qui la riga si spezza anche quando e' il RESPIRO a non entrare. Il conto e' lo
+        // stesso che verra' rifatto sotto: se cambia uno, deve cambiare l'altro, ed e' per
+        // questo che i minimi stanno adesso in costanti condivise invece che in due copie.
+        const MIN_PIXEL_SPACING = 8;
+        const minPxPerTickAssoluto = MIN_PX_PER_QUARTER / TICKS_PER_QUARTER;
+        const defaultPxCondiviso = (typeof DEFAULT_PX_PER_TICK === 'number' && DEFAULT_PX_PER_TICK > 0) ? DEFAULT_PX_PER_TICK : 0;
+
+        /** Distanza minima fra due attacchi vicini DENTRO una misura (in tick). */
+        const respiroDiMisura = (mi: number): number => {
+            const ticks = [...(attacchiPerMisura.get(mi)?.keys() ?? [])].sort((a, b) => a - b);
+            let minimo = Infinity;
+            for (let i = 1; i < ticks.length; i++) {
+                const d = ticks[i] - ticks[i - 1];
+                if (d > 0 && d < minimo) minimo = d;
+            }
+            return minimo;
+        };
+
+        /** Quanto vuole una riga se il respiro minimo fra attacchi vicini va rispettato. */
+        const larghezzaRichiestaDaiRespiri = (misure: number[]): number => {
+            if (misure.length === 0) return 0;
+            let tick = 0;
+            let respiro = Infinity;
+            for (const mi of misure) {
+                tick += ticksPerMeasureForIndex(mi);
+                const r = respiroDiMisura(mi);
+                if (r < respiro) respiro = r;
+            }
+            if (!isFinite(respiro) || respiro <= 0) respiro = ticksPerMeasureForIndex(misure[0]);
+            const px = Math.max(minPxPerTickAssoluto, defaultPxCondiviso, MIN_PIXEL_SPACING / Math.max(1, respiro));
+            const intestazione = armaturaDiMisuraLayout(misure[0]).count * LARGHEZZA_ALTERAZIONE + timeSigWidthWithPadding;
+            return tick * px + misure.length * (MEASURE_PADDING_X * 2) + intestazione;
+        };
+
         let accWidth = 0;
         for (let m = 0; m < targetTotalMeasures && !isRibbon; m++) {
             if (curSys.length >= desiredMeasuresPerLine) {
@@ -8035,7 +8085,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             const isFirst = curSys.length === 0;
             const mWidth = naturalMeasureWidth(m, isFirst);
-            if (!isFirst && accWidth + mWidth > usablePageWidth) {
+            const sforaPerRespiro = !isFirst && larghezzaRichiestaDaiRespiri([...curSys, m]) > usablePageWidth;
+            if (!isFirst && (accWidth + mWidth > usablePageWidth || sforaPerRespiro)) {
                 tentativeSystems.push({ measureIndices: curSys });
                 curSys = [m];
                 accWidth = naturalMeasureWidth(m, true);
@@ -8074,17 +8125,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             tentativeSystems.push({ measureIndices: curSys });
         }
 
-        // If a global default px-per-tick is configured, check whether every tentative
-        // system can fit using that scale. If so, prefer the global deterministic value
-        // (this prevents unexpected global reflow when inserting measures).
-        const canUseDefaultPxPerTick = typeof DEFAULT_PX_PER_TICK === 'number' && isFinite(DEFAULT_PX_PER_TICK) && DEFAULT_PX_PER_TICK > 0 && tentativeSystems.every(sys => {
-            const measureCount = sys.measureIndices.length;
-            const totalTicks = sys.measureIndices.reduce((s, mi) => s + ticksPerMeasureForIndex(mi), 0);
-            const totalPadding = measureCount * (MEASURE_PADDING_X * 2);
-            const availableContentWidth = Math.max(40, usablePageWidth - totalPadding);
-            const neededContentWidth = Math.round(totalTicks * DEFAULT_PX_PER_TICK);
-            return neededContentWidth <= availableContentWidth;
-        });
+        // NOTA: qui viveva `canUseDefaultPxPerTick`, un controllo che verificava se ogni
+        // sistema stesse nella pagina al px-per-tick di serie. Era calcolato e MAI LETTO —
+        // e serviva esattamente a evitare il difetto delle note fuori dal pentagramma. Il
+        // controllo ora c'e' davvero, in due punti che si parlano: la riga si spezza se il
+        // respiro non entra (vedi `larghezzaRichiestaDaiRespiri`), e qui sotto la densita'
+        // finale non puo' comunque superare la pagina. Un controllo che nessuno legge e'
+        // peggio di nessun controllo: sembra che il caso sia coperto.
 
         const finalNotes: StaffNote[] = [];
         const allSystemsBarlines: Barline[][] = [];
@@ -8102,12 +8149,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
             // Allow increasing pxPerTick beyond the default when notes are very dense
             // so small subdivisions (biscrome etc.) remain legible.
-            const minPxPerTick = (MIN_PX_PER_QUARTER / TICKS_PER_QUARTER);
-            // px fra due attacchi vicini. Resta basso di proposito: questo canale alza il
-            // px-per-tick del sistema, e un sistema più largo della pagina SFORA a destra
-            // invece di andare a capo. Il respiro vero si ottiene dalla domanda di spazio
-            // (vedi `measureDemand`), che spezza la riga.
-            const MIN_PIXEL_SPACING = 8;
+            // I minimi sono quelli CONDIVISI col giro che spezza le righe (piu' sopra): due
+            // copie separate erano il motivo per cui le due decisioni non coincidevano.
+            const minPxPerTick = minPxPerTickAssoluto;
 
             // Distanza minima fra due attacchi vicini del sistema. Vale per TUTTE le righe
             // (`attacchiPerMisura` comprende le tracce): quando il coro è rado ma una traccia
@@ -8124,8 +8168,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (!isFinite(minDeltaTicks) || minDeltaTicks <= 0) minDeltaTicks = ticksPerMeasureForIndex(sys.measureIndices[0] ?? 0);
 
             const neededPxPerTickFromNotes = MIN_PIXEL_SPACING / Math.max(1, minDeltaTicks);
-            const defaultPx = (typeof DEFAULT_PX_PER_TICK === 'number' && DEFAULT_PX_PER_TICK > 0) ? DEFAULT_PX_PER_TICK : 0;
-            const pxPerTick = Math.max(minPxPerTick, defaultPx, neededPxPerTickFromNotes, (availableContentWidth / Math.max(1, totalTicks)));
+            const defaultPx = defaultPxCondiviso;
+            const pxPerTickDaCapienza = availableContentWidth / Math.max(1, totalTicks);
+            let pxPerTick = Math.max(minPxPerTick, defaultPx, neededPxPerTickFromNotes, pxPerTickDaCapienza);
+            // ── RETE: LA DENSITA' NON PUO' SUPERARE LA PAGINA ──
+            // Dopo la spezzatura qui sopra questo non dovrebbe piu' servire, tranne in un
+            // caso che nessuna spezzatura risolve: UNA SOLA misura cosi' fitta da non entrare
+            // da sola. Li' bisogna scegliere fra stringere le note e disegnarle fuori dal
+            // pentagramma — e stringerle e' sempre meglio, perche' resta musica leggibile
+            // invece che musica in un posto dove non c'e' il rigo.
+            // Nel nastro no: quello e' fatto apposta per eccedere la finestra, si scorre.
+            if (!isRibbon && pxPerTick > pxPerTickDaCapienza) pxPerTick = pxPerTickDaCapienza;
 
             // Ripartizione della larghezza fra le misure del sistema, in proporzione alla
             // loro DOMANDA di spazio invece che alla sola durata.
@@ -8253,7 +8306,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // sono quelle che si accendono a richiesta dalla console (vedi __htAiuto), non
         // quelle che lavorano sempre e non dicono nulla.
         return { positionedNotes: finalNotes, systemsBarlines: allSystemsBarlines, systemsParams: systemsParams, measureFinalWidths, measureStartAbsBeat, measureBeatsPerMeasure, keyChangeExtraByMeasure };
-    }, [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths, systemBreaks, concertPitch, visibleAccompanimentTracks]);
+    }), [notes, layoutWidth, settledZoom, contentAwareSpacing, timeSignature, timeSignatureChanges, keySignature, keySignatureChanges, keySignatureRoot, isMinorMode, measuresPerLine, viewMode, minMeasureCount, doubleBarlineMeasures, repeatBarlines, accompanimentTracks, measureLengths, systemBreaks, concertPitch, visibleAccompanimentTracks]);
 
     /**
      * QUANTE MISURE HA DAVVERO LA PAGINA — il numero che si legge in barra.
