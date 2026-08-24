@@ -281,6 +281,40 @@ const satbVoiceMidiChannel = (channels: Record<number, number> | undefined, v: n
   if (Number.isFinite(c) && c >= 1 && c <= 16) return c - 1;
   return Math.max(0, Math.min(15, v - 1));
 };
+/** CANCELLARE VUOL DIRE CANCELLARE.
+ *
+ *  Una nota cancellata diventa PAUSA, e la pausa serve a una cosa sola: tenere in piedi la
+ *  linea del tempo, perche' le note che seguono non slittino all'indietro. Tutto il resto —
+ *  alterazioni, legature di valore, ornamenti, articolazioni, corone, gambi e travature
+ *  decisi a mano, appartenenza a un accordo — era della NOTA, e la nota non c'e' piu'.
+ *
+ *  Restava appeso perche' `{ ...n, isRest: true }` conserva ogni campo: si cancellava una
+ *  nota e l'ornamento che le avevi messo continuava a vivere sulla pausa, invisibile finche'
+ *  non riscrivevi li' sopra e te lo ritrovavi addosso.
+ *
+ *  Si tiene SOLO cio' che misura il tempo: figura, punto, terzina, tick d'inizio e durata,
+ *  battuta, movimento, voce. Il resto va via. */
+const spogliaNotaCancellata = (n: any): any => ({
+    ...n,
+    isRest: true,
+    accidental: undefined,
+    explicitAccidental: undefined,
+    userAccidental: undefined,
+    isTiedToNext: undefined,
+    isTiedFromPrev: undefined,
+    chordId: undefined,
+    chordPcs: undefined,
+    chordRootName: undefined,
+    manualBeamGroupId: undefined,
+    manualBeamDisabled: undefined,
+    manualStemDirection: undefined,
+    isSuspension: undefined,
+    ornamentMark: undefined,
+    ornamentOverride: undefined,
+    articulations: undefined,
+    isFermata: undefined,
+});
+
 const drumPaletteFor = (t: any): DrumPiece[] => (t?.drumKit === 'rock' ? DRUM_PALETTE_ROCK : DRUM_PALETTE_ORCH);
 /** Le due tavolozze di batteria, in un oggetto SOLO. Scritte a mano nel JSX diventavano un
  *  oggetto nuovo per ogni sistema a ogni render, e finivano nella firma di ridisegno: due
@@ -817,16 +851,29 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // «nell'ultimo secondo: 0» accanto a un massimo di 98. Qui il conto si fa a
             // ogni render, e quando supera la soglia lo dice — una volta ogni tre secondi,
             // che basta a vederlo e non riempie la console.
+            // ── SI AVVISA PER IL TEMPO SPESO, NON PER IL NUMERO DI RIDISEGNI ──
+            //
+            // L'avviso scattava a quaranta ridisegni al secondo, punto. Ma scrivendo
+            // normalmente se ne fanno tre o quattro per nota, e con la mano svelta si passa
+            // quota quaranta senza che succeda niente: misurati, costano 3,8 ms l'uno, cioe'
+            // il quindici per cento del secondo. L'avviso diceva «il thread non ha spazio per
+            // l'audio» mentre lo spazio c'era tutto — e un avviso che grida sempre smette di
+            // essere letto, proprio mentre serve.
+            //
+            // Il numero che conta e' il TEMPO: cento ridisegni da un millesimo sono innocui,
+            // cinque da duecento millesimi fermano la riproduzione. Sopra il 40% del secondo
+            // speso a ridisegnare l'audio comincia davvero a soffrire; sotto, e' solo un
+            // programma che lavora.
             const tempi: number[] = w.__htRenderTimes ?? [];
             const ora = performance.now();
             let quanti = 0;
             for (let i = tempi.length - 1; i >= 0 && ora - tempi[i] <= 1000; i--) quanti++;
-            if (quanti >= 40 && (ora - (w.__htUltimoAvvisoRaffica ?? -1e9)) > 3000) {
+            const speso = Math.round(durate.slice(-Math.max(1, quanti)).reduce((a, b) => a + b, 0));
+            const SOGLIA_MS = 400;
+            if (speso > SOGLIA_MS && (ora - (w.__htUltimoAvvisoRaffica ?? -1e9)) > 3000) {
                 w.__htUltimoAvvisoRaffica = ora;
-                const ultimi = durate.slice(-quanti);
-                const speso = Math.round(ultimi.reduce((a, b) => a + b, 0));
                 // eslint-disable-next-line no-console
-                console.warn(`[render] RAFFICA: ${quanti} ridisegni nell'ultimo secondo, ${speso} ms di lavoro. Il thread non ha spazio per l'audio. __htRender() per il dettaglio.`);
+                console.warn(`[render] ${speso} ms dell'ultimo secondo spesi a ridisegnare (${quanti} ridisegni). Sopra questa soglia l'audio comincia a mancare di spazio. __htRender() per il dettaglio.`);
             }
         } catch { /* la diagnostica non deve disturbare */ }
     });
@@ -1951,6 +1998,50 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const octaveShiftsRef = useRef(octaveShifts);
     octaveShiftsRef.current = octaveShifts;
 
+    // ── I SEGNI APPESI A UNA NOTA CHE NON SUONA PIU' NON VALGONO ──
+    //
+    // Cancellare una nota la trasforma in PAUSA, e la pausa conserva l'id. Ornamenti,
+    // legature di portamento, segni d'ottava e curve di tempo vivono in elenchi a parte
+    // agganciati agli id: continuavano quindi a puntare a qualcosa che formalmente esiste
+    // e musicalmente no — una legatura appesa a una pausa, un rallentando ancorato al nulla.
+    //
+    // Non si CANCELLANO: si IGNORANO. Cancellarli sarebbe piu' diretto, ma quei quattro
+    // elenchi non stanno nella pila dell'annulla — solo le note ci stanno — e togliendoli
+    // qui, annullare avrebbe restituito la nota senza la sua legatura. Filtrandoli in
+    // lettura il dato resta al suo posto, l'annulla ricuce tutto da se', e il filtro copre
+    // OGNI strada che fa sparire una nota, non solo il tasto Backspace.
+    //
+    // Le potature che gia' esistevano piu' sotto restano: servono a un altro caso — la nota
+    // sparita DAVVERO (un import che sostituisce il brano), dove il dato non serve piu' a
+    // nessuno.
+    const idsCheSuonano = useMemo(() => {
+        const vive = new Set<string>();
+        for (const n of (rawNotes || [])) if (n && !n.isRest && n.id) vive.add(n.id);
+        for (const t of (accompanimentTracks || [])) {
+            for (const n of (t.notes || [])) if (n && !n.isRest && n.id) vive.add(n.id);
+        }
+        return vive;
+    }, [rawNotes, accompanimentTracks]);
+
+    /** Legature con ENTRAMBI i capi ancora suonanti. */
+    const slursVivi = useMemo(
+        () => (slurs || []).filter(l => idsCheSuonano.has(l.fromNoteId) && idsCheSuonano.has(l.toNoteId)),
+        [slurs, idsCheSuonano]);
+    /** Segni d'ottava con entrambi i capi ancora suonanti. */
+    const octaveShiftsVivi = useMemo(
+        () => (octaveShifts || []).filter(o => idsCheSuonano.has(o.fromNoteId) && idsCheSuonano.has(o.toNoteId)),
+        [octaveShifts, idsCheSuonano]);
+    /** Ornamenti su note che suonano ancora. */
+    const ornamentOverridesVivi = useMemo(
+        () => (ornamentOverrides || []).filter(o => idsCheSuonano.has(o.noteId)),
+        [ornamentOverrides, idsCheSuonano]);
+    /** Curve di tempo con entrambi i capi ancora suonanti. */
+    const tempoCurvesVive = useMemo(
+        () => (tempoCurves || []).filter(c => idsCheSuonano.has(c.startNoteId) && idsCheSuonano.has(c.endNoteId)),
+        [tempoCurves, idsCheSuonano]);
+    const tempoCurvesViveRef = useRef(tempoCurvesVive);
+    tempoCurvesViveRef.current = tempoCurvesVive;
+
     /**
      * I segni d'ottava risolti sui tick, pronti per l'esecuzione: il capo dà il punto,
      * la voce dice a chi si applica (un 8va sul soprano non alza il basso che suona
@@ -1963,7 +2054,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         ];
         const perId = new Map(tutte.map(n => [n.id, n]));
         const out: OctaveSpan[] = [];
-        for (const o of (octaveShifts || [])) {
+        for (const o of (octaveShiftsVivi || [])) {
             const a = perId.get(o.fromNoteId);
             const b = perId.get(o.toNoteId);
             if (!a || !b) continue;
@@ -7345,13 +7436,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const w = analysisWorkerRef.current;
             if (w) {
                 try {
-                    w.postMessage({ seq, args: { notes: deferredNotes, keySignature, keyTonic: currentTonic, isMinor: isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts } });
+                    w.postMessage({ seq, args: { notes: deferredNotes, keySignature, keyTonic: currentTonic, isMinor: isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides: ornamentOverridesVivi, harmonyOverrides, opts } });
                 } catch {
-                    try { setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts)); } catch { /* ignore */ }
+                    try { setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverridesVivi, harmonyOverrides, opts)); } catch { /* ignore */ }
                 }
             } else {
                 try {
-                    setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverrides, harmonyOverrides, opts));
+                    setAnalysisResult(applyHarmonyRules(deferredNotes, keySignature, currentTonic, isMinorMode, analysisContexts, timeSignature, doubleBarlineMeasures, ornamentOverridesVivi, harmonyOverrides, opts));
                 } catch (e) {
                     console.error('[GrandStaffEditor] applyHarmonyRules crashed:', e);
                     setAnalysisResult(empty);
@@ -8913,7 +9004,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         useStatisticalCorrection: !!useStatisticalCorrection,
         statisticalBiasThreshold: Number(statisticalBiasThreshold) || 2,
         styleProfile: useStatisticalCorrection ? _styleProfile : null,
-        ornamentOverrides,
+        ornamentOverrides: ornamentOverridesVivi,
         autoHarmonyLabelOverrides: (analysisResult as any).autoHarmonyLabelOverrides,
         tonicizationHints,
         inferredContextSuppressions,
@@ -9419,7 +9510,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             // Marcatura 'structural'/ornamentale (Opt+H / Opt+O) → mappa per il motore ACC,
             // chiavi per noteId E per midi-misura-beat (come il percorso SATB).
             const ornMap: Record<string, string> = {};
-            for (const o of (ornamentOverrides || [])) {
+            for (const o of (ornamentOverridesVivi || [])) {
                 if (!o) continue;
                 ornMap[o.noteId] = o.type;
                 if (o.midi != null) ornMap[`${o.midi}-${o.measureIndex ?? -1}-${o.beat ?? -1}`] = o.type;
@@ -10623,7 +10714,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (arr) arr.push(it.absStartBeat);
                 else idToAbsBeats.set(it.note.id, [it.absStartBeat]);
             }
-            for (const c of (tempoCurvesRef.current || [])) {
+            for (const c of (tempoCurvesViveRef.current || [])) {
                 const starts = (idToAbsBeats.get(c.startNoteId) || []).slice().sort((a, b) => a - b);
                 const ends = (idToAbsBeats.get(c.endNoteId) || []).slice().sort((a, b) => a - b);
                 if (starts.length === 0 || ends.length === 0) continue;
@@ -11144,7 +11235,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             }
             return null;
         };
-        (tempoCurves || []).forEach((c, index) => {
+        (tempoCurvesVive || []).forEach((c, index) => {
             const startP = resolvePos(c.startNoteId);
             const endP = resolvePos(c.endNoteId);
             if (!startP || !endP) return;
@@ -17743,11 +17834,9 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     // Se è selezionata ed è una nota normale, la trasformo in pausa
                     if (!selectedNoteIds.has(n.id)) return n;
                     if (n.isRest) return n;
-                    return {
-                        ...n,
-                        isRest: true
-                    };
+                    return spogliaNotaCancellata(n);
                 }));
+
                 // Route Delete to ACC notes as well
                 const accTracks = latestAccompanimentTracks.current;
                 const accIdsSelected = [...selectedNoteIds].filter(id => isAccompanimentNote(id, accTracks));
@@ -17763,8 +17852,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             })
                             .map(n => {
                                 if (!accIdSet.has(n.id)) return n;
-                                // Convert note to rest
-                                return { ...n, isRest: true };
+                                // Convert note to rest — spogliata di tutto cio' che era suo
+                                return spogliaNotaCancellata(n);
                             }),
                     })));
                 }
@@ -19793,8 +19882,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                 // mostrare quella nuova, non quella d'impianto.
                                 keySignature={keySignatureAtMeasure(systemStartMeasureIndex)}
                                 barlines={systemBarlines}
-                                slurs={slurs}
-                                octaveShifts={octaveShifts}
+                                slurs={slursVivi}
+                                octaveShifts={octaveShiftsVivi}
                                 onOctaveRightClick={(octaveId) => togli8va(octaveId)}
                                 onSlurAnchors={(capi) => setSlurAnchors(prev => {
                                     // Solo se sono cambiati davvero: il disegno si ripete a
