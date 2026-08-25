@@ -1,10 +1,48 @@
-## Novità nella versione 1.7.1
+## Novità nella versione 1.8.0
+
+### 🎺 Strumenti traspositori
+
+Una parte si può assegnare a uno strumento traspositore, e viene riscritta come quello strumento la legge: cambiano le note sul suo rigo e la sua armatura, mentre tutto il resto — analisi, riproduzione, esportazione — continua a lavorare sul suono vero. Nel file resta sempre il suono reale.
+
+La spunta **Suoni reali** passa da una vista all'altra: accesa mostra quello che si sente, spenta quello che ogni strumentista legge sul leggio.
+
+### 🎻 Partitura d'orchestra
+
+A sinistra dei righi compaiono le parentesi di famiglia — archi con archi, legni con legni — dedotte dallo strumento della traccia. Restano distinte da quelle blu dell'analisi, che raccolgono i righi letti insieme: sono due domande diverse e ora si vedono separate.
+
+### 🎹 Arpeggiatore
+
+Le decisioni che riguardano un arpeggio — disposizione delle note, figura, suddivisione, verso — stanno in un pannello unico invece che sparse fra barra e scorciatoie. Lo stesso disegno si applica a più accordi in una volta, e cambiando figura l'accordo non si consuma: le note restano quelle, cambia come sono distribuite nel tempo.
+
+### ⚡️ Velocità
+
+Su brani con molte parti l'editing era diventato faticoso: la nota fantasma arrivava in ritardo sul puntatore e ogni tasto premuto si faceva aspettare. Ora si disegnano solo i sistemi che si vedono, e il fantasma si muove per conto suo senza far ridisegnare la pagina. Su una partitura a tredici parti la differenza è quella fra scrivere e aspettare.
+
+Chi lavora su corali a quattro voci non noterà nulla: lì non c'era niente da guadagnare.
+
+### 🖨 Stampa ed esportazione
+
+Stampa e PDF adattano la pagina al foglio: se un sistema è più largo o più alto dello spazio disponibile, tutto si rimpicciolisce quanto basta perché ogni sistema entri intero. Prima usciva tagliato a destra, con i sistemi spezzati fra le pagine.
+
+L'esportazione in immagine produce più file numerati quando il brano è lungo, e taglia sempre fra un sistema e l'altro: nessun pentagramma resta a metà.
 
 ### 🎼 Analisi
+
+L'accordo dichiarato con **⌥⇧H** non è più un'etichetta fissa. Ricorda da quali note è nato e li segue: cancellandone una si rifà sulle altre — tolto il Si da un Do maggiore con settima, torna a dire Do — e quando ne restano meno di due sparisce, lasciando tornare l'analisi automatica.
+
+Gli attacchi che stanno ancora suonando nel punto in cui dichiari tengono la loro sigla. È quello che permette di tenere un accordo lungo nel coro e aggiungergli una nota per movimento, ottenendo Do, Do maggiore con settima, La minore con settima, Do con nona aggiunta.
 
 Un passaggio come I → ii non viene più scambiato per una cadenza d'inganno in un'altra tonalità. Era il motivo per cui, in certi esercizi, il primo grado veniva letto come dominante e tutta la frase seguente risultava spostata di quarta.
 
 Le cadenze vengono riconosciute solo dove una frase finisce davvero, e il riconoscimento tiene ora conto della tonalità in vigore in quel punto del brano, non di quella iniziale. Nei brani che modulano la differenza si vede.
+
+### ✍️ Scrittura
+
+Scrivendo più note nello stesso punto, la voce di ciascuna può essere dedotta da come si dispongono sul rigo: la più acuta va alla voce più alta, la più grave alla più bassa. Finché la disposizione non è chiara, vale la voce scelta in barra.
+
+I pulsanti S/A/T/B convertono le note **solo quando la selezione l'hai fatta tu**, cliccando o con un riquadro. La nota appena scritta resta selezionata per comodità, ma premendo un'altra voce si prepara soltanto la nota successiva: prima si convertiva quella appena scritta.
+
+Cancellando una nota resta una pausa al suo posto, per non far slittare quello che segue. Ma ciò che era della nota se ne va con lei: alterazioni, corone, articolazioni, ornamenti, gambi e travature decisi a mano, e le legature che la riguardavano. Annullando torna tutto.
 
 ### ♯ Sensibile automatica
 
@@ -31,6 +69,10 @@ Tavolozza, mixer, dialogo del nuovo progetto, menù del tasto destro, pannello d
 - Il corpo delle righe del pentagramma compariva due volte nelle preferenze e la scelta non aveva effetto sulla pagina
 - Trascinando un'armatura, l'etichetta che segue il puntatore indicava l'armatura invece della tonalità (Mi♭m dove si intendeva Do minore)
 - Lo zoom torna al 100% col doppio clic su una parte vuota, senza più azzerarsi da solo
+- Le parentesi delle terzine sulle tracce finivano dentro il pentagramma della traccia sopra, e a gambi in su si appoggiavano alla traversa
+- Su musica fitta le note dell'ultima misura potevano uscire dal pentagramma: ora la riga si chiude prima, e il numero di battute per riga resta un tetto e non un obbligo
+- Una legatura di valore rimasta senza la nota d'arrivo si scioglie, invece di restare appesa o riagganciarsi a una nota lontana
+- Il manuale, in italiano e in inglese, è aggiornato a questa versione
 
 ## Novità nella versione 1.7.0
 
