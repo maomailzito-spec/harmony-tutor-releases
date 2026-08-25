@@ -858,6 +858,30 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
   const prevArr = [prev.bass, prev.tenor, prev.alto, prev.soprano];
   const currArr = allM;
 
+  // ── CI SONO SALTI CHE NON SI FANNO, QUALUNQUE COSA COSTINO GLI ALTRI ──
+  //
+  // Il costo dei movimenti qui sotto e' calcolato per GRANDEZZA: piu' e' largo il salto,
+  // piu' costa. E' ragionevole per la comodita' di canto, ma non e' quello che dicono le
+  // regole. Il tritono e' largo sei semitoni — quanto una quinta, che non costa niente —
+  // eppure e' proibito come intervallo melodico; la settima costa 120, cioe' e' cara ma
+  // resta comprabile se il resto e' peggio. Cosi' il generatore le comprava: misurate sul
+  // Dubois, sei violazioni di intervallo melodico proibito, tutte nel basso.
+  //
+  // La proibizione e' di natura diversa dal costo, e va espressa come tale: non «largo»,
+  // ma «non si fa». Con le sole altezze MIDI si riconoscono con certezza il tritono, le
+  // settime e tutto cio' che supera l'ottava; la seconda eccedente non si distingue dalla
+  // terza minore senza sapere come sono SCRITTE le note, e resta fuori.
+  {
+    const proibito = (semitoni: number): number => {
+      const d = Math.abs(semitoni);
+      if (d === 6) return 200;              // tritono: vietato, ma esiste il caso risolto
+      if (d === 10 || d === 11) return 400; // settime
+      if (d > 12) return 400;               // oltre l'ottava
+      return 0;
+    };
+    for (let vi = 0; vi < 4; vi++) cost += proibito(currArr[vi] - prevArr[vi]);
+  }
+
   // Bass motion cost — bass is freer than upper voices but large leaps are penalized
   {
     const bassDist = midiDistance(currArr[0], prevArr[0]);
@@ -2715,8 +2739,20 @@ function chooseBestInversion(
     let dist = Math.abs(bassPc - prevPc);
     if (dist > 6) dist = 12 - dist;
 
-    // Slight preference for root position (add 0.5 penalty for inversions)
-    const adjustedDist = inv === 0 ? dist : dist + 0.5;
+    // ── IL BASSO NON E' UNA MELODIA ──
+    //
+    // Qui comandava la «morbidezza»: si sceglieva il basso piu' vicino al precedente,
+    // contando i semitoni. Ma il basso e' la fondazione dell'armonia, non una linea che
+    // deve procedere per gradi: da Sol a Do ci sono cinque semitoni e da Sol a Mi tre,
+    // quindi V→I in posizione fondamentale «costava» piu' di V→I6 — e usciva un brano di
+    // primi rivolti, con la cadenza che scivola invece di appoggiare.
+    //
+    // Nella scrittura accademica la posizione fondamentale e' la norma; il rivolto si usa
+    // per una RAGIONE — ammorbidire il basso dove serve, evitare un raddoppio storto, non
+    // fare parallele. Quindi la fondamentale parte avvantaggiata, e la vicinanza pesa la
+    // meta': resta un argomento, smette di essere l'unico.
+    const costoRivolto = inv === 0 ? 0 : 2.5;
+    const adjustedDist = dist * 0.5 + costoRivolto;
 
     // Il 6/4 e' un accordo DEBOLE: in scrittura accademica si usa in pochi casi precisi
     // (cadenzale, di passaggio, di volta), non come ripiego. La penalita' vale un paio di
@@ -2729,11 +2765,23 @@ function chooseBestInversion(
     // ── E ORA LA CORNICE ──
     let cornice = 0;
     if (sopranoPc >= 0) {
-      // 1) Basso e soprano sulla STESSA nota: le due voci estreme suonano all'ottava.
-      //    Non e' vietato in se', ma svuota l'accordo — e se e' la SENSIBILE, e' un
-      //    raddoppio proibito da cui il basso non ha piu' uscita: deve saltare invece di
-      //    salire, e sbaglia due regole in un colpo (misurato: sei volte sul Dubois).
-      if (bassPc === sopranoPc) cornice += bassPc === sensibilePc ? 40 : 8;
+      // 1) Basso e soprano sulla stessa nota: dipende da QUALE nota.
+      //
+      //    Raddoppiare la FONDAMENTALE fra le due voci estreme e' il raddoppio normale
+      //    dell'armonia a quattro parti — spesso e' proprio quello che si vuole. Punirlo
+      //    e' stato il mio errore alla prima stesura: con la melodia sul Do, la posizione
+      //    fondamentale del I costava piu' del primo rivolto, e usciva un brano con TUTTI
+      //    i gradi di tonica in 6. Il banco non se n'era accorto perche' non e' una
+      //    violazione: e' una bruttura, e le brutture non hanno un codice di regola.
+      //
+      //    Il divieto riguarda la SENSIBILE, che raddoppiata non ha piu' via d'uscita
+      //    (deve salire in tutt'e due le voci, e non puo'). Raddoppiare la TERZA e' un
+      //    ripiego che si accetta ma non si cerca.
+      if (bassPc === sopranoPc) {
+        if (bassPc === sensibilePc) cornice += 40;   // proibito
+        else if (inv === 1) cornice += 5;            // terza raddoppiata: sconsigliato
+        // fondamentale o quinta: nessuna penalita', e' scrittura normale
+      }
 
       // 2) PARALLELE fra le voci estreme. Se l'intervallo fra basso e soprano era una
       //    quinta o un'ottava e resta lo stesso mentre tutt'e due si muovono, sono
