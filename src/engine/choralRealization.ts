@@ -2676,25 +2676,7 @@ function chooseBestInversion(
   tonicPc: number,
   prevBassMidi: number,
   isFirst: boolean,
-  isLast: boolean,
-  // ── LE DUE VOCI ESTREME SI DECIDONO INSIEME ──
-  //
-  // Scegliere il rivolto vuol dire scegliere il BASSO. E il basso, insieme al soprano che
-  // la melodia ha gia' fissato, forma la cornice del corale: e' fra quelle due voci che si
-  // fanno le ottave e le quinte parallele, ed e' li' che si sentono.
-  //
-  // Questa funzione il soprano non lo guardava: sceglieva il basso piu' comodo da
-  // raggiungere e basta. Il guaio e' che quando si arriva a mettere le voci interne il
-  // danno e' fatto — soprano e basso sono entrambi gia' scritti, e le uniche due voci
-  // ancora libere non c'entrano niente. Il punteggio le parallele le punisce (5000 punti
-  // a testa, in `scoreVoicing`) ma non ha piu' nessuno da spostare: misurato sul Dubois,
-  // dieci parallele su venti errori, TUTTE fra soprano e basso.
-  //
-  // Sapendo dove sta il soprano, adesso e prima, il basso si sceglie in modo che la
-  // cornice regga. Senza questi due numeri si torna al comportamento di prima.
-  sopranoPc: number = -1,
-  prevSopranoPc: number = -1,
-  sensibilePc: number = -1
+  isLast: boolean
 ): number {
   const pcs = triadPcSets[deg]; // [root, 3rd, 5th]
 
@@ -2706,9 +2688,6 @@ function chooseBestInversion(
   let bestDist = Infinity;
   const prevPc = ((prevBassMidi % 12) + 12) % 12;
 
-  /** Distanza in semitoni sul cerchio delle altezze. */
-  const giro = (a: number, b: number) => { const d = Math.abs(a - b) % 12; return d > 6 ? 12 - d : d; };
-
   for (let inv = 0; inv < pcs.length; inv++) {
     const bassPc = pcs[inv];
     // Semitone distance (circular)
@@ -2718,46 +2697,11 @@ function chooseBestInversion(
     // Slight preference for root position (add 0.5 penalty for inversions)
     const adjustedDist = inv === 0 ? dist : dist + 0.5;
 
-    // Il 6/4 e' un accordo DEBOLE: in scrittura accademica si usa in pochi casi precisi
-    // (cadenzale, di passaggio, di volta), non come ripiego. La penalita' vale un paio di
-    // semitoni di scomodita' del basso, ma deve restare molto sotto quella delle parallele
-    // — se no, chiudendo le altre strade, il 6/4 diventa l'uscita di servizio e ci si
-    // ritrova dieci secondi rivolti dove prima c'erano dieci parallele. E' successo: prima
-    // taratura di questa funzione, avvisi da 10 a 27.
-    const penalty64 = inv === 2 ? 10 : 0;
+    // Penalize 6/4 (2nd inversion) more in general — it's weaker
+    const penalty64 = inv === 2 ? 1.5 : 0;
 
-    // ── E ORA LA CORNICE ──
-    let cornice = 0;
-    if (sopranoPc >= 0) {
-      // 1) Basso e soprano sulla STESSA nota: le due voci estreme suonano all'ottava.
-      //    Non e' vietato in se', ma svuota l'accordo — e se e' la SENSIBILE, e' un
-      //    raddoppio proibito da cui il basso non ha piu' uscita: deve saltare invece di
-      //    salire, e sbaglia due regole in un colpo (misurato: sei volte sul Dubois).
-      if (bassPc === sopranoPc) cornice += bassPc === sensibilePc ? 40 : 8;
-
-      // 2) PARALLELE fra le voci estreme. Se l'intervallo fra basso e soprano era una
-      //    quinta o un'ottava e resta lo stesso mentre tutt'e due si muovono, sono
-      //    parallele: l'errore piu' grossolano dell'armonia a quattro parti, e quello che
-      //    a valle nessuno puo' piu' correggere.
-      if (prevSopranoPc >= 0 && prevPc >= 0) {
-        const primaSop = prevSopranoPc !== sopranoPc;
-        const primaBas = prevPc !== bassPc;
-        if (primaSop && primaBas) {
-          const prima = giro(prevSopranoPc, prevPc);
-          const dopo = giro(sopranoPc, bassPc);
-          if ((prima === 0 && dopo === 0) || (prima === 7 && dopo === 7) || (prima === 5 && dopo === 5)) {
-            cornice += 60;
-          }
-        }
-      }
-
-      // 3) La sensibile al basso e' una scelta forte, non un ripiego: la si lascia
-      //    disponibile, ma non la si prende per comodita' di movimento.
-      if (bassPc === sensibilePc) cornice += 6;
-    }
-
-    if (adjustedDist + penalty64 + cornice < bestDist) {
-      bestDist = adjustedDist + penalty64 + cornice;
+    if (adjustedDist + penalty64 < bestDist) {
+      bestDist = adjustedDist + penalty64;
       bestInv = inv;
     }
   }
@@ -3014,10 +2958,7 @@ export function autoHarmonize(
 
     // If no candidate found (non-diatonic soprano?), default to I
     if (candidates.length === 0) {
-      const invSopPc = groups[i].pcs.length ? groups[i].pcs[0] : -1;
-      const invSopPrima = i > 0 && groups[i - 1].pcs.length ? groups[i - 1].pcs[0] : -1;
-      const inv = chooseBestInversion(0, triadPcSets, tonicPc, prevBassMidi, i === 0, i === totalGroups - 1,
-        invSopPc, invSopPrima, (tonicPc + 11) % 12);
+      const inv = chooseBestInversion(0, triadPcSets, tonicPc, prevBassMidi, i === 0, i === totalGroups - 1);
       result.push({
         roman: romanLabels[0] + inversionSuffix(inv, false),
         measure: group.measure,
@@ -3056,14 +2997,7 @@ export function autoHarmonize(
     );
 
     const maxInv = useSeventh ? 3 : 2;
-    // La nota del soprano su cui cade l'accordo: e' la prima del gruppo, cioe' quella che
-    // suona insieme al basso che stiamo per scegliere. La sensibile e' il settimo grado
-    // alzato — in minore vale comunque quella della scala armonica.
-    const sopranoPc = groupPcs.length ? groupPcs[0] : -1;
-    const sopranoPrimaPc = i > 0 && groups[i - 1].pcs.length ? groups[i - 1].pcs[0] : -1;
-    const sensibilePc = (tonicPc + 11) % 12;
-    const inv = chooseBestInversion(best.deg, triadPcSets, tonicPc, prevBassMidi, i === 0, i === totalGroups - 1,
-      sopranoPc, sopranoPrimaPc, sensibilePc);
+    const inv = chooseBestInversion(best.deg, triadPcSets, tonicPc, prevBassMidi, i === 0, i === totalGroups - 1);
     // Clamp inversion to valid range for the chord type
     const clampedInv = Math.min(inv, maxInv);
 
