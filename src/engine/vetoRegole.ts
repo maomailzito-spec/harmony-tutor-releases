@@ -70,8 +70,14 @@ import { applyHarmonyRules } from '../utils/musicTheory';
  *
  * Tenute fuori di proposito: le cadenze (`CAD-*`), la falsa relazione cromatica (`R-09`, che
  * ha eccezioni retoriche legittime), l'accordo incompleto (`R-CHORD-COMPLETE`, che è una
- * scelta), le preferenze di raddoppio (`R-10-64`, `R-10-6`, `R-10-3RD`, che sono gusto), e
- * tutte le `EXC-*`, che non sono violazioni ma il contrario.
+ * scelta), le preferenze di raddoppio in stato fondamentale e primo rivolto (`R-10-6`,
+ * `R-10-3RD`, che sono gusto), e tutte le `EXC-*`, che non sono violazioni ma il contrario.
+ *
+ * `R-10-64` era in quel gruppo ed è stato SPOSTATO QUI. Era un errore di classificazione mio:
+ * in un accordo di quarta e sesta la quarta sul basso non è una nota qualunque, è la
+ * dissonanza dell'accordo, e raddoppiare una dissonanza non è una preferenza — è un errore.
+ * La regola infatti non interpreta niente, conta solo quale nota risulta raddoppiata.
+ * Segnalato dall'utente su un 4/6 uscito col Do raddoppiato invece del basso.
  */
 export const REGOLE_DI_VETO = new Set<string>([
   'R-01',        // quinte e ottave parallele
@@ -83,6 +89,7 @@ export const REGOLE_DI_VETO = new Set<string>([
   'R-10',        // sensibile raddoppiata
   'R-10-DIM5',   // quinta diminuita raddoppiata
   'R-10-7TH',    // settima raddoppiata
+  'R-10-64',     // raddoppio sbagliato in quarta e sesta (vedi sotto)
   'R-12',        // risoluzione della settima
   'R-13',        // moto retto di tutte e quattro le voci
   'R-14',        // quinta nascosta

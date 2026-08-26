@@ -2134,6 +2134,12 @@ export function generaCandidati(args: {
         if (fixedSoprano == null) proponi({ ...base, soprano: base.soprano + d }, rv);
       }
     }
+    // Le due voci interne insieme. Il giro dei salti arriva alla QUINTA (±7) e comprende la
+    // terza (±4): mancavano, e con loro mancava una soluzione ovvia. Su un 4/6 uscito col
+    // Do raddoppiato al posto del basso, la cura era portare il contralto al Sol e il tenore
+    // al Mi — un salto di terza al tenore — e quel candidato non veniva nemmeno costruito.
+    // Nelle voci interne un salto è ammissibile: costa qualcosa nel punteggio, ma è una
+    // moneta con cui si compra volentieri un raddoppio giusto.
     for (const dt of [-12, 12, -5, -3, -2, -1, 1, 2, 3, 5]) {
       for (const da of [-12, 12, -3, -2, -1, 1, 2, 3]) {
         proponi({ ...base, tenor: base.tenor + dt, alto: base.alto + da }, rv);
