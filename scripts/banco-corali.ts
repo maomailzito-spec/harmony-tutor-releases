@@ -107,6 +107,7 @@ for (const f of process.argv.slice(2)) {
   // sono a zero il problema non e' la severita' del checker, e' che non lo stiamo chiamando.
   console.log(`   veto: ${vetoDelBrano.controllati} controlli, ${vetoDelBrano.fermati} respinti` +
     (vetoDelBrano.fermati ? ` → ${vetoDelBrano.risolti} risolti, ${vetoDelBrano.migliorati} attenuati` +
+      `${vetoDelBrano.passiIndietro ? `, ${vetoDelBrano.passiIndietro} passi indietro` : ''}` +
       `  [${Object.entries(vetoDelBrano.perRegola).map(([r, n2]) => `${r}×${n2}`).join(' ')}]` : ''));
   if (process.env.DETTAGLIO) for (const r of b.dettaglio) console.log('      ' + r);
 }

@@ -42,6 +42,8 @@ export const contiVeto = {
   fermati: 0,
   risolti: 0,
   migliorati: 0,
+  /** Quante volte si è dovuto tornare indietro di un accordo per trovare l'uscita. */
+  passiIndietro: 0,
   perRegola: {} as Record<string, number>,
 };
 
@@ -51,6 +53,7 @@ export function azzeraContiVeto(): void {
   contiVeto.fermati = 0;
   contiVeto.risolti = 0;
   contiVeto.migliorati = 0;
+  contiVeto.passiIndietro = 0;
   contiVeto.perRegola = {};
 }
 
@@ -2059,6 +2062,96 @@ function findToneForMidi(midi: number, tones: ScaleDegreeNote[]): ScaleDegreeNot
   return tones[0];
 }
 
+/** Un accordo candidato: le quattro voci e il rivolto con cui è stato costruito (la grafia
+ *  dipende dal rivolto, quindi va portato appresso). */
+export type Proposta = { v: SATBVoicing; inv: number };
+
+/**
+ * TUTTI I MODI RAGIONEVOLI DI SCRIVERE QUESTO ACCORDO dopo quello precedente.
+ *
+ * Serve a chi deve rimettere in discussione una scelta: il veto quando respinge l'accordo in
+ * carica, e il passo indietro quando la colpa è dell'accordo PRIMA. Le due domande sono la
+ * stessa, poste su accordi diversi, e prima stavano scritte due volte.
+ *
+ * I vincoli sono quelli che rendono un candidato un accordo VALIDO e non un'altra armonia:
+ * solo note dell'accordo richiesto, basso preteso dal rivolto, voci in ordine e in ambito, e
+ * la melodia data intoccabile. Dentro quei limiti si prova a muovere le voci interne, a
+ * spostare basso e soprano di un'ottava, e — quando il rivolto è una proposta della macchina
+ * e non una scelta dell'utente — a cambiare rivolto: le quinte nascoste fra soprano e basso
+ * non si curano in nessun altro modo, perché quelle due voci sono le uniche inchiodate.
+ */
+export function generaCandidati(args: {
+  tones: ScaleDegreeNote[];
+  inv: number;
+  rivoltiDaProvare: number[];
+  prevVoicing: SATBVoicing;
+  inCarica: SATBVoicing | null;
+  rules: ChoralRules;
+  fixedSoprano?: number;
+  fixedBass?: number;
+  tonicPc: number;
+  prevSeventhPc?: number;
+  isLast: boolean;
+  styleCtx: StyleContext;
+}): Proposta[] {
+  const { tones, inv, rivoltiDaProvare, prevVoicing, inCarica, rules, fixedSoprano, fixedBass, tonicPc, prevSeventhPc, isLast, styleCtx } = args;
+  const pcDellAccordo = new Set(tones.map(t => toneToMidiPc(t)));
+  const eNotaDellAccordo = (midi: number) => pcDellAccordo.has(((midi % 12) + 12) % 12);
+  const ammissibile = (c: SATBVoicing, rv: number): boolean => {
+    if (c.bass > c.tenor || c.tenor > c.alto || c.alto > c.soprano) return false;
+    if (c.soprano < VOICE_RANGES.soprano.min || c.soprano > VOICE_RANGES.soprano.max) return false;
+    if (c.alto < VOICE_RANGES.alto.min || c.alto > VOICE_RANGES.alto.max) return false;
+    if (c.tenor < VOICE_RANGES.tenor.min || c.tenor > VOICE_RANGES.tenor.max) return false;
+    if (c.bass < VOICE_RANGES.bass.min || c.bass > VOICE_RANGES.bass.max) return false;
+    if (!eNotaDellAccordo(c.bass) || !eNotaDellAccordo(c.tenor) || !eNotaDellAccordo(c.alto) || !eNotaDellAccordo(c.soprano)) return false;
+    if (((c.bass % 12) + 12) % 12 !== toneToMidiPc(tones[rv % tones.length])) return false;
+    if (fixedSoprano != null && c.soprano !== fixedSoprano) return false;
+    if (fixedBass != null && c.bass !== fixedBass) return false;
+    return true;
+  };
+
+  const fuori: Proposta[] = [];
+  const gia = new Set<string>();
+  if (inCarica) gia.add(`${inv}|${inCarica.bass},${inCarica.tenor},${inCarica.alto},${inCarica.soprano}`);
+  const proponi = (c: SATBVoicing, rv: number) => {
+    if (!ammissibile(c, rv)) return;
+    const k = `${rv}|${c.bass},${c.tenor},${c.alto},${c.soprano}`;
+    if (gia.has(k)) return;
+    gia.add(k);
+    fuori.push({ v: c, inv: rv });
+  };
+
+  for (const rv of rivoltiDaProvare) {
+    const base = (rv === inv && inCarica) ? inCarica
+      : realizeNextChord(tones, rv, prevVoicing, rules, fixedSoprano, fixedBass, tonicPc, prevSeventhPc, isLast, styleCtx);
+    if (!base) continue;
+    proponi(base, rv);
+    for (const d of [-12, 12, -7, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 7]) {
+      proponi({ ...base, tenor: base.tenor + d }, rv);
+      proponi({ ...base, alto: base.alto + d }, rv);
+      if (d === -12 || d === 12) {
+        proponi({ ...base, bass: base.bass + d }, rv);
+        if (fixedSoprano == null) proponi({ ...base, soprano: base.soprano + d }, rv);
+      }
+    }
+    for (const dt of [-12, 12, -5, -3, -2, -1, 1, 2, 3, 5]) {
+      for (const da of [-12, 12, -3, -2, -1, 1, 2, 3]) {
+        proponi({ ...base, tenor: base.tenor + dt, alto: base.alto + da }, rv);
+      }
+    }
+    // E le realizzazioni che nascono da un accordo precedente immaginato diverso: a volte
+    // l'unica uscita è un accordo interamente diverso, non uno spostamento.
+    for (const d of [-2, -1, 1, 2]) {
+      for (const chi of ['tenor', 'alto'] as const) {
+        const finto = { ...prevVoicing, [chi]: (prevVoicing as any)[chi] + d } as SATBVoicing;
+        const alt = realizeNextChord(tones, rv, finto, rules, fixedSoprano, fixedBass, tonicPc, prevSeventhPc, isLast, styleCtx);
+        if (alt) proponi(alt, rv);
+      }
+    }
+  }
+  return fuori;
+}
+
 // ─── Main Entry Point ──────────────────────────────────────────────────────
 
 /**
@@ -2706,124 +2799,85 @@ export function realizeChorale(
       allViolations.push(...finalViolations);
     }
 
-    const vociPrimaDelVeto = voicing;
-    // ── IL VETO DELLE REGOLE ───────────────────────────────────────────────
+    // ── IL VETO DELLE REGOLE, E IL PASSO INDIETRO ──────────────────────────
     // Fin qui l'accordo è stato scelto dal punteggio interno del generatore, che delle
     // regole ha una copia SEMPLIFICATA (`detectViolations`, `countParallels`). Prima di
     // fissarlo lo si sottopone al checker vero dell'applicazione, ma solo sulle regole
     // meccaniche — vedi `vetoRegole.ts` per la linea di taglio e il perché.
     //
-    // L'accordo in carica si controlla SEMPRE (un controllo, ~1,5 ms); le alternative si
-    // pagano soltanto quando serve, cioè quando il veto scatta davvero.
+    // E QUANDO NON C'È USCITA, SI TORNA INDIETRO. Il veto sa vedere il difetto ma non sempre
+    // sa curarlo muovendo l'accordo in esame: su «Corale n 5c» respingeva due sovrapposizioni
+    // di voce (il contralto dell'accordo prima che finisce sopra il soprano di questo) e non
+    // trovava niente, perché il soprano è la melodia data e la cura stava nell'accordo
+    // PRECEDENTE. È l'obiezione dell'utente, e ha ragione: «a volte arrivati lì non c'è
+    // soluzione se non tornando indietro e modificando i due accordi precedenti».
+    //
+    // Il passo indietro rimette in gioco l'accordo prima — a patto che la sua sostituta regga
+    // a sua volta il veto contro quello ancora prima, altrimenti si sposterebbe il guasto di
+    // una casella invece di toglierlo. Le note già scritte si riscrivono con la stessa
+    // macchina che usa il backtracking interno (`prevChordNoteStart`).
+    //
+    // COSTO: l'accordo in carica si controlla SEMPRE (un controllo, ~1,5 ms); le alternative
+    // si pagano solo quando il veto scatta, e il passo indietro solo quando le alternative
+    // non bastano — cioè di rado.
+    const vociPrimaDelVeto = voicing;
     if (voicing && prevVoicing && prevTones && config.vetoRegole !== false) {
       // La finestra è di tre accordi quando ci sono — `R-06` e `R-17a` parlano di un salto
       // E della sua risoluzione, che in due accordi non si vede. I posti sono movimenti
       // forti consecutivi (b1, b3 della prima battuta, b1 della seconda) così che nessuna
       // regola legata al tempo forte cambi risposta per colpa della collocazione.
-      const passato: StaffNote[][] = [];
-      if (prevPrevVoicing && prevPrevTones) {
-        passato.push(voicingToStaffNotes(prevPrevVoicing, 0, 1, 'half', prevPrevTones, prevPrevInvUsed, keySignature, 4));
-        passato.push(voicingToStaffNotes(prevVoicing, 0, 3, 'half', prevTones, prevInvUsed, keySignature, 4));
-      } else {
-        passato.push(voicingToStaffNotes(prevVoicing, 0, 1, 'half', prevTones, prevInvUsed, keySignature, 4));
-      }
-      const posto = passato.length === 2 ? { m: 1, b: 1 } : { m: 0, b: 3 };
-      const giudica = (cand: SATBVoicing, rivolto: number = inv) =>
-        veto(passato,
-             voicingToStaffNotes(cand, posto.m, posto.b, 'half', tones, rivolto, keySignature, 4),
-             keySignature, tonic, isMinor);
+      const noteDi = (v: SATBVoicing, tn: ScaleDegreeNote[], rv: number, m: number, b: number) =>
+        voicingToStaffNotes(v, m, b, 'half', tn, rv, keySignature, 4);
+      const finestra = (prevPrev: SATBVoicing | null, prev: SATBVoicing, prevTn: ScaleDegreeNote[], prevRv: number) => {
+        const passato: StaffNote[][] = [];
+        if (prevPrev && prevPrevTones) {
+          passato.push(noteDi(prevPrev, prevPrevTones, prevPrevInvUsed, 0, 1));
+          passato.push(noteDi(prev, prevTn, prevRv, 0, 3));
+          return { passato, m: 1, b: 1 };
+        }
+        passato.push(noteDi(prev, prevTn, prevRv, 0, 1));
+        return { passato, m: 0, b: 3 };
+      };
+
+      const f = finestra(prevPrevVoicing, prevVoicing, prevTones, prevInvUsed);
+      const giudica = (cand: SATBVoicing, rivolto: number, dentro = f) =>
+        veto(dentro.passato, noteDi(cand, tones, rivolto, dentro.m, dentro.b), keySignature, tonic, isMinor);
 
       contiVeto.controllati++;
-      const esitoInCarica = giudica(voicing);
+      const esitoInCarica = giudica(voicing, inv);
 
       if (esitoInCarica.quante > 0) {
         contiVeto.fermati++;
         for (const r of esitoInCarica.regole) contiVeto.perRegola[r] = (contiVeto.perRegola[r] ?? 0) + 1;
 
-        // Le alternative devono restare accordi VALIDI: le note dell'armonia richiesta, il
-        // basso preteso dal rivolto, voci in ordine e in ambito.
-        //
-        // E DEVONO POTER CAMBIARE RIVOLTO. Le quinte e ottave nascoste che restavano dopo
-        // il primo giro stavano quasi tutte fra SOPRANO e BASSO: il soprano è la melodia
-        // data e non si tocca, il basso è inchiodato dal rivolto — muovendo solo contralto
-        // e tenore non c'era proprio niente da muovere. Il rivolto invece è una scelta del
-        // generatore (`chooseBestInversion` lo indovina con un'euristica), e quando l'utente
-        // non l'ha imposto rimetterlo in discussione è legittimo.
-        type Proposta = { v: SATBVoicing; inv: number };
-        const rivoltiDaProvare: number[] = [inv];
-        if ((chord.inversion == null || chord.inversionIsSuggestion) && !isLast) {
-          for (let k = 0; k < Math.min(tones.length, 4); k++) if (k !== inv) rivoltiDaProvare.push(k);
-        }
-        const pcDellAccordo = new Set(tones.map(t => toneToMidiPc(t)));
-        const eNotaDellAccordo = (midi: number) => pcDellAccordo.has(((midi % 12) + 12) % 12);
-        const ammissibile = (c: SATBVoicing, rv: number): boolean => {
-          if (c.bass > c.tenor || c.tenor > c.alto || c.alto > c.soprano) return false;
-          if (c.soprano < VOICE_RANGES.soprano.min || c.soprano > VOICE_RANGES.soprano.max) return false;
-          if (c.alto < VOICE_RANGES.alto.min || c.alto > VOICE_RANGES.alto.max) return false;
-          if (c.tenor < VOICE_RANGES.tenor.min || c.tenor > VOICE_RANGES.tenor.max) return false;
-          if (c.bass < VOICE_RANGES.bass.min || c.bass > VOICE_RANGES.bass.max) return false;
-          if (!eNotaDellAccordo(c.bass) || !eNotaDellAccordo(c.tenor) || !eNotaDellAccordo(c.alto) || !eNotaDellAccordo(c.soprano)) return false;
-          if (((c.bass % 12) + 12) % 12 !== toneToMidiPc(tones[rv % tones.length])) return false;
-          // Il soprano è la MELODIA quando armonizziamo: non si tocca.
-          if (fixedSoprano != null && c.soprano !== fixedSoprano) return false;
-          if (fixedBass != null && c.bass !== fixedBass) return false;
-          return true;
+        const rivoltiDi = (c: RomanChord, rivolto: number, tn: ScaleDegreeNote[], ultimo: boolean): number[] => {
+          const out = [rivolto];
+          if ((c.inversion == null || c.inversionIsSuggestion) && !ultimo) {
+            for (let k = 0; k < Math.min(tn.length, 4); k++) if (k !== rivolto) out.push(k);
+          }
+          return out;
         };
 
-        const alternative: Proposta[] = [];
-        const gia = new Set<string>([`${inv}|${voicing.bass},${voicing.tenor},${voicing.alto},${voicing.soprano}`]);
-        const proponi = (c: SATBVoicing, rv: number) => {
-          if (!ammissibile(c, rv)) return;
-          const k = `${rv}|${c.bass},${c.tenor},${c.alto},${c.soprano}`;
-          if (gia.has(k)) return;
-          gia.add(k);
-          alternative.push({ v: c, inv: rv });
-        };
+        const gusto = (p: Proposta, prev: SATBVoicing, prevPrev: SATBVoicing | null, tn: ScaleDegreeNote[], deg: number) =>
+          scoreVoicing({
+            curr: p.v, prev, prevPrev, rules, tonicPc: tonicPcVal, tones: tn,
+            ...(config.styleProfile
+              ? { styleProfile: config.styleProfile, currentDegree: degreeToRoman(deg, isMinor), currentInversion: p.inv }
+              : {}),
+          });
 
-        for (const rv of rivoltiDaProvare) {
-          // Il punto di partenza per ogni rivolto: l'accordo in carica se è il suo rivolto,
-          // altrimenti quello che il motore scriverebbe partendo dall'accordo precedente.
-          const base = rv === inv ? voicing
-            : realizeNextChord(tones, rv, prevVoicing, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, isLast, styleCtx);
-          if (!base) continue;
-          proponi(base, rv);
-          for (const d of [-12, 12, -7, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 7]) {
-            proponi({ ...base, tenor: base.tenor + d }, rv);
-            proponi({ ...base, alto: base.alto + d }, rv);
-            if (d === -12 || d === 12) {
-              proponi({ ...base, bass: base.bass + d }, rv);
-              if (fixedSoprano == null) proponi({ ...base, soprano: base.soprano + d }, rv);
-            }
-          }
-          for (const dt of [-12, 12, -5, -3, -2, -1, 1, 2, 3, 5]) {
-            for (const da of [-12, 12, -3, -2, -1, 1, 2, 3]) {
-              proponi({ ...base, tenor: base.tenor + dt, alto: base.alto + da }, rv);
-            }
-          }
-          // E le realizzazioni che nascono da un accordo precedente immaginato diverso: a
-          // volte l'unica uscita è un accordo interamente diverso, non uno spostamento.
-          for (const d of [-2, -1, 1, 2]) {
-            for (const chi of ['tenor', 'alto'] as const) {
-              const finto = { ...prevVoicing, [chi]: (prevVoicing as any)[chi] + d } as SATBVoicing;
-              const alt = realizeNextChord(tones, rv, finto, rules, fixedSoprano, fixedBass, tonicPcVal, prevSeventhPc ?? undefined, isLast, styleCtx);
-              if (alt) proponi(alt, rv);
-            }
-          }
-        }
-
+        // ── Primo tentativo: cambiare SOLO questo accordo ──
+        const alternative = generaCandidati({
+          tones, inv, rivoltiDaProvare: rivoltiDi(chord, inv, tones, isLast),
+          prevVoicing, inCarica: voicing, rules, fixedSoprano, fixedBass,
+          tonicPc: tonicPcVal, prevSeventhPc: prevSeventhPc ?? undefined, isLast, styleCtx,
+        });
         // Si provano in ordine di GUSTO: il punteggio stilistico (che il corpus alimenta)
         // decide la fila, il checker decide chi passa. Il primo che non infrange niente
         // vince — è il candidato più bello fra quelli leciti.
-        const gusto = new Map<Proposta, number>();
-        for (const c of alternative) {
-          gusto.set(c, scoreVoicing({
-            curr: c.v, prev: prevVoicing!, prevPrev: prevPrevVoicing, rules, tonicPc: tonicPcVal, tones,
-            ...(config.styleProfile
-              ? { styleProfile: config.styleProfile, currentDegree: degreeToRoman(parsed.degree, isMinor), currentInversion: c.inv }
-              : {}),
-          }));
-        }
-        alternative.sort((a, b) => (gusto.get(a) ?? 0) - (gusto.get(b) ?? 0));
+        const punti = new Map<Proposta, number>();
+        for (const c of alternative) punti.set(c, gusto(c, prevVoicing, prevPrevVoicing, tones, parsed.degree));
+        alternative.sort((a, b) => (punti.get(a) ?? 0) - (punti.get(b) ?? 0));
 
         let menoPeggio: Proposta = { v: voicing, inv };
         let menoPeggioEsito: EsitoVeto = esitoInCarica;
@@ -2835,6 +2889,75 @@ export function realizeChorale(
           // solo perché ha MENO violazioni, se quelle poche sono più gravi.
           if (confronta(e, menoPeggioEsito) < 0) { menoPeggio = cand; menoPeggioEsito = e; }
         }
+
+        // ── Secondo tentativo: IL PASSO INDIETRO ──
+        // Solo se il primo non ha trovato una strada pulita, e solo se c'è un accordo prima
+        // da rimettere in discussione (non la prima coppia, e non con basso dato: lì il basso
+        // è scritto e cambiarlo vorrebbe dire riscrivere l'esercizio).
+        const chordPrima = i >= 1 ? sortedProg[i - 1] : null;
+        if (menoPeggioEsito.quante > 0 && chordPrima && prevPrevVoicing && prevPrevTones && prevChordNoteStart >= 0) {
+          const fixedSopPrima = sopranoMap.get(`${chordPrima.measure}:${chordPrima.beat}`);
+          const fixedBasPrima = bassMap.get(`${chordPrima.measure}:${chordPrima.beat}`);
+          const fPrima = finestra(prevPrevVoicing, prevPrevVoicing, prevPrevTones, prevPrevInvUsed);
+          // Le sostitute dell'accordo PRECEDENTE, in ordine di gusto.
+          const altPrima = generaCandidati({
+            tones: prevTones, inv: prevInvUsed,
+            rivoltiDaProvare: rivoltiDi(chordPrima, prevInvUsed, prevTones, false),
+            prevVoicing: prevPrevVoicing, inCarica: prevVoicing, rules,
+            fixedSoprano: fixedSopPrima, fixedBass: fixedBasPrima,
+            tonicPc: tonicPcVal, isLast: false, styleCtx,
+          });
+          const puntiPrima = new Map<Proposta, number>();
+          for (const c of altPrima) puntiPrima.set(c, gusto(c, prevPrevVoicing, null, prevTones, parseRoman(chordPrima.roman).degree));
+          altPrima.sort((a, b) => (puntiPrima.get(a) ?? 0) - (puntiPrima.get(b) ?? 0));
+
+          const TETTO_INDIETRO = 12;  // sostitute dell'accordo prima
+          const TETTO_AVANTI = 10;    // candidati di questo, per ciascuna
+          let trovato: { prima: Proposta; ora: Proposta } | null = null;
+          for (const prima of altPrima.slice(0, TETTO_INDIETRO)) {
+            // La sostituta deve reggere il veto contro l'accordo ANCORA prima: altrimenti si
+            // sposta il guasto indietro di una casella invece di toglierlo.
+            const nuoveNotePrima = noteDi(prima.v, prevTones, prima.inv, fPrima.m, fPrima.b);
+            if (veto(fPrima.passato, nuoveNotePrima, keySignature, tonic, isMinor).quante > 0) continue;
+            // Con lei davanti, questo accordo si riscrive da capo.
+            const fOra = finestra(prevPrevVoicing, prima.v, prevTones, prima.inv);
+            const oraCand = generaCandidati({
+              tones, inv, rivoltiDaProvare: rivoltiDi(chord, inv, tones, isLast),
+              prevVoicing: prima.v, inCarica: null, rules, fixedSoprano, fixedBass,
+              tonicPc: tonicPcVal, prevSeventhPc: prevSeventhPc ?? undefined, isLast, styleCtx,
+            });
+            const puntiOra = new Map<Proposta, number>();
+            for (const c of oraCand) puntiOra.set(c, gusto(c, prima.v, prevPrevVoicing, tones, parsed.degree));
+            oraCand.sort((a, b) => (puntiOra.get(a) ?? 0) - (puntiOra.get(b) ?? 0));
+            for (const ora of oraCand.slice(0, TETTO_AVANTI)) {
+              if (giudica(ora.v, ora.inv, fOra).quante === 0) { trovato = { prima, ora }; break; }
+            }
+            if (trovato) break;
+          }
+
+          if (trovato) {
+            // Si riscrive l'accordo precedente: note e violazioni. La macchina è la stessa
+            // del backtracking interno — `prevChordNoteStart` dice dove ricominciare.
+            allNotes.length = prevChordNoteStart;
+            for (let vi = allViolations.length - 1; vi >= 0; vi--) {
+              const v = allViolations[vi];
+              if (v.measure === chordPrima.measure && v.beat === chordPrima.beat) allViolations.splice(vi, 1);
+            }
+            const durataPrima = beatsToDuration(
+              chord.beat > chordPrima.beat && chord.measure === chordPrima.measure
+                ? chord.beat - chordPrima.beat
+                : beatsPerMeasure - chordPrima.beat + 1
+            );
+            allNotes.push(...voicingToStaffNotes(trovato.prima.v, chordPrima.measure, chordPrima.beat, durataPrima, prevTones, trovato.prima.inv, displayKeySignature, beatsPerMeasure));
+            allViolations.push(...detectViolations(prevPrevVoicing, trovato.prima.v, chordPrima.measure, chordPrima.beat, rules));
+            prevVoicing = trovato.prima.v;
+            prevInvUsed = trovato.prima.inv;
+            menoPeggio = trovato.ora;
+            menoPeggioEsito = { quante: 0, errori: 0, avvisi: 0, regole: [] };
+            contiVeto.passiIndietro++;
+          }
+        }
+
         if (menoPeggio.v !== voicing || menoPeggio.inv !== inv) {
           voicing = menoPeggio.v;
           inv = menoPeggio.inv;
