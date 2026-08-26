@@ -10,6 +10,7 @@ import type { DynamicMark } from '../utils/dynamics';
 import type { OctaveSpan } from '../utils/octaveShifts';
 import { electronBridge } from '../services/electronBridge';
 import { usePreference } from '../preferences/usePreference';
+import { stimaTonalita } from '../utils/stimaTonalita';
 
 export type GrandStaffMidiProject = {
   notes: StaffNote[];
@@ -1631,6 +1632,52 @@ export function planMidiTracks(
 }
 
 /** Che cosa contiene un file MIDI, per poterlo dire PRIMA di chiedere dove metterlo. */
+/**
+ * QUALE TONALITÀ USARE PER UN FILE MIDI CHE STIAMO IMPORTANDO.
+ *
+ * Un MIDI non contiene alterazioni, solo numeri di nota: la grafia di ogni Do♯/Re♭ del brano
+ * la decide l'armatura che scegliamo qui. Le fonti sono tre e non valgono uguale.
+ *
+ * 1. LA DICHIARAZIONE DEL FILE (meta `0x59`), quando dice qualcosa di diverso da DO MAGGIORE.
+ *    Zero diesis e modo maggiore è il valore che ci finisce da solo quando chi ha scritto il
+ *    file non se n'è occupato: nel file «niente da dichiarare» e «è in Do maggiore» si
+ *    scrivono IDENTICI, e l'unico modo di distinguerli è guardare le note. Qualunque altro
+ *    valore è invece una scelta deliberata, e a quella si crede.
+ *
+ * 2. LA STIMA DALLE NOTE (Krumhansl-Schmuckler, vedi `utils/stimaTonalita.ts`). Misurata sul
+ *    corpus: 88-100% sul repertorio vero (Delachi 100%, Delamont 90%, Dubois 88%, corali
+ *    82%). Non abbastanza per scavalcare una dichiarazione, abbastanza per battere il caso.
+ *
+ * 3. LA TONALITÀ GIÀ IMPOSTATA nel progetto, come ultima risorsa.
+ *
+ * La funzione è UNA perché il dialogo che annuncia l'import e l'import stesso devono dire la
+ * stessa cosa: se il riassunto decidesse per conto suo, prometterebbe una tonalità e
+ * l'importazione ne scriverebbe un'altra.
+ */
+export type TonalitaImport = {
+  /** Fondamentale MAGGIORE relativa, nella convenzione di `keySignatureRoot`. */
+  root: string;
+  isMinor: boolean;
+  /** Da dove viene, per poterlo dire a chi importa. */
+  fonte: 'file' | 'stima' | 'progetto';
+};
+
+export function decidiTonalitaImport(
+  parsed: { keySignature?: { sharps: number; isMinor: boolean }; notes?: Array<{ midi: number; durationTicks?: number }> },
+  progetto?: { root: string; isMinor: boolean },
+): TonalitaImport {
+  const MAG_DIESIS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
+  const MAG_BEMOLLI = ['C', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
+  const k = parsed.keySignature;
+  if (k && !(k.sharps === 0 && !k.isMinor)) {
+    const root = k.sharps >= 0 ? (MAG_DIESIS[k.sharps] ?? 'C') : (MAG_BEMOLLI[-k.sharps] ?? 'C');
+    return { root, isMinor: !!k.isMinor, fonte: 'file' };
+  }
+  const stima = stimaTonalita(parsed.notes || []);
+  if (stima) return { root: stima.root, isMinor: stima.isMinor, fonte: 'stima' };
+  return { root: progetto?.root || 'C', isMinor: !!progetto?.isMinor, fonte: 'progetto' };
+}
+
 export async function summarizeMidiSource(source: File | ArrayBuffer | string): Promise<ImportSummary | null> {
   try {
     const buffer = await resolveMidiSource(source, async () => null);
@@ -1657,7 +1704,7 @@ export async function summarizeMidiSource(source: File | ArrayBuffer | string): 
         ...(multi && !spec.isDrum ? { clef: (mean < 60 ? 'bass' : 'treble') as ClefType } : {}),
       };
     });
-    return { kind: 'midi', parts };
+    return { kind: 'midi', parts, tonalita: decidiTonalitaImport(parsed) };
   } catch {
     return null;
   }
@@ -1792,15 +1839,9 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     // in `keySignatureRoot` anche quando il brano è in minore. Prima, per un file in minore,
     // qui ci finiva la tonica vera — importando un MIDI in Mi minore diventava 'E', che per
     // la convenzione del programma significa DO♯ minore: quattro diesis invece di uno.
-    let midiRoot = project.keySignatureRoot || 'C';
-    let midiIsMinor = project.isMinorMode;
-    if (parsed.keySignature) {
-      const { sharps, isMinor } = parsed.keySignature;
-      const majorRoots = ['C','G','D','A','E','B','F#','C#'];
-      const flatMajorRoots = ['C','F','Bb','Eb','Ab','Db','Gb','Cb'];
-      midiRoot = sharps >= 0 ? (majorRoots[sharps] ?? 'C') : (flatMajorRoots[-sharps] ?? 'C');
-      midiIsMinor = !!isMinor;
-    }
+    const tonalita = decidiTonalitaImport(parsed, { root: project.keySignatureRoot || 'C', isMinor: !!project.isMinorMode });
+    const midiRoot = tonalita.root;
+    const midiIsMinor = tonalita.isMinor;
     // 'Major' sempre: `midiRoot` è già la fondamentale maggiore relativa.
     const keySig = getKeySignature(midiRoot, 'Major');
 
@@ -1884,7 +1925,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       timeSignature: midiFirstTs,
       timeSignatureChanges: midiTsChanges,
       bpm: parsed.tempoBpm,
-      ...(parsed.keySignature ? { keySignatureRoot: midiRoot, isMinorMode: midiIsMinor } : {}),
+      ...(tonalita.fonte !== 'progetto' ? { keySignatureRoot: midiRoot, isMinorMode: midiIsMinor } : {}),
     });
   }, [pickMidiFile, project.isMinorMode, project.keySignatureRoot, setProject]);
 

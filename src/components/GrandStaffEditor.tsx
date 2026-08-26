@@ -249,6 +249,11 @@ const pxPerTickOfMeasure = (sys: any, idxInSystem: number): number => {
     return (typeof sysPx === 'number' && isFinite(sysPx) && sysPx > 0) ? sysPx : DEFAULT_PX_PER_TICK;
 };
 
+/** «G» + minore → «Mi minore»: il nome che un musicista si aspetta di leggere, non la
+ *  fondamentale d'armatura che il programma memorizza. */
+const nomeTonalitaUmano = (root: string, isMinor: boolean): string =>
+    isMinor ? `${tonicaReale(root, true)} minore` : `${root} maggiore`;
+
 // `relativeMinors` e `tonicaReale` vivono in `utils/relativeMinors.ts`. La tabella stava
 // qui, privata: è il motivo per cui la stessa conversione è stata riscritta a mano — e
 // sbagliata — in altri punti del programma che non potevano vederla.
@@ -18976,6 +18981,27 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                         );
                                     })}
                                 </ul>
+                                {importSummary.kind === 'midi' && importSummary.tonalita && (
+                                    // La TONALITÀ va detta prima di importare: un MIDI non contiene
+                                    // alterazioni, solo numeri di nota, quindi è questa scelta a
+                                    // decidere come verrà scritto ogni Do♯/Re♭ del brano. E va detto
+                                    // anche DA DOVE viene, perché una stima si corregge e una
+                                    // dichiarazione del file no.
+                                    <p className="mt-2 text-[11px] text-amber-200/90">
+                                        {tUI('import_key_line', {
+                                            key: nomeTonalitaUmano(importSummary.tonalita.root, importSummary.tonalita.isMinor),
+                                            defaultValue: `Tonalità: ${nomeTonalitaUmano(importSummary.tonalita.root, importSummary.tonalita.isMinor)}`,
+                                        })}
+                                        <span className="text-slate-500">
+                                            {' — '}
+                                            {importSummary.tonalita.fonte === 'file'
+                                                ? tUI('import_key_from_file', { defaultValue: 'dichiarata dal file' })
+                                                : importSummary.tonalita.fonte === 'stima'
+                                                    ? tUI('import_key_from_guess', { defaultValue: 'dedotta dalle note (il file non la dichiara); correggila dalla barra strumenti se sbagliata' })
+                                                    : tUI('import_key_from_project', { defaultValue: 'resta quella corrente' })}
+                                        </span>
+                                    </p>
+                                )}
                                 {importSummary.kind === 'midi' && (
                                     <p className="mt-2 text-[10px] text-slate-500">
                                         {tUI('import_drums_hint2', { defaultValue: 'Percussioni e parti intonate sono riconosciute da sole (canale 10, nome della traccia): tocca l’etichetta solo se serve correggerle.' })}
