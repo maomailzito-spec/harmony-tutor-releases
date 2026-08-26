@@ -142,6 +142,9 @@ export type ChoralConfig = {
    *  per il perché il checker si interroghi solo su una parte delle sue regole.
    *  Attivo di default; `false` riporta al comportamento precedente. */
   vetoRegole?: boolean;
+  /** Il PASSO INDIETRO del veto: quando nessun candidato per l'accordo in esame passa, si
+   *  rimette in gioco quello prima. Attivo di default; `false` serve al confronto. */
+  passoIndietro?: boolean;
   /** Initial chord voicing disposition (bottom to top: Bass=Root, then Tenor, Alto, Soprano).
    * Digits: 8=Root(octave), 3=3rd, 5=5th. e.g. 'R358' = B=Root, T=3rd, A=5th, S=8va.
    * 'auto' (default) = engine picks best voicing. Only effective for first chord in root position. */
@@ -2902,7 +2905,7 @@ export function realizeChorale(
         // da rimettere in discussione (non la prima coppia, e non con basso dato: lì il basso
         // è scritto e cambiarlo vorrebbe dire riscrivere l'esercizio).
         const chordPrima = i >= 1 ? sortedProg[i - 1] : null;
-        if (menoPeggioEsito.quante > 0 && chordPrima && prevPrevVoicing && prevPrevTones && prevChordNoteStart >= 0) {
+        if (config.passoIndietro !== false && menoPeggioEsito.quante > 0 && chordPrima && prevPrevVoicing && prevPrevTones && prevChordNoteStart >= 0) {
           const fixedSopPrima = sopranoMap.get(`${chordPrima.measure}:${chordPrima.beat}`);
           const fixedBasPrima = bassMap.get(`${chordPrima.measure}:${chordPrima.beat}`);
           const fPrima = finestra(prevPrevVoicing, prevPrevVoicing, prevPrevTones, prevPrevInvUsed);

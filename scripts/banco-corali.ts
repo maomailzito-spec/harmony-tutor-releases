@@ -81,6 +81,7 @@ for (const f of process.argv.slice(2)) {
     // SENZA_VETO=1 spegne il veto delle regole: serve al confronto prima/dopo, che va fatto
     // cambiando un interruttore e non l'albero di lavoro.
     vetoRegole: !process.env.SENZA_VETO,
+    passoIndietro: !process.env.SENZA_PASSO,
   } as any;
   azzeraContiVeto();
   const generato = realizeChorale(progressione, config);
