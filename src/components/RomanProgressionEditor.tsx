@@ -33,6 +33,7 @@ import {
   type StyleProfile,
 } from '../engine/choralStyleProfile';
 import defaultStyleProfileData from '../engine/defaultStyleProfile.json';
+import { tonicaReale } from '../utils/relativeMinors';
 
 // ─── Props ─────────────────────────────────────────────────────────────────
 
@@ -330,7 +331,11 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const { t } = useTranslation('ui');
 
   const [progressionText, setProgressionText] = useState('I - IV - V7 - I');
-  const [localTonic, setLocalTonic] = useState(keySignatureRoot);
+  // `keySignatureRoot` è la fondamentale MAGGIORE relativa, non la tonica: su un brano in
+  // Mi minore vale 'G'. Passandolo tale e quale, il pannello proponeva «Sol minore» e il
+  // generatore armonizzava in una tonalità dove i Mi e i Si naturali del brano sono
+  // estranei. Vedi `utils/relativeMinors.ts`.
+  const [localTonic, setLocalTonic] = useState(() => tonicaReale(keySignatureRoot, isMinorMode));
   const [localMinor, setLocalMinor] = useState(isMinorMode);
   const [localTs, setLocalTs] = useState<TimeSignature>(timeSignature);
   const [selectedDuration, setSelectedDuration] = useState('quarter');
@@ -432,7 +437,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   // Sync from parent when panel opens
   useEffect(() => {
     if (isOpen) {
-      setLocalTonic(keySignatureRoot);
+      setLocalTonic(tonicaReale(keySignatureRoot, isMinorMode));
       setLocalMinor(isMinorMode);
       setLocalTs(timeSignature);
       setGeneratedNotes(null);
