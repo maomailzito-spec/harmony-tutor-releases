@@ -171,3 +171,25 @@ export function fotografiaCorpus(isMinor: boolean): { grado: string; conto: numb
     const uni = delModo(isMinor).unigrammi;
     return nomi.map((gruppo, deg) => ({ grado: gruppo.join('/'), conto: somma(uni, gruppo), peso: Math.round((pesi[deg] ?? 0) * 10) / 10 }));
 }
+
+/**
+ * QUANTO PESA UN ACCORDO DI TONICIZZAZIONE (`V/V`, `V7/vi`, `vii°/iv`…), nella stessa scala
+ * dei gradi diatonici.
+ *
+ * Nel corpus valgono il **12% degli accordi in maggiore** e il 9,6% in minore: non sono un
+ * ornamento, sono un pezzo del vocabolario. Il generatore non ne aveva nessuno, e una nota di
+ * melodia fuori scala finiva sotto l'accordo di tonica — che è il modo più diretto di
+ * scrivere uno scontro cromatico.
+ *
+ * @param chiave l'etichetta com'è scritta nel corpus: `V/V`, `V/vi`, `vii°/iv`…
+ */
+export function pesoSecondaria(isMinor: boolean, chiave: string): number {
+    const uni = delModo(isMinor).unigrammi;
+    const nomi = etichette(isMinor);
+    // Il metro è lo stesso dei gradi: il massimo diatonico vale 10.
+    const massimo = Math.max(...nomi.map(g => somma(uni, g)), 1);
+    // La settima non è contata a parte nel corpus (le cifre sono già cadute): `V7/V` e `V/V`
+    // pescano dalla stessa voce.
+    const base = chiave.replace(/^V7\//, 'V/');
+    return ((uni[base] ?? 0) / massimo) * 10;
+}

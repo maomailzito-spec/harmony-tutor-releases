@@ -20,7 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
-import { pesiDeiGradi, bonusTransizione } from './corpusProgressione';
+import { pesiDeiGradi, bonusTransizione, pesoSecondaria } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -3326,6 +3326,53 @@ export function autoHarmonize(
       : (da === 4 && a === 0 ? 5 : da === 3 && a === 4 ? 3 : da === 1 && a === 4 ? 3
         : da === 5 && (a === 1 || a === 3) ? 2 : 0);
 
+
+  // ── GLI ACCORDI DI TONICIZZAZIONE ───────────────────────────────────
+  // Fin qui il generatore conosceva sette triadi diatoniche e basta. Una nota di melodia
+  // fuori scala non era coperta da nessun grado e finiva nel ramo di ripiego «nessun
+  // candidato → metti I»: l'accordo di tonica sotto una nota cromatica, cioè il modo più
+  // diretto di scrivere uno scontro. Misurato su 75 brani, era il primo addebito del
+  // generatore, e tutto il suo passivo stava sulle melodie cromatiche.
+  //
+  // Nel corpus questi accordi valgono il 12% del totale in maggiore e il 9,6% in minore.
+  // Il realizzatore li sa già scrivere (`parseRoman` legge `V/V`, `getChordTones` costruisce
+  // la scala provvisoria del bersaglio, la grafia esce giusta): mancava solo che qualcuno
+  // glieli PROPONESSE.
+  //
+  // Si accodano ai sette diatonici, così che tutto il resto — rivolti, basso, punteggio —
+  // continui a lavorare per indice senza sapere che sono cambiati di numero.
+  type Extra = { label: string; corpus: string; target: number; hasSeventh: boolean };
+  const extra: Extra[] = [];
+  /** Come si scrive il bersaglio dentro l'etichetta: `parseRoman` legge solo lettere romane,
+   *  quindi niente `°` né `o` (un `V/iio` non verrebbe riconosciuto). */
+  const BERSAGLIO_MAG = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii'];
+  const BERSAGLIO_MIN = ['i', 'ii', 'III', 'iv', 'V', 'VI', 'VII'];
+  const nomeBersaglio = isMinor ? BERSAGLIO_MIN : BERSAGLIO_MAG;
+  /** Come il corpus lo chiama, che è un'altra cosa (là il ° c'è). */
+  const CORPUS_MAG = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
+  const CORPUS_MIN = ['i', 'ii°', 'III', 'iv', 'V', 'VI', 'VII'];
+  const nomeCorpus = isMinor ? CORPUS_MIN : CORPUS_MAG;
+  if (usaCorpus) {
+    // Non si tonicizza la tonica (sarebbe la dominante di casa) né il settimo grado, che
+    // essendo una triade diminuita non è una meta.
+    for (const t of [1, 2, 3, 4, 5]) {
+      const radiceBersaglio = triadPcSets[t][0];
+      const radiceDom = (radiceBersaglio + 7) % 12;
+      const triade = [radiceDom, (radiceDom + 4) % 12, (radiceDom + 7) % 12];
+      const settima = (radiceDom + 10) % 12;
+      // La versione senza e con settima sono due candidati distinti: coprono note diverse
+      // della melodia, e la settima è spesso proprio la nota cromatica che serve.
+      triadPcSets.push(triade);
+      seventhPcs.push(settima);
+      extra.push({ label: `V/${nomeBersaglio[t]}`, corpus: `V/${nomeCorpus[t]}`, target: t, hasSeventh: false });
+      triadPcSets.push([...triade, settima]);
+      seventhPcs.push(settima);
+      extra.push({ label: `V7/${nomeBersaglio[t]}`, corpus: `V/${nomeCorpus[t]}`, target: t, hasSeventh: true });
+    }
+  }
+  const PRIMO_EXTRA = 7;
+  const datiExtra = (deg: number): Extra | null => (deg >= PRIMO_EXTRA ? extra[deg - PRIMO_EXTRA] ?? null : null);
+
   const n = melody.length;
   const result: RomanChord[] = [];
   let prevDeg = -1;
@@ -3362,7 +3409,9 @@ export function autoHarmonize(
   }
 
   const totalGroups = groups.length;
-  let prevBassMidi = -1;  // Track previous bass for smooth voice leading
+  let prevBassMidi = -1;
+  /** Se l'accordo precedente era una tonicizzazione, il grado che ha promesso. */
+  let bersaglioAtteso = -1;  // Track previous bass for smooth voice leading
 
   for (let i = 0; i < totalGroups; i++) {
     const group = groups[i];
@@ -3370,13 +3419,25 @@ export function autoHarmonize(
 
     // Find candidate degrees whose triad covers the group's PCs
     const candidates: { deg: number; score: number; coverage: number }[] = [];
-    for (let deg = 0; deg < 7; deg++) {
+    for (let deg = 0; deg < triadPcSets.length; deg++) {
       const pcs = triadPcSets[deg];
       // Count how many of the group's PCs are in this triad
       const covered = groupPcs.filter(pc => pcs.includes(pc)).length;
       if (covered === 0) continue;
 
-      let score = baseWeight[deg] ?? 1;
+      const ex = datiExtra(deg);
+      if (ex) {
+        // UNA TONICIZZAZIONE DEVE RISOLVERE. Un `V/V` che non è seguito dal V non è una
+        // tonicizzazione, è una nota sbagliata con un nome altisonante: si propone solo se
+        // il gruppo di melodia SUCCESSIVO può stare sopra il suo bersaglio.
+        if (i + 1 >= totalGroups) continue;
+        const pcsBersaglio = triadPcSets[ex.target];
+        if (!groups[i + 1].pcs.some(pc => pcsBersaglio.includes(pc))) continue;
+        // E non si apre un brano tonicizzando.
+        if (i === 0) continue;
+      }
+
+      let score = ex ? pesoSecondaria(isMinor, ex.corpus) : (baseWeight[deg] ?? 1);
 
       // Coverage bonus: more melody notes covered = better fit
       score += (covered / groupPcs.length) * 5;
@@ -3386,6 +3447,9 @@ export function autoHarmonize(
 
       // Penalty: same degree as previous chord → monotonous
       if (deg === prevDeg) score -= 4;
+      // Chi arriva DOPO una tonicizzazione e ne è il bersaglio è la sua risoluzione: è
+      // l'accordo che quella tonicizzazione ha promesso, e va mantenuta la promessa.
+      if (bersaglioAtteso >= 0 && deg === bersaglioAtteso) score += 8;
 
       // ─── Cadential patterns ───────────────────────────────────────
       // Last chord should be I (or i)
@@ -3444,7 +3508,8 @@ export function autoHarmonize(
       }
     }
 
-    const useSeventh = shouldUseSeventh(
+    const exBest = datiExtra(best.deg);
+    const useSeventh = exBest ? exBest.hasSeventh : shouldUseSeventh(
       best.deg, groupPcs, seventhPcs[best.deg], triadPcSets[best.deg][0],
       i === 0, i === totalGroups - 1, nextDeg, isMinor
     );
@@ -3461,8 +3526,11 @@ export function autoHarmonize(
     // Clamp inversion to valid range for the chord type
     const clampedInv = Math.min(inv, maxInv);
 
+    // L'etichetta di una tonicizzazione porta già la settima nel nome (`V7/vi`): il cifrato
+    // che si aggiunge è solo quello del rivolto.
     result.push({
-      roman: romanLabels[best.deg] + inversionSuffix(clampedInv, useSeventh),
+      roman: exBest ? exBest.label + inversionSuffix(clampedInv, false)
+        : romanLabels[best.deg] + inversionSuffix(clampedInv, useSeventh),
       measure: group.measure,
       beat: group.beat,
       inversion: clampedInv,
@@ -3470,6 +3538,7 @@ export function autoHarmonize(
     });
     prevBassMidi = bassMidiForInversion(best.deg, clampedInv, triadPcSets, tonicPc);
     prevDeg = best.deg;
+    bersaglioAtteso = exBest ? exBest.target : -1;
   }
 
   return result;
