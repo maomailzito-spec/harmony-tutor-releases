@@ -20,7 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
-import { pesiDeiGradi, bonusTransizione, pesoSecondaria } from './corpusProgressione';
+import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -1205,9 +1205,17 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
         cost += getMotionBonus(sp, voiceNames[vi], motionType);
       }
 
-      // Contrary motion preference bonus (outer voices)
+      // IL MOTO FRA LE VOCI ESTREME. Soprano e basso sono il telaio: quel che sta in mezzo
+      // riempie. Nel corpus il moto contrario fra le estreme è il 49% di tutto ciò che è
+      // stato scritto, il retto il 28%, l'obliquo il 21% — e finora questa preferenza
+      // esisteva SOLO se l'utente aveva estratto un profilo di stile suo, cioè quasi mai.
+      // Qui le due note sono numeri veri, quindi la domanda «sale o scende» ha una risposta
+      // sola: è il posto dove il telaio si giudica.
       const sopDir = Math.sign(soprano - prev.soprano);
       const bassDir = Math.sign(bass - prev.bass);
+      const tipoMoto = (sopDir === 0 || bassDir === 0) ? 'obliquo'
+        : (sopDir === bassDir ? 'retto' : 'contrario');
+      cost += costoMotoEstremi(tipoMoto);
       if (sopDir !== 0 && bassDir !== 0 && sopDir !== bassDir) {
         cost += getContraryMotionBonus(sp);
       }
@@ -3103,7 +3111,7 @@ function scontoDellaQuartaSesta(forzaQui: number, gradoQui: number, gradoDopo: n
 }
 
 /** Un gruppo di melodia da armonizzare: le classi d'altezza che ci suonano sopra, e dove sta. */
-type GruppoMelodia = { pcs: number[]; measure: number; beat: number };
+type GruppoMelodia = { pcs: number[]; measure: number; beat: number; sopranoMidi?: number };
 
 /** Che cosa serve sapere di un accordo candidato, indipendentemente da dove si trova. */
 type SchedaAccordo = {
@@ -3629,7 +3637,7 @@ export function autoHarmonize(
   let prevDeg = -1;
 
   // ── Group melody notes by harmonic rhythm slots ─────────────────────
-  type MelodyGroup = { pcs: number[]; measure: number; beat: number };
+  type MelodyGroup = { pcs: number[]; measure: number; beat: number; sopranoMidi?: number };
   let groups: MelodyGroup[];
 
   if (harmonicRhythmBeats > 0) {
@@ -3647,7 +3655,9 @@ export function autoHarmonize(
         const slotBeat = (slotAbsBeat % beatsPerMeasure) + 1;
         groupMap.set(slotIndex, { pcs: [], measure: slotMeasure, beat: slotBeat });
       }
-      groupMap.get(slotIndex)!.pcs.push(((m.midi % 12) + 12) % 12);
+      const gr = groupMap.get(slotIndex)!;
+      gr.pcs.push(((m.midi % 12) + 12) % 12);
+      if (gr.sopranoMidi == null) gr.sopranoMidi = m.midi;
     }
     groups = [...groupMap.values()];
   } else {
@@ -3656,6 +3666,9 @@ export function autoHarmonize(
       pcs: [((m.midi % 12) + 12) % 12],
       measure: m.measure,
       beat: m.beat,
+      // La nota VERA del soprano, non solo la sua classe: al moto fra le voci estreme serve
+      // sapere se sale o scende, e una classe d'altezza non lo dice.
+      sopranoMidi: m.midi,
     }));
   }
 

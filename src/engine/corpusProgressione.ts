@@ -53,6 +53,8 @@ type PerModo = {
     unigrammiDebole: { [grado: string]: number };
     bigrammiForte: MappaBigrammi;
     bigrammiDebole: MappaBigrammi;
+    intervalliEstremi: { [forza: string]: { [semitoni: string]: number } };
+    motoEstremi: { [tipo: string]: number };
     rivolti: MappaBigrammi;
 };
 
@@ -316,4 +318,61 @@ export function costoDelRivolto(isMinor: boolean, deg: number, inv: number): num
     const massimo = Math.max(...conti, 1);
     const dalCorpus = (1 - conti[inv] / massimo) * PESO_RIVOLTO;
     return (1 - f) * aMano + f * dalCorpus;
+}
+
+
+/**
+ * LE VOCI ESTREME TRACCIANO LA VIA, IL RESTO È COLORE.
+ *
+ * Il generatore sceglieva i gradi e il basso usciva come conseguenza: cioè il contrario di
+ * come si scrive. Soprano e basso sono il telaio — un contrappunto a due voci che regge tutto
+ * — e le voci interne lo riempiono.
+ *
+ * Il corpus ha soprano e basso scritti in ogni brano, e non li avevamo mai guardati. Dicono
+ * due cose nette:
+ *
+ *   L'INTERVALLO fra le estreme, e dove cade. Unisono e ottava valgono il 22% sul tempo
+ *   forte e solo l'11% sul debole: sono la sonorità d'ARRIVO, atterrano sul battere. Sul
+ *   tempo debole comandano terze e quinte, che sono di passaggio.
+ *
+ *   IL MOTO fra un accordo e l'altro: contrario 49%, retto 28%, obliquo 21%. Il moto
+ *   contrario non è una preferenza da manuale, è quasi la metà di tutto ciò che è stato
+ *   scritto.
+ */
+
+/** Quanto ci si aspetta questo intervallo fra soprano e basso, qui. Zero = è il più comune. */
+export function costoIntervalloEstremi(isMinor: boolean, forte: boolean, semitoni: number): number {
+    const PESO = 3;
+    const tab = delModo(isMinor).intervalliEstremi?.[forte ? 'forte' : 'debole'];
+    if (!tab) return 0;
+    let totale = 0, massimo = 0;
+    for (const v of Object.values(tab)) { totale += v; if (v > massimo) massimo = v; }
+    if (totale <= 0 || massimo <= 0) return 0;
+    const iv = ((semitoni % 12) + 12) % 12;
+    return (1 - (tab[String(iv)] ?? 0) / massimo) * PESO * fiducia(totale);
+}
+
+/**
+ * Quanto costa muovere le estreme in questo modo. Zero = il moto più consueto (contrario).
+ *
+ * Va chiesto dove le note sono VERE. Provato dentro la scelta della progressione, dove del
+ * basso si conosce solo la classe d'altezza: «sale o scende» diventa una supposizione (si
+ * prende il tragitto più breve fra le due classi) e il responso è ambiguo — meno errori e
+ * meno retrocessioni, ma più avvisi e più altalene. Nel realizzatore invece soprano e basso
+ * sono due numeri, e la domanda ha una risposta sola.
+ *
+ * Non prende il modo: fra maggiore e minore la differenza è di un punto percentuale, e non
+ * vale infilare un parametro lungo tutta la catena di `scoreVoicing` per quello.
+ */
+export function costoMotoEstremi(tipo: 'contrario' | 'retto' | 'obliquo'): number {
+    const PESO = 2.5;
+    const tab: { [k: string]: number } = {};
+    for (const m of [stats.major, stats.minor]) {
+        for (const [k, v] of Object.entries(m.motoEstremi || {})) tab[k] = (tab[k] ?? 0) + v;
+    }
+    if (!Object.keys(tab).length) return 0;
+    let totale = 0, massimo = 0;
+    for (const v of Object.values(tab)) { totale += v; if (v > massimo) massimo = v; }
+    if (totale <= 0 || massimo <= 0) return 0;
+    return (1 - (tab[tipo] ?? 0) / massimo) * PESO * fiducia(totale);
 }

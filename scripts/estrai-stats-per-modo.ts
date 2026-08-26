@@ -43,13 +43,22 @@ type PerModo = {
     unigrammiDebole: Record<string, number>;
     bigrammiForte: Mappa;
     bigrammiDebole: Mappa;
+    /** LE VOCI ESTREME. Soprano e basso tracciano la via; quel che sta in mezzo è colore.
+     *  Il corpus le ha scritte e non le avevamo mai guardate.
+     *
+     *  `intervalliEstremi[forza][semitoni]` = con che intervallo si presentano soprano e
+     *  basso (in semitoni, ridotto all'ottava);
+     *  `motoEstremi[tipo]` = come si muovono l'uno rispetto all'altro fra un accordo e il
+     *  successivo — contrario, obliquo, retto. */
+    intervalliEstremi: Record<string, Record<string, number>>;
+    motoEstremi: Record<string, number>;
     /** `rivolti[grado][cifra] = quante volte`. Risponde a «se metto un ii, che basso ci va»:
      *  il corpus dice che il ii sta in primo rivolto il doppio delle volte del I, e che il
      *  vii° in posizione fondamentale è raro. Prima quel giudizio era una mia costante. */
     rivolti: Mappa;
     brani: number; transizioni: number;
 };
-const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, unigrammiForte: {}, unigrammiDebole: {}, bigrammiForte: {}, bigrammiDebole: {}, rivolti: {}, brani: 0, transizioni: 0 });
+const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, unigrammiForte: {}, unigrammiDebole: {}, bigrammiForte: {}, bigrammiDebole: {}, intervalliEstremi: { forte: {}, debole: {} }, motoEstremi: {}, rivolti: {}, brani: 0, transizioni: 0 });
 const modi: Record<'major' | 'minor', PerModo> = { major: vuoto(), minor: vuoto() };
 
 /** Via il cifrato dal grado: `V65` → `V`, `vii°6` → `vii°`, `V/vi6` → `V/vi`. */
@@ -93,18 +102,26 @@ for (const f of files) {
         const seq: string[] = [];
         const conCifre: { grado: string; cifra: string }[] = [];
         const forze: boolean[] = [];
+        const estremi: ({ s: number; b: number; forte: boolean } | null)[] = [];
         let ultimoAssoluto = -Infinity;
         for (const k of chiavi) {
             const [mi, bt] = k.split(':').map(Number);
             // Solo movimenti INTERI, e non più fitti di uno: le suddivisioni portano note di
             // passaggio e rivolti fantasma, che come statistica sono rumore.
             if (Math.abs(bt - Math.round(bt)) > 0.01) continue;
+            const bRound = Math.round(bt);
+            const forzaQui = bRound === 1 || (movPerBattuta % 2 === 0 && bRound === movPerBattuta / 2 + 1);
             const assoluto = mi * movPerBattuta + bt;
             if (assoluto - ultimoAssoluto < 0.99) continue;
             const strutturali = perMovimento.get(k)!.filter((n: any) =>
                 !n.isPassing && !n.isNeighbor && !n.isAppoggiatura && !n.isAnticipation && !n.isEscape && !n.isSuspension);
             if (strutturali.length < 2) continue;
             ultimoAssoluto = assoluto;
+            // Le voci estreme dell'accordo, quando ci sono tutt'e due.
+            const conVoce = perMovimento.get(k)!.filter((x: any) => x.voice >= 1 && x.voice <= 4);
+            const sop = conVoce.find((x: any) => x.voice === 1);
+            const bas = conVoce.find((x: any) => x.voice === 4);
+            estremi.push(sop && bas ? { s: Number(sop.midi), b: Number(bas.midi), forte: forzaQui } : null);
             try {
                 const r = getRomanAnalysis(strutturali as any, tonica, isMinor);
                 if (r && r.roman && r.roman !== '?') {
@@ -113,8 +130,7 @@ for (const f of files) {
                     const cifra = (r.figures || []).join('') || '5';
                     conCifre.push({ grado: senzaCifre(r.roman), cifra });
                     // Forte: il battere, e nei metri pari anche il movimento di mezzo.
-                    const b = Math.round(bt);
-                    forze.push(b === 1 || (movPerBattuta % 2 === 0 && b === movPerBattuta / 2 + 1));
+                    forze.push(forzaQui);
                 }
             } catch { /* accordo illeggibile: si salta */ }
         }
@@ -135,6 +151,19 @@ for (const f of files) {
             (mappa[seq[k - 1]] ||= {})[seq[k]] = (mappa[seq[k - 1]][seq[k]] || 0) + 1;
         }
         for (const c of conCifre) (m.rivolti[c.grado] ||= {})[c.cifra] = (m.rivolti[c.grado][c.cifra] || 0) + 1;
+        // ── LE VOCI ESTREME ──
+        for (let k = 0; k < estremi.length; k++) {
+            const e = estremi[k];
+            if (!e) continue;
+            const iv = ((e.s - e.b) % 12 + 12) % 12;
+            const dove = m.intervalliEstremi[e.forte ? 'forte' : 'debole'];
+            dove[String(iv)] = (dove[String(iv)] || 0) + 1;
+            const p = k > 0 ? estremi[k - 1] : null;
+            if (!p) continue;
+            const ds = Math.sign(e.s - p.s), db = Math.sign(e.b - p.b);
+            const tipo = (ds === 0 || db === 0) ? 'obliquo' : (ds === db ? 'retto' : 'contrario');
+            m.motoEstremi[tipo] = (m.motoEstremi[tipo] || 0) + 1;
+        }
         for (let i = 1; i < puliti.length; i++) {
             const da = puliti[i - 1], a = puliti[i];
             (m.bigrammi[da] ||= {})[a] = (m.bigrammi[da][a] || 0) + 1;
