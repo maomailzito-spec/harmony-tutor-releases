@@ -46,7 +46,7 @@
 import statsJson from '../data/progressionStatsByMode.json';
 
 type MappaBigrammi = { [da: string]: { [a: string]: number } };
-type PerModo = { unigrammi: { [grado: string]: number }; bigrammi: MappaBigrammi };
+type PerModo = { unigrammi: { [grado: string]: number }; bigrammi: MappaBigrammi; rivolti: MappaBigrammi };
 
 const stats = statsJson as unknown as { major: PerModo; minor: PerModo };
 const delModo = (isMinor: boolean): PerModo => (isMinor ? stats.minor : stats.major);
@@ -219,4 +219,82 @@ export function pesoSecondaria(isMinor: boolean, chiave: string): number {
     // pescano dalla stessa voce.
     const base = chiave.replace(/^V7\//, 'V/');
     return ((uni[base] ?? 0) / massimo) * 10;
+}
+
+
+/**
+ * CHE BASSO VUOLE UN CERTO GRADO — dal corpus, non da una costante.
+ *
+ * «Se metto un ii, cosa posso mettere al basso» è una domanda a cui l'armonia risponde con
+ * delle consuetudini, e le consuetudini stanno scritte nel repertorio. Il corpus dice che il
+ * `ii` sta in primo rivolto il 29% delle volte contro il 17% del `I`, e che in minore il
+ * `ii°` in primo rivolto (34%) è più frequente che in posizione fondamentale (24%) — cioè
+ * esattamente la regola di scuola, ma misurata invece che asserita.
+ *
+ * Prima era una tabella di quattro numeri scelti da me, uguale per tutti i gradi.
+ *
+ * ── È UNA CONSUETUDINE, NON UNA REGOLA, E PESA POCO APPOSTA ───────────────────────────
+ *
+ * La frequenza con cui un grado compare in un certo rivolto è un'inclinazione generale.
+ * QUALE rivolto vada in un punto preciso lo decide un'altra cosa: come si muovono le voci —
+ * se il basso fa una linea, se nascono quinte parallele — e quella decisione sta a valle, nel
+ * realizzatore e nel veto delle regole.
+ *
+ * Misurato: con questa consuetudine a peso alto (8) la condotta migliorava — meno altalene,
+ * meno retrocessioni — ma gli ERRORI salivano da 256 a 280, perché il corpus preferisce la
+ * posizione fondamentale e una fila di accordi tutti in stato fondamentale produce parallele
+ * fra le voci estreme. Una statistica sul repertorio intero non sa niente del punto in cui
+ * ci troviamo.
+ *
+ * Perciò pesa poco: è un suggerimento che cede a chi ne sa di più. Le consuetudini che invece
+ * sono REGOLE — il 4/6 che ha bisogno di un'occasione — restano scritte a parte e taglienti.
+ */
+const PESO_RIVOLTO = 3;
+
+/** Dal cifrato dell'analisi al numero di rivolto. Le alterazioni nel cifrato (`5♯3`, `♯64`)
+ *  dicono che nota è alterata, non chi sta al basso: si tolgono. */
+function rivoltoDalCifrato(cifra: string): number | null {
+    const c = cifra.replace(/[♯♭♮#b]/g, '');
+    if (c === '5' || c === '3' || c === '53' || c === '' || c === '7' || c === '75' || c === '73') return 0;
+    if (c === '6' || c === '63' || c === '65') return 1;
+    if (c === '64' || c === '43') return 2;
+    if (c === '42' || c === '2' || c === '4') return 3;
+    return null;
+}
+
+/**
+ * Quanto costa mettere quel grado in quel rivolto. Zero = è il suo rivolto abituale.
+ *
+ * **MISURATA E NON IN USO.** Provata dentro la scelta della progressione, migliorava la
+ * condotta (meno altalene, meno retrocessioni) e PEGGIORAVA la scrittura: 280 errori invece
+ * di 256 su 75 brani. Il motivo è che il corpus preferisce la posizione fondamentale, e una
+ * fila di accordi tutti in stato fondamentale produce parallele fra le voci estreme — una
+ * statistica sul repertorio intero non sa niente del punto in cui ci si trova. Vince invece,
+ * e nettamente (237 errori), la sola regola METRICA del 4/6, che non è una frequenza ma una
+ * consuetudine con un contesto preciso.
+ *
+ * Resta qui perché il dato è buono e la domanda che risolve — «se metto un ii, che basso ci
+ * va» — è quella giusta: manca il posto dove porla, che è la condotta delle voci, non la
+ * scelta del grado.
+ */
+export function costoDelRivolto(isMinor: boolean, deg: number, inv: number): number {
+    if (deg < 0 || deg > 6) return inv === 0 ? 0 : inv === 1 ? 1.5 : inv === 2 ? 6 : 3;
+    const tabella = delModo(isMinor).rivolti || {};
+    const conti: number[] = [0, 0, 0, 0];
+    let totale = 0;
+    for (const nome of etichette(isMinor)[deg]) {
+        for (const [cifra, c] of Object.entries(tabella[nome] || {})) {
+            const rv = rivoltoDalCifrato(cifra);
+            if (rv == null) continue;
+            conti[rv] += c;
+            totale += c;
+        }
+    }
+    // Poco materiale: si torna alla consuetudine generica (fondamentale, poi primo rivolto).
+    const f = fiducia(totale);
+    const aMano = inv === 0 ? 0 : inv === 1 ? 1.5 : inv === 2 ? 8 : 3;
+    if (totale <= 0) return aMano;
+    const massimo = Math.max(...conti, 1);
+    const dalCorpus = (1 - conti[inv] / massimo) * PESO_RIVOLTO;
+    return (1 - f) * aMano + f * dalCorpus;
 }

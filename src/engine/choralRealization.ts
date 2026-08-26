@@ -3058,10 +3058,49 @@ export function realizeChorale(
 /** Un accordo candidato per una nota: quale accordo e con che basso. */
 type Posa = { acc: number; inv: number };
 
-/** Quanto costa un rivolto in sé, prima di ogni contesto. La posizione fondamentale è la
- *  norma; il primo rivolto è di uso corrente; il secondo — la quarta e sesta — è un accordo
- *  che vuole un'occasione precisa (cadenza, passaggio) e altrove è una scelta debole. */
+/** Quanto costa un rivolto in sé. La posizione fondamentale è la norma, il primo rivolto è
+ *  di uso corrente, la quarta e sesta è un accordo che vuole un'occasione — e se la trova se
+ *  la fa perdonare dal contesto (`scontoDellaQuartaSesta`). */
 const COSTO_RIVOLTO = [0, 1.5, 6, 3];
+
+/**
+ * QUANTO È FORTE UN MOVIMENTO, da 0 a 1.
+ *
+ * Non è un dettaglio di contorno: metà delle regole dell'armonia parlano di tempo forte e
+ * tempo debole, e finora il generatore non sapeva in che punto della battuta stesse
+ * scrivendo. Il primo movimento porta la stanghetta ed è sempre forte; in un metro pari il
+ * movimento di mezzo è forte a sua volta, ma meno; il resto è debole, e ciò che cade fra un
+ * movimento e l'altro è più debole ancora.
+ */
+function forzaMetrica(beat: number, movPerBattuta: number): number {
+  if (Math.abs(beat - Math.round(beat)) > 0.01) return 0.1;   // fra un movimento e l'altro
+  const b = Math.round(beat);
+  if (b === 1) return 1;
+  if (movPerBattuta % 2 === 0 && b === movPerBattuta / 2 + 1) return 0.6;  // il mezzo, nei metri pari
+  return 0.3;
+}
+
+/**
+ * LO SCONTO CHE UN 4/6 SI GUADAGNA DAL CONTESTO.
+ *
+ * La quarta e sesta è l'accordo che più di ogni altro dipende da dove sta e da cosa lo segue.
+ * Sono tre accordi diversi che si scrivono uguale:
+ *
+ *   CADENZALE     sul tempo forte, seguito dalla dominante: è la formula della cadenza,
+ *                 e lì non solo è ammesso, è la scelta giusta;
+ *   DI PASSAGGIO  sul tempo debole, col basso che ci entra e ne esce per grado: è una nota
+ *                 di passaggio al basso vestita da accordo;
+ *   NÉ L'UNO NÉ L'ALTRO  un accordo debole messo dove capita, che è quello che il
+ *                 generatore scriveva prima di sapere che ora è.
+ */
+function scontoDellaQuartaSesta(forzaQui: number, gradoQui: number, gradoDopo: number, saltoDelBasso: number): number {
+  // Cadenzale: sul BATTERE — non su un movimento mezzo forte, altrimenti diventa una
+  // scappatoia buona sempre — e seguita dalla dominante.
+  if (forzaQui >= 0.9 && gradoQui === 0 && gradoDopo === 4) return 6;
+  // Di passaggio: sul tempo debole, col basso che ne esce per grado.
+  if (forzaQui < 0.5 && saltoDelBasso > 0 && saltoDelBasso <= 2) return 4;
+  return 0;
+}
 
 /** Un gruppo di melodia da armonizzare: le classi d'altezza che ci suonano sopra, e dove sta. */
 type GruppoMelodia = { pcs: number[]; measure: number; beat: number };
@@ -3091,11 +3130,13 @@ const INFINITO = 1e9;
 function scegliProgressioneDellaFrase(args: {
   gruppi: GruppoMelodia[];
   schede: SchedaAccordo[];
+  /** Quanto è forte il movimento su cui cade ciascun gruppo (0…1). */
+  forze: number[];
   curaLaCondotta: boolean;
   /** Il costo scritto a mano fra due gradi, per quando il corpus è spento. */
   transizione: (da: number, a: number) => number;
 }): Posa[] {
-  const { gruppi, schede, transizione, curaLaCondotta } = args;
+  const { gruppi, schede, forze, transizione, curaLaCondotta } = args;
   const n = gruppi.length;
   if (n === 0) return [];
 
@@ -3127,6 +3168,8 @@ function scegliProgressioneDellaFrase(args: {
     c -= (coperte / Math.max(1, pcs.length)) * 5;       // e quello che regge più note
     if (coperte === pcs.length) c -= 3;
     c += COSTO_RIVOLTO[p.inv] ?? 4;
+    // Una cadenza vuole il tempo forte: chiudere su un movimento debole non è una chiusura.
+    if (i === n - 1) c += (1 - forze[i]) * 6;
     // ── Cadenze: la frase deve chiudere ──
     if (i === n - 1) {
       // L'ultimo accordo è la tonica in posizione fondamentale, o non è una chiusura.
@@ -3165,7 +3208,21 @@ function scegliProgressioneDellaFrase(args: {
     }
     // Il basso è una linea, non una successione di fondamentali: i salti si pagano.
     const salto = Math.abs(bassoDi(a) - bassoDi(da));
-    c += Math.min(salto, 12 - salto % 12) * 0.25;
+    const passo = Math.min(salto, 12 - (salto % 12));
+    c += passo * 0.25;
+    // IL 4/6 SI GIUDICA DA QUI, perché per sapere che accordo è bisogna vedere cosa lo
+    // segue: il costo salato che ha preso nella posa gli viene restituito se è cadenzale
+    // (tempo forte, seguito dalla dominante) o di passaggio (tempo debole, basso per grado).
+    if (da.inv === 2 && sda.gradoDiatonico >= 0 && sa.gradoDiatonico >= 0) {
+      c -= scontoDellaQuartaSesta(forze[i - 1], sda.gradoDiatonico, sa.gradoDiatonico, passo);
+    }
+    // NOTA. Qui starebbe la regola «sul tempo forte ci si aspetta un'armonia nuova, sul
+    // debole l'armonia prosegue». È stata scritta e TOLTA dopo averla misurata: presuppone
+    // che il ritmo armonico sia una SCELTA, e oggi non lo è — c'è un accordo per ogni nota
+    // di melodia, quindi il generatore è obbligato a cambiare (o a ripetere) su ogni
+    // movimento, forte o debole che sia. La regola finiva per combattere contro un vincolo
+    // invece che guidare una scelta. Torna quando il ritmo armonico sarà libero, cioè quando
+    // una nota potrà non essere nota d'accordo.
     return c;
   };
 
@@ -3625,8 +3682,11 @@ export function autoHarmonize(
         gradoDiatonico: -1,
       });
     }
+    // `beatsPerMeasure` è già i movimenti da un quarto per battuta.
+    const movPerBattuta = beatsPerMeasure;
+    const forze = groups.map(g => forzaMetrica(g.beat, movPerBattuta));
     const scelte = scegliProgressioneDellaFrase({
-      gruppi: groups, schede, curaLaCondotta, transizione,
+      gruppi: groups, schede, forze, curaLaCondotta, transizione,
     });
     for (let i = 0; i < totalGroups; i++) {
       const { acc, inv } = scelte[i];

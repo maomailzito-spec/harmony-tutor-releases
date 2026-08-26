@@ -30,8 +30,16 @@ const files = fs.readdirSync(TESTS_DIR)
     .map(f => path.join(TESTS_DIR, f));
 
 type Mappa = Record<string, Record<string, number>>;
-type PerModo = { unigrammi: Record<string, number>; bigrammi: Mappa; brani: number; transizioni: number };
-const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, brani: 0, transizioni: 0 });
+type PerModo = {
+    unigrammi: Record<string, number>;
+    bigrammi: Mappa;
+    /** `rivolti[grado][cifra] = quante volte`. Risponde a «se metto un ii, che basso ci va»:
+     *  il corpus dice che il ii sta in primo rivolto il doppio delle volte del I, e che il
+     *  vii° in posizione fondamentale è raro. Prima quel giudizio era una mia costante. */
+    rivolti: Mappa;
+    brani: number; transizioni: number;
+};
+const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, rivolti: {}, brani: 0, transizioni: 0 });
 const modi: Record<'major' | 'minor', PerModo> = { major: vuoto(), minor: vuoto() };
 
 /** Via il cifrato dal grado: `V65` → `V`, `vii°6` → `vii°`, `V/vi6` → `V/vi`. */
@@ -73,6 +81,7 @@ for (const f of files) {
         });
 
         const seq: string[] = [];
+        const conCifre: { grado: string; cifra: string }[] = [];
         let ultimoAssoluto = -Infinity;
         for (const k of chiavi) {
             const [mi, bt] = k.split(':').map(Number);
@@ -87,7 +96,12 @@ for (const f of files) {
             ultimoAssoluto = assoluto;
             try {
                 const r = getRomanAnalysis(strutturali as any, tonica, isMinor);
-                if (r && r.roman && r.roman !== '?') seq.push(senzaCifre(r.roman));
+                if (r && r.roman && r.roman !== '?') {
+                    seq.push(senzaCifre(r.roman));
+                    // Il CIFRATO, che dice quale nota sta al basso.
+                    const cifra = (r.figures || []).join('') || '5';
+                    conCifre.push({ grado: senzaCifre(r.roman), cifra });
+                }
             } catch { /* accordo illeggibile: si salta */ }
         }
         // Ripetizioni consecutive dello stesso grado: non sono progressione.
@@ -97,6 +111,7 @@ for (const f of files) {
         const m = modi[isMinor ? 'minor' : 'major'];
         m.brani++;
         for (const r of puliti) m.unigrammi[r] = (m.unigrammi[r] || 0) + 1;
+        for (const c of conCifre) (m.rivolti[c.grado] ||= {})[c.cifra] = (m.rivolti[c.grado][c.cifra] || 0) + 1;
         for (let i = 1; i < puliti.length; i++) {
             const da = puliti[i - 1], a = puliti[i];
             (m.bigrammi[da] ||= {})[a] = (m.bigrammi[da][a] || 0) + 1;
