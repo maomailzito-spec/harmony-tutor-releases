@@ -2559,6 +2559,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (next.timeSignature) setTimeSignature(next.timeSignature);
         if (next.timeSignatureChanges) setTimeSignatureChanges(next.timeSignatureChanges);
         if (typeof next.bpm === 'number' && Number.isFinite(next.bpm)) setBpm(Math.max(20, Math.min(300, Math.round(next.bpm))));
+        // L'ARMATURA. Questo pezzo mancava, e l'import MIDI non l'ha mai applicata: il file
+        // poteva dichiarare Mi maggiore, l'importazione SCRIVEVA le note con quell'armatura
+        // — cioè Fa♯, Do♯, Sol♯, Re♯ senza segni accanto, perché li porta la chiave — e poi
+        // il rigo le DISEGNAVA sotto l'armatura di prima, rimasta vuota. Risultato: un brano
+        // di sole note naturali, senza alterazioni né accanto alle note né in chiave.
+        // Le due armature devono essere la stessa, altrimenti la grafia perde il suo senso.
+        if (typeof next.keySignatureRoot === 'string' && next.keySignatureRoot) setKeySignatureRoot(next.keySignatureRoot);
+        if (typeof next.isMinorMode === 'boolean') setIsMinorMode(next.isMinorMode);
 
         try {
             const maxIdx = (next.notes || []).reduce((mx, n) => Math.max(mx, Number.isFinite(n?.measureIndex as any) ? Number(n?.measureIndex) : -1), -1);
@@ -2568,7 +2576,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch {
             // ignore
         }
-    }, [setRawNotes, setTimeSignature, setTimeSignatureChanges, setBpm, setMinMeasureCount, setMinMeasureCountDraft]);
+    }, [setRawNotes, setTimeSignature, setTimeSignatureChanges, setBpm, setKeySignatureRoot, setIsMinorMode, setMinMeasureCount, setMinMeasureCountDraft]);
 
     const { exportMidi, importMidi, importMidiAsAccompaniment, pickMidiFile } = useGrandStaffMidi({
         project,
