@@ -20,11 +20,28 @@ import { autoHarmonize, realizeChorale, contiVeto, azzeraContiVeto, type Soprano
 
 const V: Record<number, string> = { 1: 'S', 2: 'A', 3: 'T', 4: 'B' };
 
+/**
+ * IL CAMPO `keySignatureRoot` NON E' LA TONICA.
+ *
+ * Nei file dell'applicazione quel campo tiene sempre la fondamentale MAGGIORE relativa: un
+ * brano in Mi minore lo scrive 'G' con `isMinorMode`. Il banco lo passava tale e quale al
+ * generatore, che quindi armonizzava un corale in Mi minore credendolo in Sol minore.
+ *
+ * Non e' un dettaglio di forma: su «Corale 17 Schinelli» il soprano aveva 31 note su 74
+ * fuori dalla tonalita' (tutti i Mi e i Si naturali, che in Mi minore sono di casa), e il
+ * generatore le armonizzava con accordi di Sol minore. Ne uscivano 58 errori e trentuno
+ * scontri cromatici che il generatore non aveva nessuna colpa di aver scritto.
+ */
+const RELATIVE_MINORI: Record<string, string> = {
+  'C': 'A', 'G': 'E', 'D': 'B', 'A': 'F#', 'E': 'C#', 'B': 'G#', 'F#': 'D#', 'C#': 'A#',
+  'F': 'D', 'Bb': 'G', 'Eb': 'C', 'Ab': 'F', 'Db': 'Bb', 'Gb': 'Eb', 'Cb': 'Ab',
+};
+
 type Esito = { errori: number; avvisi: number; perRegola: Record<string, number>; dettaglio: string[] };
 
-function controlla(note: any[], radice: string, minore: boolean, ts: any): Esito {
-  const ks = getKeySignature(radice, minore ? 'Minor' : 'Major');
-  const res: any = applyHarmonyRules(note as any, ks as any, radice, minore, [], ts, [], [], [], { partCount: 4 });
+function controlla(note: any[], tonica: string, minore: boolean, ts: any): Esito {
+  const ks = getKeySignature(tonica, minore ? 'Minor' : 'Major');
+  const res: any = applyHarmonyRules(note as any, ks as any, tonica, minore, [], ts, [], [], [], { partCount: 4 });
   const perId = new Map(note.map((n: any) => [n.id, n]));
   const esito: Esito = { errori: 0, avvisi: 0, perRegola: {}, dettaglio: [] };
   for (const v of (res.violations || []) as any[]) {
@@ -44,6 +61,8 @@ for (const f of process.argv.slice(2)) {
   const note = (d.notes || []).filter((n: any) => !n.isRest);
   const radice = d.keySignatureRoot || 'C';
   const minore = !!d.isMinorMode;
+  // La tonica VERA: in minore e' la relativa minore di cio' che il file chiama radice.
+  const tonica = minore ? (RELATIVE_MINORI[radice] || radice) : radice;
   const ts = d.timeSignature || { numerator: 4, denominator: 4 };
   const bpm = ts.numerator * (4 / ts.denominator);
 
@@ -53,9 +72,9 @@ for (const f of process.argv.slice(2)) {
     midi: n.midi, measure: n.measureIndex ?? 0, beat: n.beat ?? 1,
   }));
 
-  const progressione = autoHarmonize(vincoli, radice, minore, 0, bpm);
+  const progressione = autoHarmonize(vincoli, tonica, minore, 0, bpm);
   const config: ChoralConfig = {
-    tonic: radice, isMinor: minore, timeSignature: ts,
+    tonic: tonica, isMinor: minore, timeSignature: ts,
     rules: { allowParallel5ths: false, allowParallel8ves: false, allowCrossing: false, allowOverlap: false, doubleRoot: true },
     autoSevenths: true, sopranoMelody: vincoli,
     // SENZA_VETO=1 spegne il veto delle regole: serve al confronto prima/dopo, che va fatto
@@ -67,12 +86,12 @@ for (const f of process.argv.slice(2)) {
   const vetoDelBrano = { ...contiVeto, perRegola: { ...contiVeto.perRegola } };
   const noteGen = (generato.notes || []).filter((n: any) => !n.isRest);
 
-  const a = controlla(note, radice, minore, ts);
-  const b = controlla(noteGen, radice, minore, ts);
+  const a = controlla(note, tonica, minore, ts);
+  const b = controlla(noteGen, tonica, minore, ts);
   totOrig += a.errori; totGen += b.errori;
 
   console.log(`\n${'─'.repeat(74)}`);
-  console.log(`${f.split('/').pop()}   ·   ${soprano.length} note di melodia, ${progressione.length} accordi`);
+  console.log(`${f.split('/').pop()}   ·   ${soprano.length} note di melodia, ${progressione.length} accordi  [${tonica}${minore ? ' min' : ' Mag'}]`);
   console.log(`   originale d'autore :  ${String(a.errori).padStart(3)} errori   ${String(a.avvisi).padStart(3)} avvisi`);
   console.log(`   generatore         :  ${String(b.errori).padStart(3)} errori   ${String(b.avvisi).padStart(3)} avvisi`);
   // CIO' CHE SBAGLIA SOLO LUI. Molti brani veri non sono esercizi di scuola: hanno note
