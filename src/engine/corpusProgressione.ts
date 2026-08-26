@@ -133,16 +133,38 @@ export function pesiDeiGradi(isMinor: boolean): Record<number, number> {
     return fuori;
 }
 
-/** Quanto pesa al massimo una transizione molto frequente. Tarato sui bonus che sostituisce:
- *  il corpus dà `V → I` al 49%, e 10 × 0,49 fa 4,9 — cioè il +5 che c'era scritto a mano. */
+/** Quanto pesa al massimo una transizione, in più o in meno. La forbice che ne esce va da
+ *  circa −2,5 a +3,5: paragonabile ai bonus scritti a mano che sostituisce (0…+5), ma con
+ *  segno. */
 const PESO_TRANSIZIONE = 10;
 
 /**
- * IL BONUS PER ANDARE DAL GRADO `da` AL GRADO `a`, dalle transizioni osservate.
+ * QUANTO È IDIOMATICO ANDARE DAL GRADO `da` AL GRADO `a` — in più o in meno.
  *
  * Sostituisce i quattro casi scritti a mano (V→I, IV→V, ii→V, vi→ii/IV) con tutte le
- * quarantanove coppie, ciascuna col suo peso vero. `da < 0` significa «primo accordo»: lì
- * non c'è transizione e il bonus è zero.
+ * quarantanove coppie. `da < 0` significa «primo accordo»: lì non c'è transizione.
+ *
+ * ── PERCHÉ NON BASTA LA FREQUENZA ─────────────────────────────────────────────────────
+ *
+ * Il primo tentativo dava un bonus proporzionale alla probabilità: `P(a | da) × 10`. Il
+ * risultato, provato dall'utente su una melodia del Delachi, era corretto e **piatto** — il
+ * quinto grado ripetuto su quattro primi movimenti di fila, e due `V → ii`, che è una
+ * retrocessione. Zero errori e musica morta.
+ *
+ * Il motivo è che una successione rara prendeva un bonus PICCOLO, mai una penalità: il
+ * corpus poteva dire «questo si fa spesso» ma non «questo non si fa». E siccome nel
+ * punteggio gli altri termini (copertura, cadenze) sono positivi, un bonus piccolo non
+ * ferma niente.
+ *
+ * La misura giusta non è quanto è frequente `a` dopo `da`, ma **quanto lo è PIÙ DEL SOLITO**:
+ *
+ *      P(a | da) − P(a)
+ *
+ * Dopo il V, il I passa dal 25% al 60% — un moto che il corpus chiede a gran voce (+0,35).
+ * Il IV scende dall'8,8% al 2,9% (−0,06), il ii dal 9% al 5% (−0,04): sono le retrocessioni,
+ * e ora COSTANO invece di fruttare poco. Ripetere lo stesso grado prende la penalità piena,
+ * perché nel corpus le ripetizioni consecutive sono state tolte in fase di raccolta: una
+ * progressione è fatta di cambiamenti.
  */
 export function bonusTransizione(isMinor: boolean, da: number, a: number): number {
     if (da < 0 || da > 6 || a < 0 || a > 6) return 0;
@@ -160,8 +182,13 @@ export function bonusTransizione(isMinor: boolean, da: number, a: number): numbe
     const aMano = TRANSIZIONI_A_MANO[da]?.[a] ?? 0;
     if (totaleRiga <= 0) return aMano;
     const p = somma(riga, nomi[a]) / totaleRiga;
+    // Quanto vale `a` in generale, per sapere se qui è più o meno atteso del solito.
+    const uni = delModo(isMinor).unigrammi;
+    let totaleUni = 0;
+    for (const v of Object.values(uni)) totaleUni += v;
+    const pGenerale = totaleUni > 0 ? somma(uni, nomi[a]) / totaleUni : 0;
     const f = fiducia(totaleRiga);
-    return (1 - f) * aMano + f * (p * PESO_TRANSIZIONE);
+    return (1 - f) * aMano + f * ((p - pGenerale) * PESO_TRANSIZIONE);
 }
 
 /** Diagnostica: quanto materiale ha il corpus per questo modo, e come lo distribuisce. */

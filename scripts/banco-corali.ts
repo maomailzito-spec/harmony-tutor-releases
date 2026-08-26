@@ -17,6 +17,41 @@
 import { readFileSync } from 'fs';
 import { applyHarmonyRules, getKeySignature } from '../src/utils/musicTheory';
 import { autoHarmonize, realizeChorale, contiVeto, azzeraContiVeto, type SopranoConstraint, type ChoralConfig } from '../src/engine/choralRealization';
+import { bonusTransizione } from '../src/engine/corpusProgressione';
+
+/**
+ * LA PIATTEZZA NON HA UN CODICE DI REGOLA.
+ *
+ * Il conto delle violazioni dice se il generatore SBAGLIA, non se fa musica. Un'armonizzazione
+ * puo' essere a zero errori e suonare morta — l'utente l'ha sentito su una melodia del
+ * Delachi: quinto grado ribattuto per quattro battute e due retrocessioni `V → ii`, tutto
+ * regolare e tutto inerte. Senza una misura, ogni scelta fra «meno errori» e «meno piatto» si
+ * fa a occhio.
+ *
+ * Tre numeri, sulla PROGRESSIONE scelta (non sulle note):
+ *
+ *   altalena       due accordi che si scambiano il posto quattro volte (`V–I–V–I`): ogni
+ *                  passaggio e' idiomatico e l'insieme e' morto;
+ *   retrocessioni  passaggi che il corpus fa MENO del solito (`V → ii`, `V → IV`): il conto
+ *                  e' quello centrato di `bonusTransizione`, negativo = controcorrente;
+ *   vocabolario    quanti gradi diversi si usano in tutto il brano.
+ */
+function piattezza(prog: any[], minore: boolean): { altalena: number; retro: number; vocabolario: number } {
+  const grado = (r: string) => r.replace(/[0-9]+$/, '');
+  const g = prog.map(c => grado(String(c.roman)));
+  let altalena = 0;
+  for (let i = 3; i < g.length; i++) if (g[i] === g[i - 2] && g[i - 1] === g[i - 3]) altalena++;
+  const IDX: Record<string, number> = minore
+    ? { i: 0, 'ii°': 1, iio: 1, III: 2, iv: 3, V: 4, v: 4, VI: 5, VII: 6 }
+    : { I: 0, ii: 1, iii: 2, IV: 3, V: 4, vi: 5, 'vii°': 6, viio: 6 };
+  let retro = 0;
+  for (let i = 1; i < g.length; i++) {
+    const a = IDX[g[i - 1]], b = IDX[g[i]];
+    if (a == null || b == null || a === b) continue;
+    if (bonusTransizione(minore, a, b) < -0.2) retro++;
+  }
+  return { altalena, retro, vocabolario: new Set(g).size };
+}
 
 const V: Record<number, string> = { 1: 'S', 2: 'A', 3: 'T', 4: 'B' };
 
@@ -55,7 +90,7 @@ function controlla(note: any[], tonica: string, minore: boolean, ts: any): Esito
   return esito;
 }
 
-let totOrig = 0, totGen = 0;
+let totOrig = 0, totGen = 0, totAlt = 0, totRetro = 0;
 for (const f of process.argv.slice(2)) {
   const d = JSON.parse(readFileSync(f, 'utf8'));
   const note = (d.notes || []).filter((n: any) => !n.isRest);
@@ -73,7 +108,7 @@ for (const f of process.argv.slice(2)) {
   }));
 
   // SENZA_CORPUS=1 torna ai pesi scritti a mano nella scelta dei gradi.
-  const progressione = autoHarmonize(vincoli, tonica, minore, 0, bpm, { corpus: !process.env.SENZA_CORPUS });
+  const progressione = autoHarmonize(vincoli, tonica, minore, 0, bpm, { corpus: !process.env.SENZA_CORPUS, condotta: !process.env.SENZA_CONDOTTA });
   const config: ChoralConfig = {
     tonic: tonica, isMinor: minore, timeSignature: ts,
     rules: { allowParallel5ths: false, allowParallel8ves: false, allowCrossing: false, allowOverlap: false, doubleRoot: true },
@@ -85,6 +120,8 @@ for (const f of process.argv.slice(2)) {
   } as any;
   azzeraContiVeto();
   const generato = realizeChorale(progressione, config);
+  const p = piattezza(progressione, minore);
+  totAlt += p.altalena; totRetro += p.retro;
   const vetoDelBrano = { ...contiVeto, perRegola: { ...contiVeto.perRegola } };
   const noteGen = (generato.notes || []).filter((n: any) => !n.isRest);
 
@@ -107,6 +144,7 @@ for (const f of process.argv.slice(2)) {
   if (solo.length) console.log('   in piu\' rispetto all\'originale: ' + solo.map(([r, n2]) => `${r}+${n2}`).join('  '));
   // Il veto ha lavorato? E' una domanda diversa da «il risultato e' migliore»: se i conti
   // sono a zero il problema non e' la severita' del checker, e' che non lo stiamo chiamando.
+  console.log(`   condotta: ${p.altalena} altalene, ${p.retro} retrocessioni, ${p.vocabolario} gradi diversi`);
   console.log(`   veto: ${vetoDelBrano.controllati} controlli, ${vetoDelBrano.fermati} respinti` +
     (vetoDelBrano.fermati ? ` → ${vetoDelBrano.risolti} risolti, ${vetoDelBrano.migliorati} attenuati` +
       `${vetoDelBrano.passiIndietro ? `, ${vetoDelBrano.passiIndietro} passi indietro` : ''}` +
@@ -115,3 +153,4 @@ for (const f of process.argv.slice(2)) {
 }
 console.log(`\n${'═'.repeat(74)}`);
 console.log(`TOTALE   originali: ${totOrig} errori   ·   generatore: ${totGen} errori`);
+console.log(`CONDOTTA generatore: ${totAlt} altalene   ·   ${totRetro} retrocessioni`);

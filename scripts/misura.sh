@@ -9,6 +9,7 @@ riga() {
   err=$(echo "$r" | grep TOTALE | sed 's/.*generatore: \([0-9]*\).*/\1/')
   orig=$(echo "$r" | grep TOTALE | sed 's/.*originali: \([0-9]*\).*/\1/')
   avv=$(echo "$r" | grep "generatore  " | awk '{s+=$5} END {print s}')
-  printf '%-34s %5s errori  %5s avvisi   (autori: %s)\n' "$eti" "$err" "$avv" "$orig"
+  local cond; cond=$(echo "$r" | grep CONDOTTA | sed 's/CONDOTTA generatore: //')
+  printf '%-30s %5s errori %5s avvisi   %s   (autori: %s)\n' "$eti" "$err" "$avv" "$cond" "$orig"
 }
 riga "$2" "${@:3}"

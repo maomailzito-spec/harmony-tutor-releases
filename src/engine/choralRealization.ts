@@ -3280,8 +3280,9 @@ export function autoHarmonize(
   isMinor: boolean,
   harmonicRhythmBeats: number = 0,
   beatsPerMeasure: number = 4,
-  /** `corpus: false` torna ai pesi scritti a mano — serve al confronto prima/dopo. */
-  opts?: { corpus?: boolean }
+  /** `corpus: false` torna ai pesi scritti a mano; `condotta: false` toglie il trattamento
+   *  della nota tenuta. Servono al confronto. */
+  opts?: { corpus?: boolean; condotta?: boolean }
 ): RomanChord[] {
   if (melody.length === 0) return [];
 
@@ -3316,6 +3317,7 @@ export function autoHarmonize(
   // scarso. Il resto del punteggio — copertura, cadenze, monotonia — non cambia, e la scala
   // dei valori è la stessa di prima perché quei termini conservino il loro peso.
   const usaCorpus = opts?.corpus !== false;
+  const curaLaCondotta = opts?.condotta !== false;
   const baseWeight: Record<number, number> = usaCorpus
     ? pesiDeiGradi(isMinor)
     : { 0: 10, 1: 5, 2: 2, 3: 8, 4: 9, 5: 6, 6: 3 };
@@ -3411,7 +3413,8 @@ export function autoHarmonize(
   const totalGroups = groups.length;
   let prevBassMidi = -1;
   /** Se l'accordo precedente era una tonicizzazione, il grado che ha promesso. */
-  let bersaglioAtteso = -1;  // Track previous bass for smooth voice leading
+  let bersaglioAtteso = -1;
+  // Track previous bass for smooth voice leading
 
   for (let i = 0; i < totalGroups; i++) {
     const group = groups[i];
@@ -3445,8 +3448,16 @@ export function autoHarmonize(
       // Bonus: if every melody PC in this group belongs to the chord
       if (covered === groupPcs.length) score += 3;
 
-      // Penalty: same degree as previous chord → monotonous
-      if (deg === prevDeg) score -= 4;
+      // Penalty: same degree as previous chord → monotonous.
+      //
+      // MA NON QUANDO A RIPETERSI È LA MELODIA. Su una nota di soprano tenuta o ribattuta,
+      // restare sullo stesso grado (cambiando semmai rivolto) è la soluzione naturale, e
+      // punirla costringe a inventare un movimento che non c'è: sul Delachi n.12 il soprano
+      // ribatte il Si sopra un V, e il generatore — non potendo restare — scendeva sul ii,
+      // cioè una retrocessione. La ripetizione lì è della melodia, non sua.
+      const melodiaFerma = curaLaCondotta && i > 0 && groups[i - 1].pcs.length === groupPcs.length
+        && groupPcs.every(pc => groups[i - 1].pcs.includes(pc));
+      if (deg === prevDeg && !melodiaFerma) score -= 4;
       // Chi arriva DOPO una tonicizzazione e ne è il bersaglio è la sua risoluzione: è
       // l'accordo che quella tonicizzazione ha promesso, e va mantenuta la promessa.
       if (bersaglioAtteso >= 0 && deg === bersaglioAtteso) score += 8;
@@ -3460,8 +3471,10 @@ export function autoHarmonize(
       if (i === totalGroups - 2 && deg === 4) score += 6;
       if (i === totalGroups - 2 && deg === 3) score += 3;
 
-      // Quanto è consueto arrivare qui DA DOVE si viene.
-      if (prevDeg >= 0) score += transizione(prevDeg, deg);
+      // Quanto è consueto arrivare qui DA DOVE si viene. Con la melodia ferma sullo stesso
+      // grado il conto non si applica: il corpus non ha ripetizioni (sono state tolte in
+      // raccolta), quindi darebbe la penalità piena a una scelta che è invece corretta.
+      if (prevDeg >= 0 && !(melodiaFerma && deg === prevDeg)) score += transizione(prevDeg, deg);
 
       // First chord → prefer I strongly
       if (i === 0 && deg === 0) score += 5;
