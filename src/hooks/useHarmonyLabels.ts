@@ -1085,7 +1085,7 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         }).filter(Boolean) as Array<{ absBeat: number; roman?: string; symbol?: string; figures?: string[] }>;
 
         return detectVoiceLeadingSequences(notes, timeSignature, timeSignatureChanges, labelPoints, undefined, {
-            keySignatureRoot: String(currentTonic || 'C'),
+            keyTonic: String(currentTonic || 'C'),
             isMinorMode: !!isMinorMode,
         });
     }, [analyzedNotes, currentTonic, analysisContexts, harmonyOverrides, isAnalysisEnabled, isMinorMode, isSequencesEnabled, minSpanBeats, notes, timeSignature, timeSignatureChanges]);

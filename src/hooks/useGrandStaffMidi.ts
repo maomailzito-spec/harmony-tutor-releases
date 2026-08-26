@@ -1786,24 +1786,23 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     const { first: midiFirstTs, appChanges: midiTsChanges } = midiTimeSignatureChangesToApp(parsed.timeSignatureChanges, tpq);
     const bars = makeBarMap(midiFirstTs, midiTsChanges);
 
-    // Use key signature from MIDI file if available, otherwise use project key.
+    // Tonalità dal file MIDI, se c'è; altrimenti quella del progetto.
+    //
+    // `midiRoot` è la fondamentale MAGGIORE dell'armatura: è ciò che il progetto memorizza
+    // in `keySignatureRoot` anche quando il brano è in minore. Prima, per un file in minore,
+    // qui ci finiva la tonica vera — importando un MIDI in Mi minore diventava 'E', che per
+    // la convenzione del programma significa DO♯ minore: quattro diesis invece di uno.
     let midiRoot = project.keySignatureRoot || 'C';
     let midiIsMinor = project.isMinorMode;
     if (parsed.keySignature) {
       const { sharps, isMinor } = parsed.keySignature;
       const majorRoots = ['C','G','D','A','E','B','F#','C#'];
       const flatMajorRoots = ['C','F','Bb','Eb','Ab','Db','Gb','Cb'];
-      const majorRoot = sharps >= 0 ? (majorRoots[sharps] ?? 'C') : (flatMajorRoots[-sharps] ?? 'C');
-      if (isMinor) {
-        const minorRoots: Record<string, string> = {'C':'A','G':'E','D':'B','A':'F#','E':'C#','B':'G#','F#':'D#','C#':'A#','F':'D','Bb':'G','Eb':'C','Ab':'F','Db':'Bb','Gb':'Eb','Cb':'Ab'};
-        midiRoot = minorRoots[majorRoot] ?? majorRoot;
-        midiIsMinor = true;
-      } else {
-        midiRoot = majorRoot;
-        midiIsMinor = false;
-      }
+      midiRoot = sharps >= 0 ? (majorRoots[sharps] ?? 'C') : (flatMajorRoots[-sharps] ?? 'C');
+      midiIsMinor = !!isMinor;
     }
-    const keySig = getKeySignature(midiRoot, midiIsMinor ? 'Minor' : 'Major');
+    // 'Major' sempre: `midiRoot` è già la fondamentale maggiore relativa.
+    const keySig = getKeySignature(midiRoot, 'Major');
 
     // ---------- Smart voice assignment strategy ----------
     // 1) If multiple tracks contain notes → map track → voice (SATB order)
@@ -1937,7 +1936,8 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
 
     // The accompaniment track is not analysed; key signature for spelling defaults
     // to the project's current key so accidentals look reasonable on the staff.
-    const keySig = getKeySignature(project.keySignatureRoot || 'C', project.isMinorMode ? 'Minor' : 'Major');
+    // 'Major' anche in minore: `keySignatureRoot` è già la fondamentale maggiore relativa.
+    const keySig = getKeySignature(project.keySignatureRoot || 'C', 'Major');
 
     // Raggruppa le note in PARTI, per rispettare i pentagrammi separati di MuseScore:
     // per traccia MIDI se il file è multi-traccia (format 1), altrimenti per canale

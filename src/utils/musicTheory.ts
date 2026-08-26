@@ -1595,9 +1595,13 @@ export function getPitchClassesForDebug(notes: StaffNote[]): number[] {
     }
 }
 
+/** NOTA SUL NOME. Questo parametro vuole la TONICA VERA (Mi minore → 'E'), non il campo
+ *  `keySignatureRoot` del progetto, che è la fondamentale maggiore relativa ('G'). Si
+ *  chiamava `keySignatureRoot`, e il nome ha ingannato: `utils/relativeMinors.ts` ha la
+ *  conversione e il racconto di dove è già costata. */
 export function getRomanAnalysisDebugSnapshot(
     chord: StaffNote[],
-    keySignatureRoot: string,
+    keyTonic: string,
     isMinorMode: boolean,
 ): {
     pcsBase: number[];
@@ -1681,9 +1685,9 @@ export function getRomanAnalysisDebugSnapshot(
             .filter(n => !filteredForRoman.some(m => m && m.id === n.id))
             .map(n => String(n.id));
 
-        // Touch keySignatureRoot/isMinorMode to keep this helper semantically tied to the same context,
+        // Touch keyTonic/isMinorMode to keep this helper semantically tied to the same context,
         // even though the filtering itself doesn't depend on the key.
-        void keySignatureRoot;
+        void keyTonic;
         void isMinorMode;
 
         return { pcsBase, pcsFigures, pcsRoman, removedForFigures, removedForRoman };
@@ -2299,15 +2303,19 @@ function identifyChordCandidatesLegacy(notes: StaffNote[], ornamentOverrides?: R
     return allCandidates;
 }
 
+/** NOTA SUL NOME. Questo parametro vuole la TONICA VERA (Mi minore → 'E'), non il campo
+ *  `keySignatureRoot` del progetto, che è la fondamentale maggiore relativa ('G'). Si
+ *  chiamava `keySignatureRoot`, e il nome ha ingannato: `utils/relativeMinors.ts` ha la
+ *  conversione e il racconto di dove è già costata. */
 export function calculateRomanFromChordInfo(
     chordInfo: { root: StaffNote; type: string; intervals?: Set<number>; rootSpelled?: SpelledPitchType },
-    keySignatureRoot: string,
+    keyTonic: string,
     isMinorMode: boolean
 ): string | null {
     try {
-        const keyTonicIndex = noteNameToIndex[keySignatureRoot];
+        const keyTonicIndex = noteNameToIndex[keyTonic];
         if (keyTonicIndex === undefined) return null;
-        const keyInfo = { tonicIndex: keyTonicIndex, isMinor: isMinorMode, tonicLetter: keySignatureRoot };
+        const keyInfo = { tonicIndex: keyTonicIndex, isMinor: isMinorMode, tonicLetter: keyTonic };
         return calculateRomanNumeral(chordInfo, keyInfo);
     } catch (_) { return null; }
 }
@@ -3608,9 +3616,13 @@ export function bassScaleDegreeRoman(chord: StaffNote[], tonic: string, isMinorM
     return acc + ROMAN[degree];
 }
 
+/** NOTA SUL NOME. Questo parametro vuole la TONICA VERA (Mi minore → 'E'), non il campo
+ *  `keySignatureRoot` del progetto, che è la fondamentale maggiore relativa ('G'). Si
+ *  chiamava `keySignatureRoot`, e il nome ha ingannato: `utils/relativeMinors.ts` ha la
+ *  conversione e il racconto di dove è già costata. */
 export function getRomanAnalysis(
     chord: StaffNote[],
-    keySignatureRoot: string,
+    keyTonic: string,
     isMinorMode: boolean,
     opts?: { minorScaleMode?: 'off' | 'natural' | 'harmonic'; ornamentOverrides?: Record<string, string>; accHintPcs?: number[]; accLowestMidi?: number | null; accForced?: boolean; figuresKeySignature?: KeySignature | null }
 ): { roman: string; figures: string[]; aug6Variants?: string[] } | null {
@@ -3651,11 +3663,11 @@ export function getRomanAnalysis(
         }
     };
 
-    const keyTonicIndex = noteNameToIndex[keySignatureRoot];
+    const keyTonicIndex = noteNameToIndex[keyTonic];
     if (keyTonicIndex === undefined) return null;
 
     // Key-aware pitch-class for Roman analysis (uses key signature defaults when no explicit accidental).
-    const keySig = getKeySignature(keySignatureRoot, isMinorMode ? 'Minor' : 'Major');
+    const keySig = getKeySignature(keyTonic, isMinorMode ? 'Minor' : 'Major');
     const SHARP_ORDER = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
     const FLAT_ORDER = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
     const defaultAccForLetter = (letter: string): string => {
@@ -4318,7 +4330,7 @@ export function getRomanAnalysis(
                 // ltLetter=D → no match → vii°/iii rejected.
                 try {
                     const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
-                    const tonicLetter = String(keySignatureRoot || '').charAt(0).toUpperCase();
+                    const tonicLetter = String(keyTonic || '').charAt(0).toUpperCase();
                     const tonicLetterIdx = LETTERS.indexOf(tonicLetter);
                     if (tonicLetterIdx >= 0) {
                         const targetLetter = LETTERS[(tonicLetterIdx + i) % 7];
@@ -5274,7 +5286,7 @@ export function applyHarmonyRules(
                     minConfidence: 0.7,
                     maxMatches: 200,
                 }, {
-                    keySignatureRoot: String(keyTonic || 'C'),
+                    keyTonic: String(keyTonic || 'C'),
                     isMinorMode: !!isMinor,
                 }) as any;
             } catch {

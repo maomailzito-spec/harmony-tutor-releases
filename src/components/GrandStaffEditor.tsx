@@ -78,6 +78,7 @@ import { usePreference } from '../preferences/usePreference';
 import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
 import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData, DEFAULT_ANALYSIS_LOCK_OPTIONS } from '../storage/projectSchema';
+import { relativeMinors, tonicaReale } from '../utils/relativeMinors';
 import type { AnalysisLockOptions } from '../storage/projectSchema';
 import { recordAnalysedTransitions } from '../engine/progressionSuggester';
 import { loadStyleProfile } from '../engine/choralStyleProfile';
@@ -248,10 +249,9 @@ const pxPerTickOfMeasure = (sys: any, idxInSystem: number): number => {
     return (typeof sysPx === 'number' && isFinite(sysPx) && sysPx > 0) ? sysPx : DEFAULT_PX_PER_TICK;
 };
 
-const relativeMinors: { [major: string]: string } = {
-    'C': 'A', 'G': 'E', 'D': 'B', 'A': 'F#', 'E': 'C#', 'B': 'G#', 'F#': 'D#', 'C#': 'A#',
-    'F': 'D', 'Bb': 'G', 'Eb': 'C', 'Ab': 'F', 'Db': 'Bb', 'Gb': 'Eb', 'Cb': 'Ab'
-};
+// `relativeMinors` e `tonicaReale` vivono in `utils/relativeMinors.ts`. La tabella stava
+// qui, privata: è il motivo per cui la stessa conversione è stata riscritta a mano — e
+// sbagliata — in altri punti del programma che non potevano vederla.
 
 
 
@@ -13225,7 +13225,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const forAnalysis = note.map(n => ({ ...n, voice: 1, clef: 'treble' }));
         const candidates = identifyChordCandidates(forAnalysis as any);
         const chordInfo = candidates && candidates.length ? candidates[0] : null;
-        const tonicRoot = (currentTonic || keySignatureRoot || (keySignature as any).root || 'C') as string;
+        // La ripiega su `keySignatureRoot` va CONVERTITA: quel campo è la fondamentale
+        // maggiore relativa, e passandolo tale e quale come tonica un brano in Mi minore
+        // verrebbe letto in Sol minore.
+        const tonicRoot = (currentTonic
+            || tonicaReale(keySignatureRoot, isMinorMode)
+            || (keySignature as any).root || 'C') as string;
         // Il romano si chiede alla STESSA funzione che scrive tutte le altre etichette.
         // `calculateRomanFromChordInfo` lavora sul solo accordo, fuori contesto, e legge una
         // triade maggiore sulla tonica come dominante del IV: una triade di Do in Do maggiore
@@ -16151,7 +16156,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 ?? (mis * (timeSignature.numerator * (4 / timeSignature.denominator)));
             // La tonica dell'analisi è quella REALE: in minore è la relativa minore
             // dell'armatura, non la maggiore con cui l'armatura si scrive.
-            const tonica = isMinor ? (relativeMinors[root] || root) : root;
+            const tonica = tonicaReale(root, isMinor);
             handleApplyContext(inizio, tonica, isMinor);
         } catch { /* l'armatura resta comunque scritta */ }
     }, [timeSignature]);

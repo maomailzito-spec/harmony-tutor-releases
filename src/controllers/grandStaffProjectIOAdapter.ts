@@ -142,7 +142,11 @@ function clampMeasuresPerLine(raw: unknown): number {
 }
 
 export function buildGrandStaffProjectSnapshot(args: BuildGrandStaffProjectSnapshotArgs): any {
-	const saveKeySig = getKeySignature(args.keySignatureRoot, args.isMinorMode ? "Minor" : "Major");
+	// `keySignatureRoot` è GIÀ la fondamentale maggiore dell'armatura, anche in minore (un
+	// brano in Mi minore lo scrive 'G'): va chiesta come 'Major'. Chiedendola come 'Minor' si
+	// ottiene l'armatura del minore OMONIMO — per Mi minore due bemolli invece di un diesis —
+	// e con quella si normalizzavano le alterazioni di ogni nota al salvataggio.
+	const saveKeySig = getKeySignature(args.keySignatureRoot, "Major");
 	const baseProject: any = {
 		schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
 		notes: (args.latestRawNotes.current || []).map((n: any) => normalizeNotePitchFieldsWithKey(n as any, saveKeySig)),
@@ -521,8 +525,10 @@ export function applyGrandStaffProjectIOCommand(cmd: GrandStaffProjectIOCommand,
 			const loadKeyRoot = (typeof loadedProject.keySignatureRoot === 'string' && loadedProject.keySignatureRoot)
 				? loadedProject.keySignatureRoot
 				: 'C';
-			const loadMinor = typeof loadedProject.isMinorMode === 'boolean' ? loadedProject.isMinorMode : false;
-			const loadKeySig = getKeySignature(loadKeyRoot, loadMinor ? 'Minor' : 'Major');
+			// 'Major' anche in minore: `keySignatureRoot` è già la fondamentale maggiore relativa
+			// (Mi minore → 'G'). Chiedendola come 'Minor' si otteneva l'armatura del minore
+			// OMONIMO, e con quella si «riparavano» le alterazioni di ogni nota al caricamento.
+			const loadKeySig = getKeySignature(loadKeyRoot, 'Major');
 
 			// Self-heal older/saved projects: keep spelling fields as-is, but
 			// ensure numeric fields follow the written spelling.

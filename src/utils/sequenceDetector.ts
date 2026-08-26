@@ -30,7 +30,9 @@ function pcToTonicName(pc: number, preferFlats: boolean): string {
 }
 
 export type SequenceKeyInfo = {
-    keySignatureRoot: string;
+    /** La TONICA VERA (Mi minore → 'E'), non il campo `keySignatureRoot` del progetto, che
+     *  è la fondamentale maggiore relativa ('G'). Si chiamava così, e il nome ingannava. */
+    keyTonic: string;
     isMinorMode: boolean;
 };
 
@@ -582,14 +584,14 @@ export function detectVoiceLeadingSequences(
             //   1. It has a non-zero transposition (exact transposition of the model)
             //   2. At least one repetition contains pitch-classes outside the home key
             if (keyInfo && transpositionSemitones != null && transpositionSemitones !== 0) {
-                const diatonic = diatonicPCSet(keyInfo.keySignatureRoot, keyInfo.isMinorMode);
+                const diatonic = diatonicPCSet(keyInfo.keyTonic, keyInfo.isMinorMode);
                 if (diatonic.size > 0) {
                     // Collect all PCs in each repetition block (model + repeats)
                     let hasOutOfKey = false;
                     const tonics: string[] = [];
-                    const preferFlats = keyInfo.keySignatureRoot.includes('b') ||
-                        ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'].includes(keyInfo.keySignatureRoot);
-                    const rootPC = noteNameToPC[keyInfo.keySignatureRoot] ?? 0;
+                    const preferFlats = keyInfo.keyTonic.includes('b') ||
+                        ['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'].includes(keyInfo.keyTonic);
+                    const rootPC = noteNameToPC[keyInfo.keyTonic] ?? 0;
 
                     for (let rep = 0; rep < fullRepeats; rep++) {
                         const blockStart = i + rep * L;
