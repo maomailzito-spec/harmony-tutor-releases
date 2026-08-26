@@ -20,7 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
-import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura } from './corpusProgressione';
+import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -854,6 +854,29 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
   if (soprano - alto > 12) cost += 300;
   if (alto - tenor > 12) cost += 300;
 
+  // ── QUALE NOTA SI RADDOPPIA ──
+  // Domanda del realizzatore, non della scelta dell'armonia: si pone quando le quattro note
+  // esistono. I raddoppi sbagliati erano il primo addebito rimasto al generatore, e il
+  // corpus la risposta ce l'ha — stato fondamentale: fondamentale 86%; primo rivolto: molto
+  // più libero; quarta e sesta: la quinta, cioè il basso, 86%.
+  if (tones && tones.length >= 3) {
+    const radicePc = toneToMidiPc(tones[0]);
+    const membroDi = (m: number) => ((m - radicePc) % 12 + 12) % 12;
+    const rivolto = (() => {
+      const b = membroDi(bass);
+      return (b === 3 || b === 4) ? 1 : (b === 6 || b === 7 || b === 8) ? 2 : (b === 10 || b === 11) ? 3 : 0;
+    })();
+    const conto = new Map<number, number>();
+    for (const m of [bass, tenor, alto, soprano]) conto.set(membroDi(m), (conto.get(membroDi(m)) ?? 0) + 1);
+    for (const [membro, quante] of conto) {
+      if (quante < 2) continue;
+      // Che GRADO DELLA TONALITÀ è la nota raddoppiata: è quello a decidere, non il suo
+      // ruolo nell'accordo. La terza di un ii si raddoppia perché è il quarto grado.
+      const pcDoppia = (radicePc + membro) % 12;
+      cost += costoDelRaddoppio(rivolto, membro, pcDoppia - (tonicPc ?? 0));
+    }
+  }
+
   // Unison — strongly penalized in chorale style (voices should be independent)
   const allM = [bass, tenor, alto, soprano];
   for (let i = 0; i < 4; i++) {
@@ -1596,17 +1619,39 @@ export function realizeNextChord(
     // Remaining chord tones for alto & tenor
     const usedPcs = new Set([sopPc, bassPc]);
     const remainingTones = tones.filter(t => !usedPcs.has(toneToMidiPc(t)));
-    const innerTones: ScaleDegreeNote[] = [...remainingTones];
-    while (innerTones.length < 2) innerTones.push(tones[0]);
-    if (innerTones.length > 2) innerTones.length = 2;
+
+    // QUALE NOTA SI RADDOPPIA. Qui c'era `innerTones.push(tones[0])`: quando restava una
+    // voce da riempire si raddoppiava SEMPRE la fondamentale, per costruzione. Il che vuol
+    // dire che il raddoppio non era una scelta, e nessun punteggio poteva sceglierlo — il
+    // corpus può anche sapere che in una quarta e sesta si raddoppia il basso l'86% delle
+    // volte, ma se l'unica voicing costruita raddoppia la fondamentale non c'è niente da
+    // ordinare. Ora si costruiscono tutte le alternative e decide `scoreVoicing`, che i
+    // numeri del corpus li ha.
+    // PROVATO E RICHIUSO: aprire la scelta a TUTTI i gradi dell'accordo. Misurato, il
+    // generatore raddoppia la terza MOLTO di più (49 segnalazioni su 40 brani) e sono tutte
+    // terze MODALI, cioè sbagliate anche per la regola qui sopra: la preferenza, per quanto
+    // giusta, non regge contro le penalità di condotta e la scelta che si apre non la si sa
+    // governare. La regola serve a ORDINARE le alternative che nascono dalle perturbazioni
+    // del veto, dove il confronto avviene fra voicing complete.
+    const daRaddoppiare: ScaleDegreeNote[] = [tones[0]];
+    const disposizioniInterne: ScaleDegreeNote[][] = [];
+    for (const doppia of daRaddoppiare) {
+      const it: ScaleDegreeNote[] = [...remainingTones];
+      while (it.length < 2) it.push(doppia);
+      if (it.length > 2) it.length = 2;
+      const firma = it.map(t => toneToMidiPc(t)).join(',');
+      if (!disposizioniInterne.some(d => d.map(t => toneToMidiPc(t)).join(',') === firma)) disposizioniInterne.push(it);
+    }
 
     // Try all permutations of 2 inner tones → tenor, alto
-    const innerPerms = [[0, 1], [1, 0]];
+    const innerPermsBase = [[0, 1], [1, 0]];
     const innerRanges = [VOICE_RANGES.tenor, VOICE_RANGES.alto];
 
     let bestVoicing: SATBVoicing | null = null;
     let bestCost = Infinity;
 
+    for (const innerTones of disposizioniInterne) {
+    const innerPerms = innerPermsBase;
     for (const perm of innerPerms) {
       // Gather ALL candidates for each inner voice (not just the closest)
       const allCandidates: number[][] = [];
@@ -1638,6 +1683,7 @@ export function realizeNextChord(
     } // end altoCand loop
     } // end tenorCand loop
     } // end perm loop
+    } // end disposizioni interne (quale nota si raddoppia)
 
     if (bestVoicing && bestCost < globalBestCost) {
       globalBestCost = bestCost;

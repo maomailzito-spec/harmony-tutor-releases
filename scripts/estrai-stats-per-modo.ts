@@ -43,6 +43,16 @@ type PerModo = {
     unigrammiDebole: Record<string, number>;
     bigrammiForte: Mappa;
     bigrammiDebole: Mappa;
+    /** QUALE NOTA DELL'ACCORDO SI RADDOPPIA, per rivolto.
+     *
+     *  `raddoppi[rivolto][membro] = quante volte`, dove il membro è l'intervallo sopra la
+     *  fondamentale: `0` fondamentale, `3` terza, `7` quinta, `10` settima.
+     *
+     *  Serve al REALIZZATORE, non alla scelta dell'armonia: è una domanda che si pone quando
+     *  le quattro note esistono. I raddoppi sbagliati sono il primo addebito rimasto al
+     *  generatore, e il corpus la risposta ce l'ha. */
+    raddoppi: Record<string, Record<string, number>>;
+    raddoppiTonali: Record<string, Record<string, number>>;
     /** LE CHIUSURE DI FRASE, distinte per posizione nel PERIODO.
      *
      *  La gerarchia è quella di scuola: inciso ≈ una battuta, semifrase due, frase quattro,
@@ -69,8 +79,54 @@ type PerModo = {
     rivolti: Mappa;
     brani: number; transizioni: number;
 };
-const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, unigrammiForte: {}, unigrammiDebole: {}, bigrammiForte: {}, bigrammiDebole: {}, intervalliEstremi: { forte: {}, debole: {} }, motoEstremi: {}, chiusure: { antecedente: {}, conseguente: {} }, rivolti: {}, brani: 0, transizioni: 0 });
+const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, unigrammiForte: {}, unigrammiDebole: {}, bigrammiForte: {}, bigrammiDebole: {}, intervalliEstremi: { forte: {}, debole: {} }, motoEstremi: {}, chiusure: { antecedente: {}, conseguente: {} }, raddoppi: {}, raddoppiTonali: {}, rivolti: {}, brani: 0, transizioni: 0 });
 const modi: Record<'major' | 'minor', PerModo> = { major: vuoto(), minor: vuoto() };
+
+/**
+ * LA FONDAMENTALE DI UN ACCORDO, dalle sole note.
+ *
+ * L'analisi restituisce la sigla ma non la fondamentale, e per sapere che RUOLO ha ciascuna
+ * voce — se raddoppia la fondamentale, la terza o la quinta — serve quella. Si trova per
+ * costruzione: la fondamentale è l'unica nota da cui le altre si impilano per terze.
+ */
+/** La classe d'altezza di un nome di nota, per il conto dei gradi tonali. */
+function noteNameToPcLocale(nome: string): number {
+    const base: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+    let pc = base[String(nome)[0]?.toUpperCase()] ?? 0;
+    for (const ch of String(nome).slice(1)) { if (ch === '#') pc++; else if (ch === 'b') pc--; }
+    return ((pc % 12) + 12) % 12;
+}
+
+function fondamentaleDi(pcs: number[]): number | null {
+    const insieme = [...new Set(pcs.map(p => ((p % 12) + 12) % 12))];
+    if (insieme.length < 3 || insieme.length > 4) return null;
+    let migliore: number | null = null, migliorPunteggio = -1;
+    for (const r of insieme) {
+        const sopra = insieme.map(p => ((p - r) % 12 + 12) % 12);
+        if (!sopra.includes(0)) continue;
+        const terza = sopra.includes(3) || sopra.includes(4);
+        if (!terza) continue;
+        // LE QUINTE VANNO IN ORDINE. Accettando l'ottava eccedente alla pari, una triade
+        // minore si lascia leggere anche dalla propria terza (Do-Mib-Sol vista da Mib dà
+        // 0-4-8) e i conti sui raddoppi escono senza senso. La quinta giusta è la quinta
+        // giusta; diminuita e eccedente esistono ma valgono meno.
+        const punteggio = sopra.includes(7) ? 3 : sopra.includes(6) ? 2 : sopra.includes(8) ? 1 : 0;
+        if (punteggio === 0) continue;
+        // E ogni nota dev'essere uno dei gradi della pila.
+        if (!sopra.every(x => [0, 3, 4, 6, 7, 8, 10, 11].includes(x))) continue;
+        if (punteggio > migliorPunteggio) { migliorPunteggio = punteggio; migliore = r; }
+    }
+    return migliore;
+}
+
+/** Che rivolto è, dal MEMBRO che sta al basso (0 fondamentale, 3/4 terza, 6/7/8 quinta,
+ *  10/11 settima). Più diretto che passare dal cifrato scritto. */
+function rivoltoDaMembro(membroAlBasso: number): number {
+    if (membroAlBasso === 3 || membroAlBasso === 4) return 1;
+    if (membroAlBasso === 6 || membroAlBasso === 7 || membroAlBasso === 8) return 2;
+    if (membroAlBasso === 10 || membroAlBasso === 11) return 3;
+    return 0;
+}
 
 /** Via il cifrato dal grado: `V65` → `V`, `vii°6` → `vii°`, `V/vi6` → `V/vi`. */
 function senzaCifre(label: string): string {
@@ -110,6 +166,8 @@ for (const f of files) {
             return am !== bm ? am - bm : ab - bb;
         });
 
+        const m0 = modi[isMinor ? 'minor' : 'major'];
+        const tonicaPc = ((noteNameToPcLocale(tonica) % 12) + 12) % 12;
         const seq: string[] = [];
         const conCifre: { grado: string; cifra: string }[] = [];
         const forze: boolean[] = [];
@@ -129,6 +187,33 @@ for (const f of files) {
                 !n.isPassing && !n.isNeighbor && !n.isAppoggiatura && !n.isAnticipation && !n.isEscape && !n.isSuspension);
             if (strutturali.length < 2) continue;
             ultimoAssoluto = assoluto;
+            // ── I RADDOPPI ──
+            // Serve la fondamentale dell'accordo per sapere che ruolo ha ciascuna nota.
+            {
+                const quattro = strutturali.filter((x: any) => x.voice >= 1 && x.voice <= 4);
+                const radicePc = quattro.length === 4 ? fondamentaleDi(quattro.map((x: any) => Number(x.midi))) : null;
+                if (radicePc != null) {
+                    const bassa = quattro.reduce((a: any, b: any) => (Number(a.midi) <= Number(b.midi) ? a : b));
+                    const rv = String(rivoltoDaMembro(((Number(bassa.midi) - radicePc) % 12 + 12) % 12));
+                    const conto: Record<number, number> = {};
+                    for (const x of quattro) {
+                        const mm = ((Number(x.midi) - radicePc) % 12 + 12) % 12;
+                        conto[mm] = (conto[mm] || 0) + 1;
+                    }
+                    const doppio = Object.entries(conto).find(([, v]) => v >= 2);
+                    if (doppio) {
+                        (m0.raddoppi[rv] ||= {})[doppio[0]] = (m0.raddoppi[rv][doppio[0]] || 0) + 1;
+                        // È un GRADO TONALE della tonalità (I, IV, V)? Il raddoppio della
+                        // terza è ammesso quando la nota raddoppiata è uno di quelli — il ii
+                        // può raddoppiare la propria terza perché è il quarto grado.
+                        const pcDoppia = (radicePc + Number(doppio[0])) % 12;
+                        const gradoDaTonica = ((pcDoppia - tonicaPc) % 12 + 12) % 12;
+                        const tonale = gradoDaTonica === 0 || gradoDaTonica === 5 || gradoDaTonica === 7;
+                        const chiave = `${doppio[0]}|${tonale ? 'tonale' : 'modale'}`;
+                        (m0.raddoppiTonali[rv] ||= {})[chiave] = (m0.raddoppiTonali[rv][chiave] || 0) + 1;
+                    }
+                }
+            }
             // Le voci estreme dell'accordo, quando ci sono tutt'e due.
             const conVoce = perMovimento.get(k)!.filter((x: any) => x.voice >= 1 && x.voice <= 4);
             const sop = conVoce.find((x: any) => x.voice === 1);

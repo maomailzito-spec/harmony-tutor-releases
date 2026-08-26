@@ -54,6 +54,7 @@ type PerModo = {
     bigrammiForte: MappaBigrammi;
     bigrammiDebole: MappaBigrammi;
     chiusure: { antecedente: { [g: string]: number }; conseguente: { [g: string]: number } };
+    raddoppi: { [rivolto: string]: { [membro: string]: number } };
     intervalliEstremi: { [forza: string]: { [semitoni: string]: number } };
     motoEstremi: { [tipo: string]: number };
     rivolti: MappaBigrammi;
@@ -414,4 +415,65 @@ export function pesiDiChiusura(isMinor: boolean, antecedente: boolean): Record<n
         fuori[deg] = (1 - f) * (generici[deg] ?? 1) + f * ((conti[deg] / massimo) * 10);
     }
     return fuori;
+}
+
+
+/**
+ * QUALE NOTA DELL'ACCORDO SI RADDOPPIA.
+ *
+ * Domanda del REALIZZATORE, non della scelta dell'armonia: si pone quando le quattro note
+ * esistono. I raddoppi sbagliati erano il primo addebito rimasto al generatore.
+ *
+ * ── LA REGOLA ─────────────────────────────────────────────────────────────────────────
+ *
+ * Si raddoppia la fondamentale, in seconda battuta la quinta. La terza no — MA la vera
+ * discriminante non è quale nota dell'accordo sia: è **che grado della tonalità** sia quella
+ * nota. Se è un grado TONALE — I, IV o V della tonalità — va bene anche se è la terza
+ * dell'accordo: un `ii` può raddoppiare la propria terza, perché quella terza è il quarto
+ * grado. Un `V` invece non può, perché la sua terza è la sensibile.
+ *
+ * E nella quarta e sesta si raddoppia il BASSO, che è la quinta dell'accordo.
+ *
+ * ── COSA DICE IL CORPUS ───────────────────────────────────────────────────────────────
+ *
+ * Confermato, sui 380 brani:
+ *
+ *   stato fondamentale   fondamentale 86%, e delle poche terze raddoppiate il 63% è un
+ *                        grado tonale (in minore il 75%)
+ *   primo rivolto        fondamentale 44%, terza 34%, quinta 20% — e lì tonale e modale si
+ *                        equivalgono: il primo rivolto è davvero il rivolto libero
+ *   quarta e sesta       la quinta, cioè il basso, l'86%
+ *
+ * I numeri qui sotto seguono quella forma: severi dove la distribuzione è ripida (lo stato
+ * fondamentale, la quarta e sesta), quasi indifferenti dove è piatta (il primo rivolto).
+ *
+ * @param inv rivolto: 0 fondamentale, 1 primo, 2 quarta e sesta, 3 terzo.
+ * @param membro l'intervallo sopra la fondamentale della nota raddoppiata: 0, 3/4, 6/7/8, 10/11.
+ * @param gradoDaTonica semitoni fra la nota raddoppiata e la tonica del brano.
+ */
+export function costoDelRaddoppio(inv: number, membro: number, gradoDaTonica: number): number {
+    const g = ((gradoDaTonica % 12) + 12) % 12;
+    // I gradi TONALI stanno a 0, 5 e 7 semitoni dalla tonica in tutt'e due i modi.
+    const tonale = g === 0 || g === 5 || g === 7;
+    const famiglia = (membro === 0) ? 'fondamentale'
+        : (membro === 3 || membro === 4) ? 'terza'
+        : (membro === 6 || membro === 7 || membro === 8) ? 'quinta'
+        : 'settima';
+    // La settima non si raddoppia mai: è la dissonanza, e deve risolvere in una voce sola.
+    if (famiglia === 'settima') return 20;
+    if (inv === 2) {
+        // Quarta e sesta: si raddoppia il basso, cioè la quinta.
+        if (famiglia === 'quinta') return 0;
+        return famiglia === 'fondamentale' ? 6 : 10;
+    }
+    if (inv === 1) {
+        // Primo rivolto: il rivolto libero. Nessuna scelta è davvero fuori posto.
+        if (famiglia === 'fondamentale') return 0;
+        if (famiglia === 'quinta') return 1;
+        return tonale ? 0.5 : 3;
+    }
+    // Stato fondamentale (e terzo rivolto, che si comporta allo stesso modo).
+    if (famiglia === 'fondamentale') return 0;
+    if (famiglia === 'quinta') return 3;
+    return tonale ? 4 : 12;
 }

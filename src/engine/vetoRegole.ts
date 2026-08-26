@@ -80,6 +80,10 @@ import { applyHarmonyRules } from '../utils/musicTheory';
  * accordi incompleti sono diventati il primo addebito del generatore (61 in eccesso sui 75
  * brani): metterlo nel veto ha tolto 10 errori e 76 avvisi.
  *
+ * `R-10-3RD` invece è rimasta fuori, e stavolta la classificazione era giusta: portarla nel
+ * veto toglie 52 avvisi ma AGGIUNGE 19 errori, perché a volte raddoppiare la terza è il male
+ * minore — la si raddoppia per non fare parallele. È una preferenza per davvero.
+ *
  * `R-10-64` era in quel gruppo ed è stato SPOSTATO QUI. Era un errore di classificazione mio:
  * in un accordo di quarta e sesta la quarta sul basso non è una nota qualunque, è la
  * dissonanza dell'accordo, e raddoppiare una dissonanza non è una preferenza — è un errore.
