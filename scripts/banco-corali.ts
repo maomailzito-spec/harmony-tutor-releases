@@ -16,7 +16,7 @@
  */
 import { readFileSync } from 'fs';
 import { applyHarmonyRules, getKeySignature } from '../src/utils/musicTheory';
-import { autoHarmonize, realizeChorale, type SopranoConstraint, type ChoralConfig } from '../src/engine/choralRealization';
+import { autoHarmonize, realizeChorale, contiVeto, azzeraContiVeto, type SopranoConstraint, type ChoralConfig } from '../src/engine/choralRealization';
 
 const V: Record<number, string> = { 1: 'S', 2: 'A', 3: 'T', 4: 'B' };
 
@@ -58,8 +58,13 @@ for (const f of process.argv.slice(2)) {
     tonic: radice, isMinor: minore, timeSignature: ts,
     rules: { allowParallel5ths: false, allowParallel8ves: false, allowCrossing: false, allowOverlap: false, doubleRoot: true },
     autoSevenths: true, sopranoMelody: vincoli,
+    // SENZA_VETO=1 spegne il veto delle regole: serve al confronto prima/dopo, che va fatto
+    // cambiando un interruttore e non l'albero di lavoro.
+    vetoRegole: !process.env.SENZA_VETO,
   } as any;
+  azzeraContiVeto();
   const generato = realizeChorale(progressione, config);
+  const vetoDelBrano = { ...contiVeto, perRegola: { ...contiVeto.perRegola } };
   const noteGen = (generato.notes || []).filter((n: any) => !n.isRest);
 
   const a = controlla(note, radice, minore, ts);
@@ -79,6 +84,11 @@ for (const f of process.argv.slice(2)) {
     .map(([r, n2]) => [r, n2 - (a.perRegola[r] || 0)] as [string, number])
     .filter(([, d]) => d > 0).sort((x, y) => y[1] - x[1]);
   if (solo.length) console.log('   in piu\' rispetto all\'originale: ' + solo.map(([r, n2]) => `${r}+${n2}`).join('  '));
+  // Il veto ha lavorato? E' una domanda diversa da «il risultato e' migliore»: se i conti
+  // sono a zero il problema non e' la severita' del checker, e' che non lo stiamo chiamando.
+  console.log(`   veto: ${vetoDelBrano.controllati} controlli, ${vetoDelBrano.fermati} respinti` +
+    (vetoDelBrano.fermati ? ` → ${vetoDelBrano.risolti} risolti, ${vetoDelBrano.migliorati} attenuati` +
+      `  [${Object.entries(vetoDelBrano.perRegola).map(([r, n2]) => `${r}×${n2}`).join(' ')}]` : ''));
   if (process.env.DETTAGLIO) for (const r of b.dettaglio) console.log('      ' + r);
 }
 console.log(`\n${'═'.repeat(74)}`);
