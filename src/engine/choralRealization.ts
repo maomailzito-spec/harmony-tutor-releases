@@ -20,6 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
+import { pesiDeiGradi, bonusTransizione } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -3275,7 +3276,9 @@ export function autoHarmonize(
   tonic: string,
   isMinor: boolean,
   harmonicRhythmBeats: number = 0,
-  beatsPerMeasure: number = 4
+  beatsPerMeasure: number = 4,
+  /** `corpus: false` torna ai pesi scritti a mano — serve al confronto prima/dopo. */
+  opts?: { corpus?: boolean }
 ): RomanChord[] {
   if (melody.length === 0) return [];
 
@@ -3302,16 +3305,23 @@ export function autoHarmonize(
     seventhPcs.push((tonicPc + seventh.semiFromRoot) % 12);
   }
 
-  // Tonal weights: prefer I, V, IV — penalize iii, viio
-  const baseWeight: Record<number, number> = {
-    0: 10,  // I
-    1: 5,   // ii
-    2: 2,   // iii
-    3: 8,   // IV
-    4: 9,   // V
-    5: 6,   // vi
-    6: 3,   // viio
-  };
+  // QUANTO PESA CIASCUN GRADO. Prima era una tabella scritta a mano — I 10, V 9, IV 8,
+  // vi 6 — che metteva le triadi primarie davanti a tutto. Il corpus del programma (380
+  // armonizzazioni già analizzate, divise per modo) dice un'altra cosa: in maggiore `vi` e
+  // `ii` valgono quanto `IV`, e in minore il quarto grado sta subito dietro la dominante.
+  // Vedi `corpusProgressione.ts`, anche per come i due si mescolano quando il campione è
+  // scarso. Il resto del punteggio — copertura, cadenze, monotonia — non cambia, e la scala
+  // dei valori è la stessa di prima perché quei termini conservino il loro peso.
+  const usaCorpus = opts?.corpus !== false;
+  const baseWeight: Record<number, number> = usaCorpus
+    ? pesiDeiGradi(isMinor)
+    : { 0: 10, 1: 5, 2: 2, 3: 8, 4: 9, 5: 6, 6: 3 };
+  /** Quanto è consueto andare da un grado all'altro. Prima erano quattro casi scritti a
+   *  mano (V→I, IV→V, ii→V, vi→ii/IV); ora sono tutte le coppie, col loro peso vero. */
+  const transizione = (da: number, a: number): number =>
+    usaCorpus ? bonusTransizione(isMinor, da, a)
+      : (da === 4 && a === 0 ? 5 : da === 3 && a === 4 ? 3 : da === 1 && a === 4 ? 3
+        : da === 5 && (a === 1 || a === 3) ? 2 : 0);
 
   const n = melody.length;
   const result: RomanChord[] = [];
@@ -3383,14 +3393,8 @@ export function autoHarmonize(
       if (i === totalGroups - 2 && deg === 4) score += 6;
       if (i === totalGroups - 2 && deg === 3) score += 3;
 
-      // V → I resolution bonus (if prev was V and current is I)
-      if (prevDeg === 4 && deg === 0) score += 5;
-      // IV → V progression bonus
-      if (prevDeg === 3 && deg === 4) score += 3;
-      // ii → V progression bonus
-      if (prevDeg === 1 && deg === 4) score += 3;
-      // vi → ii or IV bonus
-      if (prevDeg === 5 && (deg === 1 || deg === 3)) score += 2;
+      // Quanto è consueto arrivare qui DA DOVE si viene.
+      if (prevDeg >= 0) score += transizione(prevDeg, deg);
 
       // First chord → prefer I strongly
       if (i === 0 && deg === 0) score += 5;

@@ -72,7 +72,8 @@ for (const f of process.argv.slice(2)) {
     midi: n.midi, measure: n.measureIndex ?? 0, beat: n.beat ?? 1,
   }));
 
-  const progressione = autoHarmonize(vincoli, tonica, minore, 0, bpm);
+  // SENZA_CORPUS=1 torna ai pesi scritti a mano nella scelta dei gradi.
+  const progressione = autoHarmonize(vincoli, tonica, minore, 0, bpm, { corpus: !process.env.SENZA_CORPUS });
   const config: ChoralConfig = {
     tonic: tonica, isMinor: minore, timeSignature: ts,
     rules: { allowParallel5ths: false, allowParallel8ves: false, allowCrossing: false, allowOverlap: false, doubleRoot: true },
