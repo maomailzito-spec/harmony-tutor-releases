@@ -200,6 +200,8 @@
   "import_key_from_file": "dichiarata dal file",
   "import_key_from_guess": "dedotta dalle note (il file non la dichiara); correggila dalla barra strumenti se sbagliata",
   "import_key_from_project": "resta quella corrente",
+  "import_key_changes_one": "più un cambio d’armatura scritto nel file",
+  "import_key_changes_many": "più {{count}} cambi d’armatura scritti nel file",
   "import_kit_rock": "rock",
   "import_kit_orch": "orchestrale",
   "menu_panel_title": "Proprietà",

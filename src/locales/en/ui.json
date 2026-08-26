@@ -225,6 +225,8 @@
   "import_key_from_file": "declared by the file",
   "import_key_from_guess": "inferred from the notes (the file does not declare it); correct it from the toolbar if wrong",
   "import_key_from_project": "the current one is kept",
+  "import_key_changes_one": "plus one key change written in the file",
+  "import_key_changes_many": "plus {{count}} key changes written in the file",
   "import_kit_rock": "rock",
   "import_kit_orch": "orchestral",
   "menu_panel_title": "Properties",

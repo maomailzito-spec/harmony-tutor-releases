@@ -2552,7 +2552,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         octaveSpans,
         // Armatura d'impianto e cambi, in quinte: il file MIDI le dichiara.
         keySignatures: midiKeySignatures,
-    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks, satbVisible, dynamics, octaveSpans, midiKeySignatures]);
+        // Gli stessi cambi nella forma del BRANO (battuta + fondamentale): è questa che
+        // l'importazione riempie, mentre `keySignatures` serve a scrivere il file.
+        keySignatureChanges,
+    }), [rawNotes, timeSignature, timeSignatureChanges, keySignatureRoot, isMinorMode, bpm, voiceInstruments, accompanimentTracks, satbVisible, dynamics, octaveSpans, midiKeySignatures, keySignatureChanges]);
 
     const setProject = useCallback((next: Partial<typeof project> & { notes: StaffNote[] }) => {
         setRawNotes(next.notes || []);
@@ -2567,6 +2570,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         // Le due armature devono essere la stessa, altrimenti la grafia perde il suo senso.
         if (typeof next.keySignatureRoot === 'string' && next.keySignatureRoot) setKeySignatureRoot(next.keySignatureRoot);
         if (typeof next.isMinorMode === 'boolean') setIsMinorMode(next.isMinorMode);
+        if (Array.isArray(next.keySignatureChanges)) setKeySignatureChanges(next.keySignatureChanges);
 
         try {
             const maxIdx = (next.notes || []).reduce((mx, n) => Math.max(mx, Number.isFinite(n?.measureIndex as any) ? Number(n?.measureIndex) : -1), -1);
@@ -2576,7 +2580,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         } catch {
             // ignore
         }
-    }, [setRawNotes, setTimeSignature, setTimeSignatureChanges, setBpm, setKeySignatureRoot, setIsMinorMode, setMinMeasureCount, setMinMeasureCountDraft]);
+    }, [setRawNotes, setTimeSignature, setTimeSignatureChanges, setBpm, setKeySignatureRoot, setIsMinorMode, setKeySignatureChanges, setMinMeasureCount, setMinMeasureCountDraft]);
 
     const { exportMidi, importMidi, importMidiAsAccompaniment, pickMidiFile } = useGrandStaffMidi({
         project,
@@ -19008,6 +19012,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                     ? tUI('import_key_from_guess', { defaultValue: 'dedotta dalle note (il file non la dichiara); correggila dalla barra strumenti se sbagliata' })
                                                     : tUI('import_key_from_project', { defaultValue: 'resta quella corrente' })}
                                         </span>
+                                        {!!importSummary.tonalita.cambi && (
+                                            <span className="text-slate-400">
+                                                {' · '}
+                                                {importSummary.tonalita.cambi === 1
+                                                    ? tUI('import_key_changes_one', { defaultValue: 'più un cambio d’armatura scritto nel file' })
+                                                    : tUI('import_key_changes_many', { count: importSummary.tonalita.cambi, defaultValue: `più ${importSummary.tonalita.cambi} cambi d’armatura scritti nel file` })}
+                                            </span>
+                                        )}
                                     </p>
                                 )}
                                 {importSummary.kind === 'midi' && (

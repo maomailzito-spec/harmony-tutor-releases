@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
-import type { AccompanimentTrack, ClefType, ImportSummary, StaffNote, TimeSignature, TimeSignatureChange, Voice } from '../types';
+import type { AccompanimentTrack, ClefType, ImportSummary, KeySignatureChange, StaffNote, TimeSignature, TimeSignatureChange, Voice } from '../types';
+import { normalizeKeyChanges } from '../utils/keySignatureChanges';
 import { bestDrumKitFor } from '../constants/drumKits';
 import { TICKS_PER_QUARTER } from '../constants';
 import { getKeySignature, getNotePropertiesFromMidi } from '../utils/musicTheory';
@@ -30,8 +31,10 @@ export type GrandStaffMidiProject = {
   dynamics?: DynamicMark[];
   /** Segni d'ottava risolti sui tick: il MIDI porta l'altezza suonata. */
   octaveSpans?: OctaveSpan[];
-  /** Armatura d'impianto e cambi, in quinte, per il meta-evento di tonalità. */
+  /** Armatura d'impianto e cambi, in quinte, per il meta-evento di tonalità (ESPORTAZIONE). */
   keySignatures?: Array<{ measureIndex: number; fifths: number; isMinor: boolean }>;
+  /** I cambi d'armatura del brano, per battuta (IMPORTAZIONE): l'import MIDI li scrive qui. */
+  keySignatureChanges?: KeySignatureChange[];
 };
 
 export type UseGrandStaffMidiArgs = {
@@ -261,6 +264,46 @@ export function midiTimeSignatureChangesToApp(
     cur = { numerator: evs[i].numerator, denominator: evs[i].denominator };
   }
   return { first, appChanges };
+}
+
+/**
+ * I CAMBI D'ARMATURA del file MIDI, dai tick alle battute del progetto.
+ *
+ * Qui si TRASCRIVE, non si interpreta. Il file dice dove cambia l'armatura e quale diventa:
+ * sono fatti scritti, non deduzioni. Dove il brano MODULA davvero è un'altra domanda — una
+ * tonicizzazione non porta cambio d'armatura, una modulazione può non portarlo, e la
+ * risposta la dà l'analisi guardando avanti e indietro. L'importazione non ci prova.
+ *
+ * Due aggiustamenti, e sono gli unici:
+ *
+ * * il messaggio a tick 0 non è un cambio, è l'armatura d'impianto: si salta;
+ * * un cambio scritto DENTRO una battuta vale dalla stanghetta successiva, perché
+ *   l'armatura è per battuta — nel modello del programma e sulla carta. In pratica i file
+ *   li scrivono già sulle stanghette; questo serve ai casi storti.
+ */
+export function midiKeyChangesToApp(
+  events: Array<{ tick: number; sharps: number; isMinor: boolean }>,
+  tpq: number,
+  bars: BarMap,
+  impianto: { root: string; isMinor: boolean },
+): KeySignatureChange[] {
+  const MAG_DIESIS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
+  const MAG_BEMOLLI = ['C', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
+  const fuori: KeySignatureChange[] = [];
+  let inVigore = { root: impianto.root, isMinor: !!impianto.isMinor };
+  for (const ev of (events || [])) {
+    if (!ev || !Number.isFinite(ev.tick) || ev.tick <= 0) continue;
+    const root = ev.sharps >= 0 ? (MAG_DIESIS[ev.sharps] ?? 'C') : (MAG_BEMOLLI[-ev.sharps] ?? 'C');
+    const isMinor = !!ev.isMinor;
+    // Un cambio che non cambia niente sul rigo si disegnerebbe come un'armatura ripetuta.
+    if (root === inVigore.root && isMinor === inVigore.isMinor) continue;
+    const loc = bars.locate(ev.tick / Math.max(1, tpq));
+    const measureIndex = loc.beat <= 1 + 1e-6 ? loc.measureIndex : loc.measureIndex + 1;
+    fuori.push({ measureIndex, root, isMinor });
+    inVigore = { root, isMinor };
+  }
+  // `normalizeKeyChanges` tiene un cambio solo per battuta e li mette in ordine.
+  return normalizeKeyChanges(fuori);
 }
 
 /** Convert one ParsedMidiNote into a StaffNote. The voice/clef strategy is supplied
@@ -1704,7 +1747,13 @@ export async function summarizeMidiSource(source: File | ArrayBuffer | string): 
         ...(multi && !spec.isDrum ? { clef: (mean < 60 ? 'bass' : 'treble') as ClefType } : {}),
       };
     });
-    return { kind: 'midi', parts, tonalita: decidiTonalitaImport(parsed) };
+    // I cambi d'armatura si contano con la STESSA funzione che poi li importa, e sulla
+    // stessa mappa di battute: un dialogo che ne promettesse un numero diverso sarebbe
+    // peggio che tacere.
+    const tonalita = decidiTonalitaImport(parsed);
+    const { first: tsFirst, appChanges: tsChanges } = midiTimeSignatureChangesToApp(parsed.timeSignatureChanges, parsed.tpq);
+    const cambi = midiKeyChangesToApp(parsed.keySignatureChanges || [], parsed.tpq, makeBarMap(tsFirst, tsChanges), tonalita);
+    return { kind: 'midi', parts, tonalita: { ...tonalita, cambi: cambi.length } };
   } catch {
     return null;
   }
@@ -1842,6 +1891,8 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     const tonalita = decidiTonalitaImport(parsed, { root: project.keySignatureRoot || 'C', isMinor: !!project.isMinorMode });
     const midiRoot = tonalita.root;
     const midiIsMinor = tonalita.isMinor;
+    // I cambi d'armatura dichiarati dal file: si trascrivono, non si indovinano.
+    const cambiArmatura = midiKeyChangesToApp(parsed.keySignatureChanges || [], tpq, bars, { root: midiRoot, isMinor: midiIsMinor });
     // 'Major' sempre: `midiRoot` è già la fondamentale maggiore relativa.
     const keySig = getKeySignature(midiRoot, 'Major');
 
@@ -1926,6 +1977,7 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       timeSignatureChanges: midiTsChanges,
       bpm: parsed.tempoBpm,
       ...(tonalita.fonte !== 'progetto' ? { keySignatureRoot: midiRoot, isMinorMode: midiIsMinor } : {}),
+      keySignatureChanges: cambiArmatura,
     });
   }, [pickMidiFile, project.isMinorMode, project.keySignatureRoot, setProject]);
 

@@ -15,6 +15,14 @@ export type ParsedMidiNote = {
 };
 
 /** Un cambio di tempo in chiave nel file, con il tick assoluto in cui entra in vigore. */
+/** Un messaggio di tonalità del file (meta 0x59), con il punto in cui compare. */
+export type ParsedKeySignature = {
+  tick: number;
+  /** Da −7 (sette bemolli) a +7 (sette diesis). */
+  sharps: number;
+  isMinor: boolean;
+};
+
 export type ParsedTimeSignature = {
   tick: number;
   numerator: number;
@@ -31,7 +39,15 @@ export type ParsedMidi = {
    *  costante, quindi da lì in avanti finivano nella misura e sul movimento sbagliati
    *  (con pause di riempimento inventate per "completare" battute che non esistevano). */
   timeSignatureChanges: ParsedTimeSignature[];
+  /** La PRIMA tonalità dichiarata dal file (retro-compatibilità). */
   keySignature?: { sharps: number; isMinor: boolean };
+  /** TUTTE le tonalità dichiarate, in ordine di tick. Prima se ne teneva UNA SOLA — una
+   *  variabile sovrascritta a ogni messaggio, quindi vinceva l'ultimo — e i cambi
+   *  d'armatura a metà brano andavano persi in silenzio, benché l'app li sappia disegnare.
+   *
+   *  Qui si TRASCRIVE ciò che il file dichiara, e nient'altro: dove il brano modula davvero
+   *  è una domanda d'interpretazione, e la risposta la dà l'analisi, non l'importazione. */
+  keySignatureChanges: ParsedKeySignature[];
   notes: ParsedMidiNote[];
   /** Nome di ogni traccia (meta 0x03), indicizzato per numero di traccia. Voci vuote = senza nome. */
   trackNames: string[];
@@ -99,8 +115,8 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
   // alla fine. In un file multi-traccia i meta di tempo stanno di norma nella traccia 0,
   // ma non è garantito, quindi si accettano da tutte.
   const tsEvents: ParsedTimeSignature[] = [];
-  let keySharps: number | null = null;
-  let keyIsMinor = false;
+  const ksEvents: ParsedKeySignature[] = [];
+
 
   // keyOffTick = the tick the KEY was released (note-off), set when a note-off is
   // deferred because the sustain pedal was held. Lets us recover the un-pedaled
@@ -225,8 +241,7 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
           }
         } else if (metaType === 0x59 && len.value >= 2) {
           // Key signature: sf = signed byte (-7..+7, neg=flats, pos=sharps), mi = 0 major / 1 minor
-          keySharps = view.getInt8(pos);
-          keyIsMinor = view.getUint8(pos + 1) === 1;
+          ksEvents.push({ tick: absTick, sharps: view.getInt8(pos), isMinor: view.getUint8(pos + 1) === 1 });
         } else if (metaType === 0x03 && len.value > 0) {
           // Track name (meta 0x03): usato per nominare le parti ACC importate. Primo per traccia.
           if (!trackNames[t]) trackNames[t] = readStr(view, pos, len.value).trim();
@@ -355,12 +370,31 @@ export function parseMidi(buffer: ArrayBuffer): ParsedMidi {
     timeSignatureChanges.unshift({ tick: 0, numerator: tsNum, denominator: tsDen });
   }
 
+  // Cambi di tonalità: stesso trattamento del metro. Uno solo per tick — in un file
+  // multi-traccia lo stesso cambio compare in ogni traccia — e senza ripetere un'armatura
+  // già in vigore, che sul rigo si disegnerebbe come un cambio che non cambia niente.
+  ksEvents.sort((a, b) => a.tick - b.tick);
+  const keySignatureChanges: ParsedKeySignature[] = [];
+  for (const ev of ksEvents) {
+    const last = keySignatureChanges[keySignatureChanges.length - 1];
+    if (last && last.tick === ev.tick) continue;
+    if (last && last.sharps === ev.sharps && last.isMinor === ev.isMinor) continue;
+    keySignatureChanges.push(ev);
+  }
+
   return {
     tpq,
     tempoBpm,
     timeSignature: { numerator: tsNum, denominator: tsDen },
     timeSignatureChanges,
-    ...(keySharps !== null ? { keySignature: { sharps: keySharps, isMinor: keyIsMinor } } : {}),
+    keySignatureChanges,
+    // L'armatura D'IMPIANTO è quella dichiarata all'INIZIO, non una qualsiasi. Prima
+    // vinceva l'ultimo messaggio del file: un brano con un cambio a metà si apriva
+    // nell'armatura della seconda metà. E un file che dichiara la tonalità solo dal terzo
+    // sistema in poi non sta dicendo com'è fatto il primo.
+    ...(keySignatureChanges[0]?.tick === 0
+      ? { keySignature: { sharps: keySignatureChanges[0].sharps, isMinor: keySignatureChanges[0].isMinor } }
+      : {}),
     notes,
     trackNames,
     programs,

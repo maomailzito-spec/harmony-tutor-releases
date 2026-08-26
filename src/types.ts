@@ -485,7 +485,7 @@ export interface ImportSummary {
     }>;
     /** Tonalità che verrà usata, e da dove viene. Un MIDI non contiene alterazioni: la
      *  grafia di ogni nota alterata dipende da questa scelta, quindi va detta PRIMA. */
-    tonalita?: { root: string; isMinor: boolean; fonte: 'file' | 'stima' | 'progetto' };
+    tonalita?: { root: string; isMinor: boolean; fonte: 'file' | 'stima' | 'progetto'; cambi?: number };
 }
 
 export interface OrnamentOverride {
