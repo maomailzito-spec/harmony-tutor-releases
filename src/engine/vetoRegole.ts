@@ -73,6 +73,13 @@ import { applyHarmonyRules } from '../utils/musicTheory';
  * scelta), le preferenze di raddoppio in stato fondamentale e primo rivolto (`R-10-6`,
  * `R-10-3RD`, che sono gusto), e tutte le `EXC-*`, che non sono violazioni ma il contrario.
  *
+ * `R-CHORD-COMPLETE` era anche lui in quel gruppo, come «è una scelta». Non lo è: la regola
+ * guarda quali note dell'accordo mancano e segnala il TERZO assente, che non è un'omissione
+ * lecita — la quinta si omette, la terza no, altrimenti l'accordo non ha modo. È aritmetica
+ * sulle note scritte, esattamente come le altre di questa famiglia. È entrato quando gli
+ * accordi incompleti sono diventati il primo addebito del generatore (61 in eccesso sui 75
+ * brani): metterlo nel veto ha tolto 10 errori e 76 avvisi.
+ *
  * `R-10-64` era in quel gruppo ed è stato SPOSTATO QUI. Era un errore di classificazione mio:
  * in un accordo di quarta e sesta la quarta sul basso non è una nota qualunque, è la
  * dissonanza dell'accordo, e raddoppiare una dissonanza non è una preferenza — è un errore.
@@ -90,6 +97,7 @@ export const REGOLE_DI_VETO = new Set<string>([
   'R-10-DIM5',   // quinta diminuita raddoppiata
   'R-10-7TH',    // settima raddoppiata
   'R-10-64',     // raddoppio sbagliato in quarta e sesta (vedi sotto)
+  'R-CHORD-COMPLETE',  // accordo incompleto (vedi sotto)
   'R-12',        // risoluzione della settima
   'R-13',        // moto retto di tutte e quattro le voci
   'R-14',        // quinta nascosta

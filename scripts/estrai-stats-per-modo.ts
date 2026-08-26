@@ -33,13 +33,23 @@ type Mappa = Record<string, Record<string, number>>;
 type PerModo = {
     unigrammi: Record<string, number>;
     bigrammi: Mappa;
+    /** Gli stessi conti separati per FORZA DEL MOVIMENTO su cui l'accordo cade.
+     *
+     *  Serve a distinguere due cose che i bigrammi da soli non distinguono: un V sul tempo
+     *  debole che spinge la conclusione sul forte, e un V sul tempo forte che è una cadenza
+     *  sospesa. È lo stesso accordo dopo lo stesso accordo, e sono due gesti diversi.
+     *  `forte` = battere e (nei metri pari) movimento di mezzo; `debole` = il resto. */
+    unigrammiForte: Record<string, number>;
+    unigrammiDebole: Record<string, number>;
+    bigrammiForte: Mappa;
+    bigrammiDebole: Mappa;
     /** `rivolti[grado][cifra] = quante volte`. Risponde a «se metto un ii, che basso ci va»:
      *  il corpus dice che il ii sta in primo rivolto il doppio delle volte del I, e che il
      *  vii° in posizione fondamentale è raro. Prima quel giudizio era una mia costante. */
     rivolti: Mappa;
     brani: number; transizioni: number;
 };
-const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, rivolti: {}, brani: 0, transizioni: 0 });
+const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, unigrammiForte: {}, unigrammiDebole: {}, bigrammiForte: {}, bigrammiDebole: {}, rivolti: {}, brani: 0, transizioni: 0 });
 const modi: Record<'major' | 'minor', PerModo> = { major: vuoto(), minor: vuoto() };
 
 /** Via il cifrato dal grado: `V65` → `V`, `vii°6` → `vii°`, `V/vi6` → `V/vi`. */
@@ -82,6 +92,7 @@ for (const f of files) {
 
         const seq: string[] = [];
         const conCifre: { grado: string; cifra: string }[] = [];
+        const forze: boolean[] = [];
         let ultimoAssoluto = -Infinity;
         for (const k of chiavi) {
             const [mi, bt] = k.split(':').map(Number);
@@ -101,6 +112,9 @@ for (const f of files) {
                     // Il CIFRATO, che dice quale nota sta al basso.
                     const cifra = (r.figures || []).join('') || '5';
                     conCifre.push({ grado: senzaCifre(r.roman), cifra });
+                    // Forte: il battere, e nei metri pari anche il movimento di mezzo.
+                    const b = Math.round(bt);
+                    forze.push(b === 1 || (movPerBattuta % 2 === 0 && b === movPerBattuta / 2 + 1));
                 }
             } catch { /* accordo illeggibile: si salta */ }
         }
@@ -111,6 +125,15 @@ for (const f of files) {
         const m = modi[isMinor ? 'minor' : 'major'];
         m.brani++;
         for (const r of puliti) m.unigrammi[r] = (m.unigrammi[r] || 0) + 1;
+        // I conti per forza del movimento si fanno sulla sequenza NON ripulita, perché lì
+        // ogni accordo ha ancora il suo posto nella battuta.
+        for (let k = 0; k < seq.length; k++) {
+            const dove = forze[k] ? m.unigrammiForte : m.unigrammiDebole;
+            dove[seq[k]] = (dove[seq[k]] || 0) + 1;
+            if (k === 0 || seq[k] === seq[k - 1]) continue;
+            const mappa = forze[k] ? m.bigrammiForte : m.bigrammiDebole;
+            (mappa[seq[k - 1]] ||= {})[seq[k]] = (mappa[seq[k - 1]][seq[k]] || 0) + 1;
+        }
         for (const c of conCifre) (m.rivolti[c.grado] ||= {})[c.cifra] = (m.rivolti[c.grado][c.cifra] || 0) + 1;
         for (let i = 1; i < puliti.length; i++) {
             const da = puliti[i - 1], a = puliti[i];

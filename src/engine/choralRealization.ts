@@ -3109,8 +3109,11 @@ type GruppoMelodia = { pcs: number[]; measure: number; beat: number };
 type SchedaAccordo = {
   /** Le classi d'altezza dell'accordo (con la settima in coda, se ce l'ha). */
   pcs: number[];
-  /** Quanto quel grado è usato nel corpus, nella scala 0…10. */
+  /** Quanto quel grado è usato nel corpus, nella scala 0…10 — sul tempo forte e sul debole,
+   *  che sono due cose diverse: la dominante spinge dal debole, la tonica atterra sul forte. */
   peso: number;
+  pesoForte: number;
+  pesoDebole: number;
   /** Rivolti ammessi. */
   rivolti: number[];
   /** Se è una tonicizzazione, il grado su cui ha promesso di risolvere; altrimenti −1. */
@@ -3134,7 +3137,7 @@ function scegliProgressioneDellaFrase(args: {
   forze: number[];
   curaLaCondotta: boolean;
   /** Il costo scritto a mano fra due gradi, per quando il corpus è spento. */
-  transizione: (da: number, a: number) => number;
+  transizione: (da: number, a: number, forteArrivo: boolean) => number;
 }): Posa[] {
   const { gruppi, schede, forze, transizione, curaLaCondotta } = args;
   const n = gruppi.length;
@@ -3164,7 +3167,8 @@ function scegliProgressioneDellaFrase(args: {
     const sc = schede[p.acc];
     const pcs = gruppi[i].pcs;
     const coperte = pcs.filter(pc => sc.pcs.includes(pc)).length;
-    let c = -sc.peso;                                   // il grado più usato costa meno
+    // Il peso del grado DOVE SI TROVA: sul battere o sul levare non è lo stesso grado.
+    let c = -(forze[i] >= 0.5 ? sc.pesoForte : sc.pesoDebole);
     c -= (coperte / Math.max(1, pcs.length)) * 5;       // e quello che regge più note
     if (coperte === pcs.length) c -= 3;
     c += COSTO_RIVOLTO[p.inv] ?? 4;
@@ -3194,7 +3198,7 @@ function scegliProgressioneDellaFrase(args: {
     if (sda.bersaglio >= 0 && sa.gradoDiatonico !== sda.bersaglio) return INFINITO;
     let c = 0;
     if (sda.gradoDiatonico >= 0 && sa.gradoDiatonico >= 0) {
-      c -= transizione(sda.gradoDiatonico, sa.gradoDiatonico);
+      c -= transizione(sda.gradoDiatonico, sa.gradoDiatonico, forze[i] >= 0.5);
     }
     // Ripetere lo stesso accordo: sciatto, SALVO quando a ripetersi è la melodia — lì
     // restare (cambiando semmai rivolto) è la soluzione naturale, e cambiare per forza
@@ -3568,8 +3572,8 @@ export function autoHarmonize(
     : { 0: 10, 1: 5, 2: 2, 3: 8, 4: 9, 5: 6, 6: 3 };
   /** Quanto è consueto andare da un grado all'altro. Prima erano quattro casi scritti a
    *  mano (V→I, IV→V, ii→V, vi→ii/IV); ora sono tutte le coppie, col loro peso vero. */
-  const transizione = (da: number, a: number): number =>
-    usaCorpus ? bonusTransizione(isMinor, da, a)
+  const transizione = (da: number, a: number, forteArrivo?: boolean): number =>
+    usaCorpus ? bonusTransizione(isMinor, da, a, forteArrivo)
       : (da === 4 && a === 0 ? 5 : da === 3 && a === 4 ? 3 : da === 1 && a === 4 ? 3
         : da === 5 && (a === 1 || a === 3) ? 2 : 0);
 
@@ -3662,11 +3666,15 @@ export function autoHarmonize(
   // melodia: così «cosa viene prima e cosa viene dopo» decide davvero, invece di essere una
   // sbirciatina di un passo che non può far cambiare idea sul passato.
   if (opts?.frase !== false) {
+    const pesiForte = usaCorpus ? pesiDeiGradi(isMinor, true) : baseWeight;
+    const pesiDebole = usaCorpus ? pesiDeiGradi(isMinor, false) : baseWeight;
     const schede: SchedaAccordo[] = [];
     for (let deg = 0; deg < 7; deg++) {
       schede.push({
         pcs: triadPcSets[deg],
         peso: baseWeight[deg] ?? 1,
+        pesoForte: pesiForte[deg] ?? 1,
+        pesoDebole: pesiDebole[deg] ?? 1,
         rivolti: [0, 1, 2],
         bersaglio: -1,
         gradoDiatonico: deg,
@@ -3674,9 +3682,10 @@ export function autoHarmonize(
     }
     for (let e = 0; e < extra.length; e++) {
       const ex = extra[e];
+      const ps = pesoSecondaria(isMinor, ex.corpus);
       schede.push({
         pcs: triadPcSets[PRIMO_EXTRA + e],
-        peso: pesoSecondaria(isMinor, ex.corpus),
+        peso: ps, pesoForte: ps, pesoDebole: ps,
         rivolti: ex.hasSeventh ? [0, 1, 2, 3] : [0, 1, 2],
         bersaglio: ex.target,
         gradoDiatonico: -1,

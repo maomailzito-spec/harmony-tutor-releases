@@ -46,7 +46,15 @@
 import statsJson from '../data/progressionStatsByMode.json';
 
 type MappaBigrammi = { [da: string]: { [a: string]: number } };
-type PerModo = { unigrammi: { [grado: string]: number }; bigrammi: MappaBigrammi; rivolti: MappaBigrammi };
+type PerModo = {
+    unigrammi: { [grado: string]: number };
+    bigrammi: MappaBigrammi;
+    unigrammiForte: { [grado: string]: number };
+    unigrammiDebole: { [grado: string]: number };
+    bigrammiForte: MappaBigrammi;
+    bigrammiDebole: MappaBigrammi;
+    rivolti: MappaBigrammi;
+};
 
 const stats = statsJson as unknown as { major: PerModo; minor: PerModo };
 const delModo = (isMinor: boolean): PerModo => (isMinor ? stats.minor : stats.major);
@@ -118,9 +126,17 @@ const fiducia = (osservazioni: number) =>
  * così che gli altri termini del punteggio — copertura, cadenze, monotonia — conservino il
  * peso che avevano.
  */
-export function pesiDeiGradi(isMinor: boolean): Record<number, number> {
+/**
+ * @param forte se dato, si guardano i conti del solo tempo FORTE o del solo tempo DEBOLE.
+ *   Non è una raffinatezza: nel corpus il quinto grado sta più spesso sul tempo debole
+ *   (21,7%) che sul forte (16,2%), e la tonica il contrario (29% contro 18%). È la regola
+ *   del ritmo armonico — la dominante spinge, la conclusione atterra sul battere — scritta
+ *   dai compositori invece che da noi.
+ */
+export function pesiDeiGradi(isMinor: boolean, forte?: boolean): Record<number, number> {
     const nomi = etichette(isMinor);
-    const uni = delModo(isMinor).unigrammi;
+    const m = delModo(isMinor);
+    const uni = forte == null ? m.unigrammi : (forte ? m.unigrammiForte : m.unigrammiDebole);
     const conti = nomi.map(gruppo => somma(uni, gruppo));
     const totale = conti.reduce((a, b) => a + b, 0);
     const massimo = Math.max(...conti, 1);
@@ -166,10 +182,11 @@ const PESO_TRANSIZIONE = 10;
  * perché nel corpus le ripetizioni consecutive sono state tolte in fase di raccolta: una
  * progressione è fatta di cambiamenti.
  */
-export function bonusTransizione(isMinor: boolean, da: number, a: number): number {
+export function bonusTransizione(isMinor: boolean, da: number, a: number, forteArrivo?: boolean): number {
     if (da < 0 || da > 6 || a < 0 || a > 6) return 0;
     const nomi = etichette(isMinor);
-    const bigrammi = delModo(isMinor).bigrammi;
+    const m = delModo(isMinor);
+    const bigrammi = forteArrivo == null ? m.bigrammi : (forteArrivo ? m.bigrammiForte : m.bigrammiDebole);
     // Le righe di tutte le grafie dello stesso grado di partenza si sommano.
     const riga: Record<string, number> = {};
     let totaleRiga = 0;
@@ -182,8 +199,10 @@ export function bonusTransizione(isMinor: boolean, da: number, a: number): numbe
     const aMano = TRANSIZIONI_A_MANO[da]?.[a] ?? 0;
     if (totaleRiga <= 0) return aMano;
     const p = somma(riga, nomi[a]) / totaleRiga;
-    // Quanto vale `a` in generale, per sapere se qui è più o meno atteso del solito.
-    const uni = delModo(isMinor).unigrammi;
+    // Quanto vale `a` in generale, per sapere se qui è più o meno atteso del solito. Il
+    // «generale» dev'essere lo stesso mondo del condizionato: se si guarda il tempo debole,
+    // il termine di paragone sono i gradi sul tempo debole.
+    const uni = forteArrivo == null ? m.unigrammi : (forteArrivo ? m.unigrammiForte : m.unigrammiDebole);
     let totaleUni = 0;
     for (const v of Object.values(uni)) totaleUni += v;
     const pGenerale = totaleUni > 0 ? somma(uni, nomi[a]) / totaleUni : 0;
