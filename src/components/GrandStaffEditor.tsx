@@ -6579,6 +6579,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                             if (Number.isFinite(result.bpm) && result.bpm > 0) setBpm(result.bpm);
                             if (result.timeSignature) setTimeSignature(result.timeSignature);
                             if (result.timeSignatureChanges?.length) setTimeSignatureChanges(result.timeSignatureChanges);
+                            // E l'ARMATURA, per la stessa ragione del metro: su progetto vuoto
+                            // questa importazione è l'apertura del file. Va applicata perché è
+                            // quella con cui le note sono già state scritte — se il rigo ne
+                            // disegnasse un'altra, le alterazioni sparirebbero due volte.
+                            if (result.keySignatureRoot) setKeySignatureRoot(result.keySignatureRoot);
+                            setIsMinorMode(!!result.isMinorMode);
+                            if (result.keySignatureChanges?.length) setKeySignatureChanges(result.keySignatureChanges);
                         }
                     }
                 }

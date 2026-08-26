@@ -1681,11 +1681,16 @@ export function planMidiTracks(
  * Un MIDI non contiene alterazioni, solo numeri di nota: la grafia di ogni Do♯/Re♭ del brano
  * la decide l'armatura che scegliamo qui. Le fonti sono tre e non valgono uguale.
  *
- * 1. LA DICHIARAZIONE DEL FILE (meta `0x59`), quando dice qualcosa di diverso da DO MAGGIORE.
- *    Zero diesis e modo maggiore è il valore che ci finisce da solo quando chi ha scritto il
- *    file non se n'è occupato: nel file «niente da dichiarare» e «è in Do maggiore» si
- *    scrivono IDENTICI, e l'unico modo di distinguerli è guardare le note. Qualunque altro
- *    valore è invece una scelta deliberata, e a quella si crede.
+ * 1. LA DICHIARAZIONE DEL FILE (meta `0x59`), quando c'è motivo di crederle. Zero diesis e
+ *    modo maggiore è il valore che ci finisce da solo quando chi ha scritto il file non se
+ *    n'è occupato: nel file «niente da dichiarare» e «è in Do maggiore» si scrivono
+ *    IDENTICI. Qualunque ALTRO valore è invece una scelta deliberata.
+ *
+ *    E lo è anche un Do maggiore, se il file dichiara ALTRE armature più avanti: chi si è
+ *    preso la briga di scrivere un cambio alla terza battuta ha scritto anche com'era la
+ *    prima. Senza questa aggiunta un file che apre in Do maggiore con le alterazioni scritte
+ *    per esteso e cambia in Re maggiore alla terza battuta si apriva in La maggiore — una
+ *    tonalità dedotta dalle alterazioni accidentali, che sulla carta non c'era.
  *
  * 2. LA STIMA DALLE NOTE (Krumhansl-Schmuckler, vedi `utils/stimaTonalita.ts`). Misurata sul
  *    corpus: 88-100% sul repertorio vero (Delachi 100%, Delamont 90%, Dubois 88%, corali
@@ -1706,17 +1711,32 @@ export type TonalitaImport = {
 };
 
 export function decidiTonalitaImport(
-  parsed: { keySignature?: { sharps: number; isMinor: boolean }; notes?: Array<{ midi: number; durationTicks?: number }> },
+  parsed: {
+    keySignature?: { sharps: number; isMinor: boolean };
+    keySignatureChanges?: Array<{ tick: number; sharps: number; isMinor: boolean }>;
+    notes?: Array<{ midi: number; durationTicks?: number; tick?: number }>;
+  },
   progetto?: { root: string; isMinor: boolean },
 ): TonalitaImport {
   const MAG_DIESIS = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
   const MAG_BEMOLLI = ['C', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
+  const dichiarazioni = parsed.keySignatureChanges || [];
   const k = parsed.keySignature;
-  if (k && !(k.sharps === 0 && !k.isMinor)) {
+  // «Do maggiore» vale come dichiarazione solo se il file dimostra di occuparsi delle
+  // armature, cioè se ne dichiara altre.
+  const gestisceLeArmature = dichiarazioni.length > 1;
+  if (k && (gestisceLeArmature || !(k.sharps === 0 && !k.isMinor))) {
     const root = k.sharps >= 0 ? (MAG_DIESIS[k.sharps] ?? 'C') : (MAG_BEMOLLI[-k.sharps] ?? 'C');
     return { root, isMinor: !!k.isMinor, fonte: 'file' };
   }
-  const stima = stimaTonalita(parsed.notes || []);
+  // Se si stima, si guarda solo il tratto a cui la stima si applica: quando più avanti c'è
+  // un cambio dichiarato, le note che vengono dopo appartengono a un'altra armatura e
+  // sporcherebbero il conto.
+  const finoA = dichiarazioni.find(d => d.tick > 0)?.tick;
+  const perLaStima = finoA == null
+    ? (parsed.notes || [])
+    : (parsed.notes || []).filter(n => (n as any).tick == null || (n as any).tick < finoA);
+  const stima = stimaTonalita(perLaStima.length ? perLaStima : (parsed.notes || []));
   if (stima) return { root: stima.root, isMinor: stima.isMinor, fonte: 'stima' };
   return { root: progetto?.root || 'C', isMinor: !!progetto?.isMinor, fonte: 'progetto' };
 }
@@ -2004,6 +2024,11 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
     bpm: number;
     timeSignature: TimeSignature;
     timeSignatureChanges: TimeSignatureChange[];
+    /** Tonalità con cui le note sono state SCRITTE. Su progetto vuoto viene dal file e il
+     *  chiamante deve applicarla, perché il rigo deve disegnare la stessa. */
+    keySignatureRoot: string;
+    isMinorMode: boolean;
+    keySignatureChanges: KeySignatureChange[];
   } | null> => {
     const arrayBuffer = await resolveMidiSource(source, pickMidiFile);
     if (!arrayBuffer) return null;
@@ -2027,10 +2052,25 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       : midiMeter.appChanges;
     const bars = makeBarMap(meterTs, meterChanges);
 
-    // The accompaniment track is not analysed; key signature for spelling defaults
-    // to the project's current key so accidentals look reasonable on the staff.
-    // 'Major' anche in minore: `keySignatureRoot` è già la fondamentale maggiore relativa.
-    const keySig = getKeySignature(project.keySignatureRoot || 'C', 'Major');
+    // L'ARMATURA CON CUI SI SCRIVONO LE NOTE.
+    //
+    // Su una partitura già avviata comanda quella del progetto: la traccia entra in un brano
+    // che una tonalità ce l'ha, e scriverla in un'altra la farebbe stonare sulla pagina.
+    // Su progetto VUOTO invece questa importazione è di fatto l'apertura del file, e allora
+    // vale la tonalità del file — la stessa regola che qui vige già per il metro.
+    //
+    // E l'armatura usata per SCRIVERE dev'essere quella che poi il rigo DISEGNA, altrimenti
+    // le alterazioni spariscono due volte: dalla chiave perché non c'è, e dalle note perché
+    // la chiave avrebbe dovuto averle. Perciò quando si adotta quella del file la si
+    // restituisce al chiamante, che la applica al progetto.
+    const suProgettoVuoto = opts?.useProjectMeter === false;
+    const tonalita = suProgettoVuoto
+      ? decidiTonalitaImport(parsed, { root: project.keySignatureRoot || 'C', isMinor: !!project.isMinorMode })
+      : { root: project.keySignatureRoot || 'C', isMinor: !!project.isMinorMode, fonte: 'progetto' as const };
+    const keySig = getKeySignature(tonalita.root, 'Major');
+    const cambiArmatura = suProgettoVuoto
+      ? midiKeyChangesToApp(parsed.keySignatureChanges || [], tpq, bars, tonalita)
+      : [];
 
     // Raggruppa le note in PARTI, per rispettare i pentagrammi separati di MuseScore:
     // per traccia MIDI se il file è multi-traccia (format 1), altrimenti per canale
@@ -2135,6 +2175,11 @@ export function useGrandStaffMidi({ project, setProject }: UseGrandStaffMidiArgs
       // solo se il progetto è vuoto — su una partitura già avviata comanda quella.
       timeSignature: midiMeter.first,
       timeSignatureChanges: midiMeter.appChanges,
+      // Idem per la tonalità: su progetto vuoto è quella del file, e va applicata al brano
+      // perché coincida con quella con cui le note sono state appena scritte.
+      keySignatureRoot: tonalita.root,
+      isMinorMode: tonalita.isMinor,
+      keySignatureChanges: cambiArmatura,
     };
   }, [pickMidiFile, project.keySignatureRoot, project.isMinorMode, project.timeSignature, project.timeSignatureChanges]);
 
