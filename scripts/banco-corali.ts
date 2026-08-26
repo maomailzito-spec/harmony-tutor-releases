@@ -108,7 +108,7 @@ for (const f of process.argv.slice(2)) {
   }));
 
   // SENZA_CORPUS=1 torna ai pesi scritti a mano nella scelta dei gradi.
-  const progressione = autoHarmonize(vincoli, tonica, minore, 0, bpm, { corpus: !process.env.SENZA_CORPUS, condotta: !process.env.SENZA_CONDOTTA });
+  const progressione = autoHarmonize(vincoli, tonica, minore, 0, bpm, { corpus: !process.env.SENZA_CORPUS, condotta: !process.env.SENZA_CONDOTTA, frase: !process.env.SENZA_FRASE });
   const config: ChoralConfig = {
     tonic: tonica, isMinor: minore, timeSignature: ts,
     rules: { allowParallel5ths: false, allowParallel8ves: false, allowCrossing: false, allowOverlap: false, doubleRoot: true },

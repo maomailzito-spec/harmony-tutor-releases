@@ -3019,6 +3019,193 @@ export function realizeChorale(
   return { notes: allNotes, violations: allViolations, modulationContexts };
 }
 
+// ─── LA SCELTA SU TUTTA LA FRASE ─────────────────────────────────────────
+
+/**
+ * ARMONIZZARE UNA MELODIA È SCEGLIERE UN PERCORSO, NON UNA SEQUENZA DI MOSSE.
+ *
+ * Il generatore sceglieva un accordo per volta, guardando solo quello prima e sbirciando di
+ * un passo. Una scelta golosa non può sapere che l'accordo comodo di adesso costringe a una
+ * goffaggine fra tre note — e non può tornare indietro a disfarla. Ne uscivano progressioni
+ * senza errori e senza vita: il quinto grado ribattuto per quattro battute, retrocessioni
+ * `V → ii` messe lì perché in quel punto sembravano il meno peggio.
+ *
+ * Qui si sceglie il PERCORSO. Ogni nota della melodia ha i suoi accordi possibili, ciascuno
+ * col suo basso; ogni coppia di accordi consecutivi ha il suo costo; e si tiene il cammino
+ * di costo minimo su tutta la frase. «Cosa viene prima e cosa viene dopo» smette di essere
+ * una sbirciatina e diventa la sostanza della decisione, perché il cammino è valutato
+ * intero: un accordo scomodo adesso viene accettato se apre una strada migliore dopo, e uno
+ * comodo viene scartato se porta in un vicolo cieco.
+ *
+ * Il conto è quello classico dei cammini minimi su una griglia (Viterbi): per ogni nota si
+ * tiene, per ciascun accordo possibile, il costo del miglior cammino che ci arriva. Costa
+ * quanto il numero di note per il quadrato degli accordi possibili — su un corale, qualche
+ * centinaio di migliaia di somme, cioè niente.
+ *
+ * ── LE DUE VOCI DEL COSTO ─────────────────────────────────────────────────────────────
+ *
+ * **Quanto quell'accordo REGGE quella nota** (`costoDiPosa`): quante note del gruppo copre,
+ * quanto quel grado è usato nel corpus, se il rivolto è di quelli che si scrivono liberamente
+ * o di quelli che vogliono un'occasione — un 4/6 non è un rivolto come gli altri.
+ *
+ * **Quanto quel passaggio è MUSICA** (`costoDiPassaggio`): quanto è idiomatico andare da un
+ * grado all'altro secondo il corpus, quanto si muove il basso, se una tonicizzazione mantiene
+ * la promessa di risolvere sul proprio bersaglio.
+ *
+ * Le due si sommano lungo il cammino, e il cammino migliore è la progressione.
+ */
+
+/** Un accordo candidato per una nota: quale accordo e con che basso. */
+type Posa = { acc: number; inv: number };
+
+/** Quanto costa un rivolto in sé, prima di ogni contesto. La posizione fondamentale è la
+ *  norma; il primo rivolto è di uso corrente; il secondo — la quarta e sesta — è un accordo
+ *  che vuole un'occasione precisa (cadenza, passaggio) e altrove è una scelta debole. */
+const COSTO_RIVOLTO = [0, 1.5, 6, 3];
+
+/** Un gruppo di melodia da armonizzare: le classi d'altezza che ci suonano sopra, e dove sta. */
+type GruppoMelodia = { pcs: number[]; measure: number; beat: number };
+
+/** Che cosa serve sapere di un accordo candidato, indipendentemente da dove si trova. */
+type SchedaAccordo = {
+  /** Le classi d'altezza dell'accordo (con la settima in coda, se ce l'ha). */
+  pcs: number[];
+  /** Quanto quel grado è usato nel corpus, nella scala 0…10. */
+  peso: number;
+  /** Rivolti ammessi. */
+  rivolti: number[];
+  /** Se è una tonicizzazione, il grado su cui ha promesso di risolvere; altrimenti −1. */
+  bersaglio: number;
+  /** L'indice del grado diatonico (0…6), o −1 per le tonicizzazioni: serve alle transizioni,
+   *  che il corpus conosce solo fra gradi diatonici. */
+  gradoDiatonico: number;
+};
+
+const INFINITO = 1e9;
+
+/**
+ * Sceglie la progressione migliore per l'intera melodia.
+ *
+ * @returns per ogni gruppo, l'accordo e il rivolto scelti.
+ */
+function scegliProgressioneDellaFrase(args: {
+  gruppi: GruppoMelodia[];
+  schede: SchedaAccordo[];
+  curaLaCondotta: boolean;
+  /** Il costo scritto a mano fra due gradi, per quando il corpus è spento. */
+  transizione: (da: number, a: number) => number;
+}): Posa[] {
+  const { gruppi, schede, transizione, curaLaCondotta } = args;
+  const n = gruppi.length;
+  if (n === 0) return [];
+
+  const bassoDi = (p: Posa) => 48 + schede[p.acc].pcs[p.inv % schede[p.acc].pcs.length];
+
+  // ── Le pose possibili per ciascuna nota ──
+  const posePerGruppo: Posa[][] = [];
+  for (let i = 0; i < n; i++) {
+    const pcs = gruppi[i].pcs;
+    const pose: Posa[] = [];
+    for (let a = 0; a < schede.length; a++) {
+      const sc = schede[a];
+      if (!pcs.some(pc => sc.pcs.includes(pc))) continue;
+      // Una tonicizzazione non apre un brano e non lo chiude: è un accordo che PROMETTE.
+      if (sc.bersaglio >= 0 && (i === 0 || i === n - 1)) continue;
+      for (const inv of sc.rivolti) pose.push({ acc: a, inv });
+    }
+    // Se nessun accordo copre la nota, resta la tonica: è il ripiego di sempre, e la vera
+    // cura sta altrove (riconoscere che quella nota può NON essere nota d'accordo).
+    posePerGruppo.push(pose.length ? pose : [{ acc: 0, inv: 0 }]);
+  }
+
+  /** QUANTO QUELL'ACCORDO REGGE QUELLA NOTA. Più basso, meglio è. */
+  const costoDiPosa = (i: number, p: Posa): number => {
+    const sc = schede[p.acc];
+    const pcs = gruppi[i].pcs;
+    const coperte = pcs.filter(pc => sc.pcs.includes(pc)).length;
+    let c = -sc.peso;                                   // il grado più usato costa meno
+    c -= (coperte / Math.max(1, pcs.length)) * 5;       // e quello che regge più note
+    if (coperte === pcs.length) c -= 3;
+    c += COSTO_RIVOLTO[p.inv] ?? 4;
+    // ── Cadenze: la frase deve chiudere ──
+    if (i === n - 1) {
+      // L'ultimo accordo è la tonica in posizione fondamentale, o non è una chiusura.
+      c += sc.gradoDiatonico === 0 ? 0 : 20;
+      c += p.inv === 0 ? 0 : 12;
+    }
+    if (i === n - 2) {
+      // Il penultimo prepara: dominante, o sottodominante per la plagale.
+      if (sc.gradoDiatonico === 4) c -= 6;
+      else if (sc.gradoDiatonico === 3) c -= 2;
+    }
+    if (i === 0) {
+      c += sc.gradoDiatonico === 0 ? -5 : 0;
+    }
+    return c;
+  };
+
+  /** QUANTO QUEL PASSAGGIO È MUSICA. Più basso, meglio è. */
+  const costoDiPassaggio = (i: number, da: Posa, a: Posa): number => {
+    const sda = schede[da.acc], sa = schede[a.acc];
+    // Una tonicizzazione DEVE risolvere sul proprio bersaglio: è la promessa che fa.
+    if (sda.bersaglio >= 0 && sa.gradoDiatonico !== sda.bersaglio) return INFINITO;
+    let c = 0;
+    if (sda.gradoDiatonico >= 0 && sa.gradoDiatonico >= 0) {
+      c -= transizione(sda.gradoDiatonico, sa.gradoDiatonico);
+    }
+    // Ripetere lo stesso accordo: sciatto, SALVO quando a ripetersi è la melodia — lì
+    // restare (cambiando semmai rivolto) è la soluzione naturale, e cambiare per forza
+    // costringe a movimenti che non ci sono.
+    if (da.acc === a.acc) {
+      const primaPcs = gruppi[i - 1].pcs, oraPcs = gruppi[i].pcs;
+      const melodiaFerma = curaLaCondotta && primaPcs.length === oraPcs.length
+        && oraPcs.every(pc => primaPcs.includes(pc));
+      if (!melodiaFerma) c += 4;
+      else if (da.inv !== a.inv) c -= 1;   // sulla nota tenuta, muovere il basso è vita
+    }
+    // Il basso è una linea, non una successione di fondamentali: i salti si pagano.
+    const salto = Math.abs(bassoDi(a) - bassoDi(da));
+    c += Math.min(salto, 12 - salto % 12) * 0.25;
+    return c;
+  };
+
+  // ── Cammini minimi ──
+  const costo: number[][] = [];
+  const daDove: number[][] = [];
+  costo.push(posePerGruppo[0].map(p => costoDiPosa(0, p)));
+  daDove.push(posePerGruppo[0].map(() => -1));
+  for (let i = 1; i < n; i++) {
+    const pose = posePerGruppo[i];
+    const prima = posePerGruppo[i - 1];
+    const riga: number[] = new Array(pose.length).fill(INFINITO);
+    const via: number[] = new Array(pose.length).fill(0);
+    for (let k = 0; k < pose.length; k++) {
+      const posa = costoDiPosa(i, pose[k]);
+      for (let j = 0; j < prima.length; j++) {
+        const prec = costo[i - 1][j];
+        if (prec >= INFINITO) continue;
+        const t = costoDiPassaggio(i, prima[j], pose[k]);
+        if (t >= INFINITO) continue;
+        const tot = prec + t + posa;
+        if (tot < riga[k]) { riga[k] = tot; via[k] = j; }
+      }
+    }
+    costo.push(riga);
+    daDove.push(via);
+  }
+
+  // ── Si ripercorre a ritroso il cammino migliore ──
+  let k = 0;
+  for (let j = 1; j < costo[n - 1].length; j++) if (costo[n - 1][j] < costo[n - 1][k]) k = j;
+  const fuori: Posa[] = new Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    fuori[i] = posePerGruppo[i][k];
+    k = daDove[i][k];
+    if (k < 0 && i > 0) k = 0;
+  }
+  return fuori;
+}
+
 // ─── Auto-Harmonization ────────────────────────────────────────────────────
 
 /**
@@ -3281,8 +3468,9 @@ export function autoHarmonize(
   harmonicRhythmBeats: number = 0,
   beatsPerMeasure: number = 4,
   /** `corpus: false` torna ai pesi scritti a mano; `condotta: false` toglie il trattamento
-   *  della nota tenuta. Servono al confronto. */
-  opts?: { corpus?: boolean; condotta?: boolean }
+   *  della nota tenuta; `frase: false` torna alla scelta golosa, un accordo per volta.
+   *  Servono al confronto. */
+  opts?: { corpus?: boolean; condotta?: boolean; frase?: boolean }
 ): RomanChord[] {
   if (melody.length === 0) return [];
 
@@ -3411,6 +3599,59 @@ export function autoHarmonize(
   }
 
   const totalGroups = groups.length;
+
+  // ── LA SCELTA SU TUTTA LA FRASE ─────────────────────────────────────
+  // Invece di scegliere un accordo per volta si sceglie il PERCORSO migliore sull'intera
+  // melodia: così «cosa viene prima e cosa viene dopo» decide davvero, invece di essere una
+  // sbirciatina di un passo che non può far cambiare idea sul passato.
+  if (opts?.frase !== false) {
+    const schede: SchedaAccordo[] = [];
+    for (let deg = 0; deg < 7; deg++) {
+      schede.push({
+        pcs: triadPcSets[deg],
+        peso: baseWeight[deg] ?? 1,
+        rivolti: [0, 1, 2],
+        bersaglio: -1,
+        gradoDiatonico: deg,
+      });
+    }
+    for (let e = 0; e < extra.length; e++) {
+      const ex = extra[e];
+      schede.push({
+        pcs: triadPcSets[PRIMO_EXTRA + e],
+        peso: pesoSecondaria(isMinor, ex.corpus),
+        rivolti: ex.hasSeventh ? [0, 1, 2, 3] : [0, 1, 2],
+        bersaglio: ex.target,
+        gradoDiatonico: -1,
+      });
+    }
+    const scelte = scegliProgressioneDellaFrase({
+      gruppi: groups, schede, curaLaCondotta, transizione,
+    });
+    for (let i = 0; i < totalGroups; i++) {
+      const { acc, inv } = scelte[i];
+      const ex = datiExtra(acc);
+      // La settima dei gradi diatonici resta una decisione a parte: dipende dalla nota di
+      // melodia e da dove si va, non dal cammino.
+      const useSeventh = ex ? ex.hasSeventh : shouldUseSeventh(
+        acc, groups[i].pcs, seventhPcs[acc], triadPcSets[acc][0],
+        i === 0, i === totalGroups - 1,
+        i + 1 < totalGroups ? (datiExtra(scelte[i + 1].acc) ? -1 : scelte[i + 1].acc) : -1,
+        isMinor,
+      );
+      const invUsato = Math.min(inv, useSeventh ? 3 : 2);
+      result.push({
+        roman: ex ? ex.label + inversionSuffix(invUsato, false)
+          : romanLabels[acc] + inversionSuffix(invUsato, useSeventh),
+        measure: groups[i].measure,
+        beat: groups[i].beat,
+        inversion: invUsato,
+        inversionIsSuggestion: true,
+      });
+    }
+    return result;
+  }
+
   let prevBassMidi = -1;
   /** Se l'accordo precedente era una tonicizzazione, il grado che ha promesso. */
   let bersaglioAtteso = -1;
