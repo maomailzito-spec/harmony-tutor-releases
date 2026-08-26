@@ -53,6 +53,7 @@ type PerModo = {
     unigrammiDebole: { [grado: string]: number };
     bigrammiForte: MappaBigrammi;
     bigrammiDebole: MappaBigrammi;
+    chiusure: { antecedente: { [g: string]: number }; conseguente: { [g: string]: number } };
     intervalliEstremi: { [forza: string]: { [semitoni: string]: number } };
     motoEstremi: { [tipo: string]: number };
     rivolti: MappaBigrammi;
@@ -375,4 +376,42 @@ export function costoMotoEstremi(tipo: 'contrario' | 'retto' | 'obliquo'): numbe
     for (const v of Object.values(tab)) { totale += v; if (v > massimo) massimo = v; }
     if (totale <= 0 || massimo <= 0) return 0;
     return (1 - (tab[tipo] ?? 0) / massimo) * PESO * fiducia(totale);
+}
+
+
+/**
+ * COME CHIUDE UNA FRASE, secondo il suo posto nel periodo.
+ *
+ * La gerarchia è quella di scuola — inciso ≈ una battuta, semifrase due, frase quattro,
+ * periodo otto o sedici — e il periodo si divide in ANTECEDENTE, la frase che propone, e
+ * CONSEGUENTE, quella che risponde e conclude. Chiudono diversamente, e il corpus lo dice:
+ *
+ *      antecedente    V 28%   ·   I 17%      ← la cadenza sospesa
+ *      conseguente    I 36%   ·   V 19%      ← la conclusione
+ *
+ * Il generatore non aveva nessuna nozione di frase, quindi «cadenza sospesa» non era
+ * esprimibile: un V a fine semifrase era un V come un altro, e la frase finiva dove capitava.
+ *
+ * NOTA SU COME SI CONTANO LE FRASI: dalla FINE. L'ultima conclude sempre, quindi è
+ * conseguente, e risalendo si alternano. Contando da capo si sbaglia in modo sistematico —
+ * basta un'anacrusi o un'apertura irregolare e l'assegnazione slitta di uno. Provato: il
+ * segnale usciva ROVESCIATO, col conseguente che chiudeva sulla dominante.
+ */
+export function pesiDiChiusura(isMinor: boolean, antecedente: boolean): Record<number, number> | null {
+    const nomi = etichette(isMinor);
+    const tab = delModo(isMinor).chiusure?.[antecedente ? 'antecedente' : 'conseguente'];
+    if (!tab) return null;
+    const conti = nomi.map(gruppo => somma(tab, gruppo));
+    const totale = conti.reduce((a, b) => a + b, 0);
+    if (totale <= 0) return null;
+    const massimo = Math.max(...conti, 1);
+    const f = fiducia(totale);
+    const generici = pesiDeiGradi(isMinor);
+    const fuori: Record<number, number> = {};
+    for (let deg = 0; deg < 7; deg++) {
+        // Dove il campione è scarso — il modo minore ne ha meno di cento — si torna verso i
+        // pesi generici invece di inventare una consuetudine.
+        fuori[deg] = (1 - f) * (generici[deg] ?? 1) + f * ((conti[deg] / massimo) * 10);
+    }
+    return fuori;
 }

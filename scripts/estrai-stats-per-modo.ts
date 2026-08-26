@@ -43,6 +43,17 @@ type PerModo = {
     unigrammiDebole: Record<string, number>;
     bigrammiForte: Mappa;
     bigrammiDebole: Mappa;
+    /** LE CHIUSURE DI FRASE, distinte per posizione nel PERIODO.
+     *
+     *  La gerarchia è quella di scuola: inciso ≈ una battuta, semifrase due, frase quattro,
+     *  periodo otto o sedici. Il periodo si divide in ANTECEDENTE — la frase che propone — e
+     *  CONSEGUENTE, la frase che risponde e conclude. Sono due gesti diversi e chiudono
+     *  diversamente: nel corpus l'antecedente chiude sul V il 29% delle volte contro il 14%
+     *  sul I (è la cadenza sospesa), il conseguente il contrario, 24% sul I contro il 17%.
+     *
+     *  Il generatore non aveva nessuna nozione di frase, quindi «cadenza sospesa» non era
+     *  nemmeno esprimibile: un V a fine semifrase era un V come un altro. */
+    chiusure: { antecedente: Record<string, number>; conseguente: Record<string, number> };
     /** LE VOCI ESTREME. Soprano e basso tracciano la via; quel che sta in mezzo è colore.
      *  Il corpus le ha scritte e non le avevamo mai guardate.
      *
@@ -58,7 +69,7 @@ type PerModo = {
     rivolti: Mappa;
     brani: number; transizioni: number;
 };
-const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, unigrammiForte: {}, unigrammiDebole: {}, bigrammiForte: {}, bigrammiDebole: {}, intervalliEstremi: { forte: {}, debole: {} }, motoEstremi: {}, rivolti: {}, brani: 0, transizioni: 0 });
+const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, unigrammiForte: {}, unigrammiDebole: {}, bigrammiForte: {}, bigrammiDebole: {}, intervalliEstremi: { forte: {}, debole: {} }, motoEstremi: {}, chiusure: { antecedente: {}, conseguente: {} }, rivolti: {}, brani: 0, transizioni: 0 });
 const modi: Record<'major' | 'minor', PerModo> = { major: vuoto(), minor: vuoto() };
 
 /** Via il cifrato dal grado: `V65` → `V`, `vii°6` → `vii°`, `V/vi6` → `V/vi`. */
@@ -103,6 +114,7 @@ for (const f of files) {
         const conCifre: { grado: string; cifra: string }[] = [];
         const forze: boolean[] = [];
         const estremi: ({ s: number; b: number; forte: boolean } | null)[] = [];
+        const battute: number[] = [];
         let ultimoAssoluto = -Infinity;
         for (const k of chiavi) {
             const [mi, bt] = k.split(':').map(Number);
@@ -131,6 +143,7 @@ for (const f of files) {
                     conCifre.push({ grado: senzaCifre(r.roman), cifra });
                     // Forte: il battere, e nei metri pari anche il movimento di mezzo.
                     forze.push(forzaQui);
+                    battute.push(mi);
                 }
             } catch { /* accordo illeggibile: si salta */ }
         }
@@ -151,6 +164,27 @@ for (const f of files) {
             (mappa[seq[k - 1]] ||= {})[seq[k]] = (mappa[seq[k - 1]][seq[k]] || 0) + 1;
         }
         for (const c of conCifre) (m.rivolti[c.grado] ||= {})[c.cifra] = (m.rivolti[c.grado][c.cifra] || 0) + 1;
+        // ── LE CHIUSURE DI FRASE ──
+        // Segmentazione sulla griglia: frase = quattro battute, e le frasi si alternano
+        // antecedente / conseguente dentro il periodo. È una griglia regolare e non tutti i
+        // brani la seguono, ma il segnale c'è ed è netto.
+        const ultimaBattuta = Math.max(...battute, 0);
+        const quanteFrasi = Math.floor((ultimaBattuta + 1) / 4);
+        for (let fr = 0; fr < quanteFrasi; fr++) {
+            let ultimo = -1;
+            for (let k = 0; k < seq.length; k++) {
+                if (battute[k] >= fr * 4 && battute[k] < (fr + 1) * 4) ultimo = k;
+            }
+            if (ultimo < 0) continue;
+            // SI CONTA DALLA FINE. L'ultima frase è quella che conclude, quindi è sempre
+            // conseguente; risalendo si alternano. Contando da CAPO invece si sbaglia
+            // sistematicamente — un'anacrusi, un'apertura irregolare, e l'assegnazione
+            // slitta di uno: provato, dava il segnale ROVESCIATO.
+            const dallaFine = quanteFrasi - 1 - fr;
+            const dove = dallaFine % 2 === 0 ? m.chiusure.conseguente : m.chiusure.antecedente;
+            dove[seq[ultimo]] = (dove[seq[ultimo]] || 0) + 1;
+        }
+
         // ── LE VOCI ESTREME ──
         for (let k = 0; k < estremi.length; k++) {
             const e = estremi[k];

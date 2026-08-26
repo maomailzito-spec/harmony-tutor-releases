@@ -20,7 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
-import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi } from './corpusProgressione';
+import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -3143,15 +3143,19 @@ function scegliProgressioneDellaFrase(args: {
   schede: SchedaAccordo[];
   /** Quanto è forte il movimento su cui cade ciascun gruppo (0…1). */
   forze: number[];
+  /** Per i gruppi che CHIUDONO una frase: i pesi dei gradi in quella chiusura. `null` per
+   *  tutti gli altri. Antecedente e conseguente chiudono diversamente. */
+  chiusure: (Record<number, number> | null)[];
   curaLaCondotta: boolean;
   /** Il costo scritto a mano fra due gradi, per quando il corpus è spento. */
   transizione: (da: number, a: number, forteArrivo: boolean) => number;
 }): Posa[] {
-  const { gruppi, schede, forze, transizione, curaLaCondotta } = args;
+  const { gruppi, schede, forze, chiusure, transizione, curaLaCondotta } = args;
   const n = gruppi.length;
   if (n === 0) return [];
 
   const bassoDi = (p: Posa) => 48 + schede[p.acc].pcs[p.inv % schede[p.acc].pcs.length];
+  const chiusures = (i: number) => chiusure[i] ?? null;
 
   // ── Le pose possibili per ciascuna nota ──
   const posePerGruppo: Posa[][] = [];
@@ -3175,8 +3179,13 @@ function scegliProgressioneDellaFrase(args: {
     const sc = schede[p.acc];
     const pcs = gruppi[i].pcs;
     const coperte = pcs.filter(pc => sc.pcs.includes(pc)).length;
-    // Il peso del grado DOVE SI TROVA: sul battere o sul levare non è lo stesso grado.
-    let c = -(forze[i] >= 0.5 ? sc.pesoForte : sc.pesoDebole);
+    // Il peso del grado DOVE SI TROVA. Su una chiusura di frase comanda il modo in cui si
+    // chiude — l'antecedente propone e sospende, il conseguente risponde e conclude —
+    // altrove comanda il tempo forte o debole.
+    const chiusura = chiusures(i);
+    let c = chiusura && sc.gradoDiatonico >= 0
+      ? -(chiusura[sc.gradoDiatonico] ?? 1)
+      : -(forze[i] >= 0.5 ? sc.pesoForte : sc.pesoDebole);
     c -= (coperte / Math.max(1, pcs.length)) * 5;       // e quello che regge più note
     if (coperte === pcs.length) c -= 3;
     c += COSTO_RIVOLTO[p.inv] ?? 4;
@@ -3707,8 +3716,26 @@ export function autoHarmonize(
     // `beatsPerMeasure` è già i movimenti da un quarto per battuta.
     const movPerBattuta = beatsPerMeasure;
     const forze = groups.map(g => forzaMetrica(g.beat, movPerBattuta));
+
+    // ── DOVE FINISCONO LE FRASI ──
+    // Frase = quattro battute, e si contano DALLA FINE: l'ultima conclude sempre, quindi è
+    // conseguente, e risalendo si alternano. Contare da capo sbaglia in modo sistematico —
+    // basta un'anacrusi e l'assegnazione slitta di uno.
+    const chiusureDeiGruppi: (Record<number, number> | null)[] = groups.map(() => null);
+    const ultimaBattuta = groups.length ? Math.max(...groups.map(g => g.measure)) : 0;
+    const quanteFrasi = Math.floor((ultimaBattuta + 1) / 4);
+    for (let fr = 0; fr < quanteFrasi; fr++) {
+      let ultimo = -1;
+      for (let k = 0; k < groups.length; k++) {
+        if (groups[k].measure >= fr * 4 && groups[k].measure < (fr + 1) * 4) ultimo = k;
+      }
+      // L'ultimo accordo del brano ha già la sua regola (tonica in stato fondamentale).
+      if (ultimo < 0 || ultimo === groups.length - 1) continue;
+      const antecedente = (quanteFrasi - 1 - fr) % 2 === 1;
+      chiusureDeiGruppi[ultimo] = usaCorpus ? pesiDiChiusura(isMinor, antecedente) : null;
+    }
     const scelte = scegliProgressioneDellaFrase({
-      gruppi: groups, schede, forze, curaLaCondotta, transizione,
+      gruppi: groups, schede, forze, chiusure: chiusureDeiGruppi, curaLaCondotta, transizione,
     });
     for (let i = 0; i < totalGroups; i++) {
       const { acc, inv } = scelte[i];
