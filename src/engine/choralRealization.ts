@@ -962,7 +962,16 @@ function scoreVoicing(opts: ScoreVoicingOpts): number {
   {
     const bassDist = midiDistance(currArr[0], prevArr[0]);
     if (bassDist === 0) {
-      cost -= 10; // bass common tone — good
+      // IL BASSO FERMO NON È UN PREGIO. Qui c'era `-10`, «nota comune tenuta: bene» — che è
+      // la regola delle voci SUPERIORI, dove tenere la nota comune è davvero un merito. Per
+      // il basso vuol dire nessuna linea, e siccome era anche l'opzione più economica il
+      // generatore ci si appoggiava di continuo: segnalato all'ascolto, sei battute su
+      // sedici, con la figura `I64 → V` che ha la stessa nota al basso.
+      //
+      // Resta un pregio quando a stare ferma è TUTTA la trama — lì è un accordo tenuto, non
+      // un basso pigro. Se invece il soprano si muove è moto obliquo: legittimo (nel corpus
+      // il 21%) ma il meno frequente dei tre, e non va premiato.
+      cost += (soprano === prev.soprano) ? -10 : 6;
     } else if (bassDist <= 5) {
       // Up to P4 (5 semitones) — normal bass motion, no penalty
       cost += 0;
@@ -2960,6 +2969,16 @@ export function realizeChorale(
         let menoPeggio: Proposta = { v: voicing, inv };
         let menoPeggioEsito: EsitoVeto = esitoInCarica;
         const TETTO = 40; // ~60 ms nel caso peggiore, e solo sugli accordi che sbagliano
+        // DIAGNOSI (spenta): `globalThis.__HT_RIP = 1` fa raccontare alla riparazione quante
+        // alternative ha e quante ne sono pulite. Serve a distinguere «non c'era altra
+        // strada» da «c'erano cinque strade e ha scelto male» — due situazioni che dal
+        // risultato si confondono, e che chiedono interventi opposti.
+        if ((globalThis as any).__HT_RIP) {
+          let pulite = 0;
+          for (const cand of alternative.slice(0, TETTO)) if (giudica(cand.v, cand.inv).quante === 0) pulite++;
+          // eslint-disable-next-line no-console
+          console.log(`  RIP b${chord.measure + 1}.${chord.beat}: ${alternative.length} alternative, ${pulite} pulite  [${esitoInCarica.regole.join(' ')}]`);
+        }
         for (const cand of alternative.slice(0, TETTO)) {
           const e = giudica(cand.v, cand.inv);
           if (e.quante === 0) { menoPeggio = cand; menoPeggioEsito = e; break; }
@@ -3291,6 +3310,7 @@ function scegliProgressioneDellaFrase(args: {
     const salto = Math.abs(bassoDi(a) - bassoDi(da));
     const passo = Math.min(salto, 12 - (salto % 12));
     c += passo * 0.25;
+
     // IL 4/6 SI GIUDICA DA QUI, perché per sapere che accordo è bisogna vedere cosa lo
     // segue: il costo salato che ha preso nella posa gli viene restituito se è cadenzale
     // (tempo forte, seguito dalla dominante) o di passaggio (tempo debole, basso per grado).
