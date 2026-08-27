@@ -20,7 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
-import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio, type PosizioneFrase } from './corpusProgressione';
+import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -3798,26 +3798,32 @@ export function autoHarmonize(
     const forze = groups.map(g => forzaMetrica(g.beat, movPerBattuta));
 
     // ── DOVE FINISCONO LE FRASI ──
-    // Frase = quattro battute, e si contano DALLA FINE: l'ultima conclude sempre, quindi è
-    // conseguente, e risalendo si alternano. Contare da capo sbaglia in modo sistematico —
-    // basta un'anacrusi e l'assegnazione slitta di uno.
+    //
+    // NON in gruppi fissi di quattro battute. L'analisi formale del corpus
+    // (`scripts/analisi-formale.ts`, 167 esercizi accademici) dice che gli esercizi si
+    // dividono in DUE METÀ: quelli di otto battute cadenzano a b4 e b8, quelli di sedici a
+    // b8 e b16 — non a 4, 8, 12, 16. È il periodo, antecedente e conseguente, e la frase è
+    // lunga la metà del brano, non quattro battute sempre. Con la griglia fissa il
+    // generatore sbagliava la segmentazione su ogni brano di sedici battute, e su tutti
+    // quelli di lunghezza non multipla di quattro — che sono la metà del corpus.
+    //
+    // Sotto le sei battute non c'è periodo: c'è una cadenza sola, quella finale, che ha già
+    // la sua regola.
     const chiusureDeiGruppi: (Record<number, number> | null)[] = groups.map(() => null);
     const ultimaBattuta = groups.length ? Math.max(...groups.map(g => g.measure)) : 0;
-    const quanteFrasi = Math.floor((ultimaBattuta + 1) / 4);
-    for (let fr = 0; fr < quanteFrasi; fr++) {
-      let ultimo = -1;
-      for (let k = 0; k < groups.length; k++) {
-        if (groups[k].measure >= fr * 4 && groups[k].measure < (fr + 1) * 4) ultimo = k;
+    if (usaCorpus && ultimaBattuta + 1 >= 6) {
+      const mezzo = (ultimaBattuta + 1) / 2;
+      let finePrima = -1;
+      for (let k = 0; k < groups.length; k++) if (groups[k].measure < mezzo) finePrima = k;
+      // La fine della PRIMA metà è il punto che il generatore non sapeva riconoscere: lì il
+      // corpus sospende (V al 20%) e concede i gradi deboli — il `vi` all'11%, che è dove
+      // vive la cadenza d'inganno. La seconda metà conclude sulla tonica (72%), e per
+      // l'ultimo accordo c'è già la regola della cadenza qui sotto.
+      if (finePrima > 0 && finePrima < groups.length - 1) {
+        chiusureDeiGruppi[finePrima] = pesiDiChiusura(isMinor, 'prima');
       }
-      // L'ultimo accordo del brano ha già la sua regola (tonica in stato fondamentale).
-      if (ultimo < 0 || ultimo === groups.length - 1) continue;
-      // DOVE STA LA FRASE NELLA FORMA. Non è la stessa cosa chiudere all'inizio, in mezzo o
-      // alla fine: la prima frase sospende, l'ultima conclude, e ciò che NEGA una chiusura —
-      // la cadenza d'inganno, i gradi di deviazione — vuole stare in mezzo, perché ha bisogno
-      // di un seguito. Vedi `pesiDiChiusura`.
-      const posizione: PosizioneFrase = fr === 0 ? 'prima' : fr === quanteFrasi - 1 ? 'ultima' : 'interna';
-      chiusureDeiGruppi[ultimo] = usaCorpus ? pesiDiChiusura(isMinor, posizione) : null;
     }
+
     const scelte = scegliProgressioneDellaFrase({
       gruppi: groups, schede, forze, chiusure: chiusureDeiGruppi, curaLaCondotta, transizione,
     });

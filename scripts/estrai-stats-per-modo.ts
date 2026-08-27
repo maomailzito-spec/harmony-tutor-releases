@@ -64,13 +64,19 @@ type PerModo = {
      *  Il generatore non aveva nessuna nozione di frase, quindi «cadenza sospesa» non era
      *  nemmeno esprimibile: un V a fine semifrase era un V come un altro. */
     chiusure: { antecedente: Record<string, number>; conseguente: Record<string, number> };
-    /** Le stesse chiusure per POSIZIONE NEL BRANO — prima frase, frasi interne, ultima.
+    /** Le chiusure per POSIZIONE NEL BRANO, sulle DUE METÀ.
      *
-     *  È l'asse che dice dove sta un gesto nella FORMA, e il corpus lo separa nettamente: la
-     *  prima frase chiude sulla dominante il 40% delle volte (è l'apertura sospesa), l'ultima
-     *  sulla tonica il 36%, e i gradi di deviazione — `III`, `VI`, `♭VII` — chiudono SOLO
-     *  frasi interne, mai l'ultima: zero volte su 55. Ciò che nega una chiusura ha bisogno di
-     *  un seguito, e nell'ultima frase il seguito non c'è. */
+     *  L'analisi formale del corpus (`scripts/analisi-formale.ts`) dice che gli esercizi non
+     *  si dividono in gruppi fissi di quattro battute: si dividono in DUE METÀ. Quelli di
+     *  otto battute cadenzano a b4 e b8, quelli di sedici a b8 e b16 — non a 4, 8, 12, 16.
+     *  È il periodo, antecedente e conseguente, e la frase è lunga la metà del brano, non
+     *  quattro battute sempre.
+     *
+     *  Su 72 brani con almeno due cadenze: la prima metà chiude sospesa nel 61% dei casi, la
+     *  seconda autentica nel 72%. E la cadenza d'inganno è l'8% nella prima metà contro l'1%
+     *  nella seconda — nega una chiusura, quindi vuole un seguito.
+     *
+     *  (`interna` resta libera: con due sole metà non c'è un mezzo.) */
     chiusurePosizione: { prima: Record<string, number>; interna: Record<string, number>; ultima: Record<string, number> };
     /** LE VOCI ESTREME. Soprano e basso tracciano la via; quel che sta in mezzo è colore.
      *  Il corpus le ha scritte e non le avevamo mai guardate.
@@ -276,11 +282,23 @@ for (const f of files) {
             const dallaFine = quanteFrasi - 1 - fr;
             const dove = dallaFine % 2 === 0 ? m.chiusure.conseguente : m.chiusure.antecedente;
             dove[seq[ultimo]] = (dove[seq[ultimo]] || 0) + 1;
-            // E per posizione nella forma: prima frase, interne, ultima.
-            const p = fr === 0 ? m.chiusurePosizione.prima
-                : fr === quanteFrasi - 1 ? m.chiusurePosizione.ultima
-                : m.chiusurePosizione.interna;
-            p[seq[ultimo]] = (p[seq[ultimo]] || 0) + 1;
+
+        }
+
+        // ── LE DUE METÀ ──
+        // Il brano si divide a metà: la prima chiude sospendendo, la seconda concludendo.
+        // Sotto le sei battute non c'è periodo: c'è una cadenza sola, quella finale.
+        if (ultimaBattuta + 1 >= 6) {
+            const mezzo = (ultimaBattuta + 1) / 2;
+            let finePrima = -1, fineSeconda = -1;
+            for (let k = 0; k < seq.length; k++) {
+                if (battute[k] < mezzo) finePrima = k; else fineSeconda = k;
+            }
+            if (finePrima >= 0) m.chiusurePosizione.prima[seq[finePrima]] = (m.chiusurePosizione.prima[seq[finePrima]] || 0) + 1;
+            if (fineSeconda >= 0) m.chiusurePosizione.ultima[seq[fineSeconda]] = (m.chiusurePosizione.ultima[seq[fineSeconda]] || 0) + 1;
+        } else if (seq.length) {
+            const u = seq.length - 1;
+            m.chiusurePosizione.ultima[seq[u]] = (m.chiusurePosizione.ultima[seq[u]] || 0) + 1;
         }
 
         // ── LE VOCI ESTREME ──
