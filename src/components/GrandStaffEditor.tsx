@@ -79,6 +79,7 @@ import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegis
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
 import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData, DEFAULT_ANALYSIS_LOCK_OPTIONS } from '../storage/projectSchema';
 import { relativeMinors, tonicaReale } from '../utils/relativeMinors';
+import { structuralNotes } from '../utils/harmonyLabelPipeline';
 import type { AnalysisLockOptions } from '../storage/projectSchema';
 import { recordAnalysedTransitions } from '../engine/progressionSuggester';
 import { loadStyleProfile } from '../engine/choralStyleProfile';
@@ -7560,6 +7561,98 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     }, [analysisResult, analysisContexts, inferredContextSuppressions, enableInferredContexts]);
 
     const { analyzedNotes, connections: errorConnections } = analysisResult;
+
+    // ── PERCHÉ QUELL'ETICHETTA (diagnostica) ──────────────────────────────────
+    // `__htEtichetta(2, 3)` dice perché sulla seconda battuta, terzo movimento, c'è scritto
+    // quello che c'è scritto.
+    //
+    // `__htBattuta(n)` dice cosa c'è SCRITTO in una battuta; questa dice cosa l'analisi ci
+    // LEGGE, e sono due cose che possono divergere. Il condotto delle etichette non guarda
+    // tutte le note: quelle che riconosce come ornamentali (passaggio, volta, appoggiatura,
+    // anticipazione, sfuggita) le toglie, e le appoggiature le sostituisce con la nota su cui
+    // risolvono — perché l'armonia vera è quella sotto l'ornamento, non quella che si vede.
+    //
+    // Quando quel giudizio sbaglia, l'etichetta racconta un accordo che sulla carta non c'è,
+    // e dal risultato non si capisce da dove venga. Questa sonda mette le due letture una
+    // accanto all'altra: la sigla dell'accordo COM'È SCRITTO e quella di ciò che il condotto
+    // tiene, dicendo quali note ha scartato e con che motivo.
+    const datiEtichettaRef = useRef<any>(null);
+    datiEtichettaRef.current = { analyzedNotes, keySignatureRoot, isMinorMode, harmonyOverrides };
+    useEffect(() => {
+        (window as any).__htEtichetta = (battuta: number, movimento: number = 1) => {
+            try {
+                const d = datiEtichettaRef.current;
+                if (!d) return 'analisi non ancora pronta';
+                const mi = Math.max(0, (Number(battuta) || 1) - 1);
+                const bt = Number(movimento) || 1;
+                const tonica = tonicaReale(d.keySignatureRoot, d.isMinorMode);
+                const qui = (d.analyzedNotes || []).filter((n: any) =>
+                    n && !n.isRest && (n.measureIndex ?? -1) === mi && Math.abs((n.beat ?? -1) - bt) < 0.01);
+                if (!qui.length) {
+                    // eslint-disable-next-line no-console
+                    console.log(`b${battuta}.${movimento}: nessuna nota.`);
+                    return 0;
+                }
+                const NOMEVOCE: Record<number, string> = { 1: 'soprano', 2: 'contralto', 3: 'tenore', 4: 'basso' };
+                const SEGNO: Record<string, string> = { sharp: '#', flat: 'b', natural: '', 'double-sharp': '##', 'double-flat': 'bb' };
+                const perche = (n: any) => {
+                    const motivi: string[] = [];
+                    if (n.isPassing) motivi.push('di passaggio');
+                    if (n.isNeighbor) motivi.push('di volta');
+                    if (n.isAppoggiatura) motivi.push('appoggiatura');
+                    if (n.isAnticipation) motivi.push('anticipazione');
+                    if (n.isEscape) motivi.push('sfuggita');
+                    if (n.isCambiata) motivi.push('cambiata');
+                    if (n.isSuspension) motivi.push('ritardo');
+                    if (n.ornamentOverride && n.ornamentOverride !== 'structural') motivi.push(`segnata a mano: ${n.ornamentOverride}`);
+                    if (n.ornamentOverride === 'structural') motivi.push('tenuta a mano');
+                    return motivi.join(', ');
+                };
+                // Gli override d'ornamento dell'utente arrivano già sulle note come
+                // `ornamentOverride`, che `structuralNotes` legge da sé.
+                const tenute = structuralNotes(qui);
+                const idTenute = new Set(tenute.map((n: any) => n.id));
+                const sigla = (note: any[]) => {
+                    try {
+                        const r = getRomanAnalysis(note as any, tonica, d.isMinorMode);
+                        return r?.roman ? r.roman + (r.figures || []).join('') : '(illeggibile)';
+                    } catch { return '(errore)'; }
+                };
+                const righe = qui
+                    .slice()
+                    .sort((a: any, b: any) => (b.voice ?? 0) - (a.voice ?? 0))
+                    .map((n: any) => ({
+                        voce: NOMEVOCE[n.voice] ?? String(n.voice ?? ''),
+                        nota: `${n.pitch ?? '?'}${SEGNO[n.accidental] ?? ''}${n.octave ?? ''}`,
+                        usata: idTenute.has(n.id) ? 'sì' : 'NO',
+                        perche: perche(n) || '',
+                    }));
+                const comeScritto = sigla(qui);
+                const comeLetto = sigla(tenute);
+                // eslint-disable-next-line no-console
+                console.log(`b${battuta}.${movimento} — tonalità ${tonica} ${d.isMinorMode ? 'minore' : 'maggiore'}`);
+                // eslint-disable-next-line no-console
+                console.table(righe);
+                // eslint-disable-next-line no-console
+                console.log(
+                    `l'accordo COM'È SCRITTO dice   ${comeScritto}\n` +
+                    `il condotto ne legge           ${comeLetto}` +
+                    (comeScritto === comeLetto
+                        ? '\n\nle due letture coincidono: l\'etichetta viene dalle note scritte.'
+                        : `\n\nLE DUE LETTURE DIVERGONO. L'etichetta non descrive l'accordo scritto ma quello che\n` +
+                          `resta togliendo ${qui.length - tenute.length} nota/e giudicata/e ornamentale/i (colonna «usata»).\n` +
+                          `Se quel giudizio è sbagliato, l'etichetta lo è di conseguenza: si corregge dal menù\n` +
+                          `contestuale sulla nota, marcandola come reale.`)
+                );
+                return { comeScritto, comeLetto };
+            } catch (e) {
+                // eslint-disable-next-line no-console
+                console.warn('__htEtichetta:', e);
+                return 'errore';
+            }
+        };
+        return () => { try { delete (window as any).__htEtichetta; } catch { /* ignore */ } };
+    }, []);
     // Localize violation texts on the main thread, reactive to the UI language (analysis stays
     // i18n-free). Re-runs only on new violations or language change — never re-analyzes.
     const violations = useMemo(

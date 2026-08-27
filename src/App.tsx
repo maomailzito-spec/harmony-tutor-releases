@@ -56,6 +56,7 @@ const App: React.FC = () => {
                     { comando: '__htAudio()', stato: attivo('__htAudio'), cosa_dice: 'note consegnate in ritardo al motore audio + quanto è intervenuto il limitatore' },
                     { comando: '__htAudioLate(azzera?)', stato: attivo('__htAudioLate'), cosa_dice: 'solo il conto dei ritardi; con true riparte da zero' },
                     { comando: '__htBattuta(n)', stato: attivo('__htBattuta'), cosa_dice: 'cosa c\'è davvero nella battuta n: voce, figura, inizio/durata/fine in tick, e i posti dove una nota può cominciare' },
+                    { comando: '__htEtichetta(battuta, movimento)', stato: attivo('__htEtichetta'), cosa_dice: 'perché su quell\'accordo c\'è scritto quello che c\'è scritto: quali note l\'analisi usa, quali scarta come ornamentali e con che motivo, e la sigla dell\'accordo COM\'È SCRITTO accanto a quella che ne esce' },
                     { comando: '__htUltimiInserimenti()', stato: attivo('__htUltimiInserimenti'), cosa_dice: 'le ultime venti note scritte col mouse: dove si è cliccato, che tempo è stato letto, quale attacco ha vinto' },
                     { comando: '__htBarra()', stato: attivo('__htBarra'), cosa_dice: 'la disposizione della barra: quella in memoria e quella salvata nelle preferenze' },
                     { comando: '__htArmature()', stato: attivo('__htArmature'), cosa_dice: 'i cambi d\'armatura che il brano ha adesso, con la battuta da cui valgono' },
