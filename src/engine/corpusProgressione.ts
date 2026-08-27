@@ -459,8 +459,30 @@ export function costoDelRaddoppio(inv: number, membro: number, gradoDaTonica: nu
         : (membro === 3 || membro === 4) ? 'terza'
         : (membro === 6 || membro === 7 || membro === 8) ? 'quinta'
         : 'settima';
-    // La settima non si raddoppia mai: è la dissonanza, e deve risolvere in una voce sola.
-    if (famiglia === 'settima') return 20;
+
+    // ── CIÒ CHE HA OBBLIGO DI RISOLUZIONE NON SI RADDOPPIA MAI ──
+    //
+    // Prima di ogni preferenza. Una nota che deve andare da qualche parte, raddoppiata, deve
+    // andarci in DUE voci — e due voci che fanno lo stesso movimento obbligato sono ottave
+    // parallele, o una risoluzione mancata. Non è questione di gusto o di stabilità: è che
+    // la risoluzione non ci sta.
+    //
+    //   la SETTIMA dell'accordo, che è la dissonanza e scende di grado;
+    //   la QUINTA quando è diminuita o eccedente, cioè quando forma un tritono o una
+    //     eccedente con la fondamentale: anche lei è obbligata;
+    //   la SENSIBILE della tonalità, che sale alla tonica.
+    //
+    // Il checker le sbarra già come veto (`R-10`, `R-10-DIM5`, `R-10-7TH`, `R-10-64`), ma il
+    // veto arriva dopo: se la preferenza non le conosce, continua a PROPORLE e il veto deve
+    // rifiutarle una per una. Meglio non proporle.
+    const OBBLIGATA = 20;
+    if (famiglia === 'settima') return OBBLIGATA;
+    if (membro === 6 || membro === 8) return OBBLIGATA;   // quinta diminuita o eccedente
+    if (g === 11) return OBBLIGATA;                       // la sensibile della tonalità
+    // E le note CROMATICHE della tonalità: la tonica alzata e la quarta alzata sono estranee
+    // in tutt'e due i modi, e quando compaiono è perché stanno tonicizzando qualcosa — cioè
+    // sono sensibili di un'altra tonalità, con lo stesso obbligo.
+    if (g === 1 || g === 6) return OBBLIGATA;
     if (inv === 2) {
         // Quarta e sesta: si raddoppia il basso, cioè la quinta.
         if (famiglia === 'quinta') return 0;

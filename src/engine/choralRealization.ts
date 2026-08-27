@@ -1627,13 +1627,27 @@ export function realizeNextChord(
     // volte, ma se l'unica voicing costruita raddoppia la fondamentale non c'è niente da
     // ordinare. Ora si costruiscono tutte le alternative e decide `scoreVoicing`, che i
     // numeri del corpus li ha.
-    // PROVATO E RICHIUSO: aprire la scelta a TUTTI i gradi dell'accordo. Misurato, il
-    // generatore raddoppia la terza MOLTO di più (49 segnalazioni su 40 brani) e sono tutte
-    // terze MODALI, cioè sbagliate anche per la regola qui sopra: la preferenza, per quanto
-    // giusta, non regge contro le penalità di condotta e la scelta che si apre non la si sa
-    // governare. La regola serve a ORDINARE le alternative che nascono dalle perturbazioni
-    // del veto, dove il confronto avviene fra voicing complete.
-    const daRaddoppiare: ScaleDegreeNote[] = [tones[0]];
+    // QUALE NOTA SI RADDOPPIA, di partenza.
+    //
+    // Qui c'era `tones[0]` fisso: si raddoppiava SEMPRE la fondamentale, per costruzione. Va
+    // bene quasi sempre — ed è giusto che il raddoppio sia una preferenza morbida, decisa
+    // tardi, che cede alla condotta delle voci. Ma in una QUARTA E SESTA è sbagliato di
+    // partenza: lì si raddoppia il basso, che è la quinta (nel corpus l'86% delle volte), e
+    // raddoppiare la fondamentale significa raddoppiare la quarta sul basso, cioè la
+    // dissonanza. Risultato: ogni 4/6 nasceva sbagliato e il veto doveva rifarlo — 105
+    // respinte per `R-10-64` su 75 brani, la prima causa fra i raddoppi.
+    //
+    // Non si riapre la scelta a tutti i gradi: provato, il generatore raddoppia la terza
+    // molto di più e sono tutte terze MODALI, cioè sbagliate anche per la regola. Si offre
+    // un'alternativa solo dove la preferenza dice che è MIGLIORE del valore di partenza.
+    const costoDi = (t: ScaleDegreeNote) => {
+      const membro = ((toneToMidiPc(t) - toneToMidiPc(tones[0])) % 12 + 12) % 12;
+      return costoDelRaddoppio(inversion, membro, toneToMidiPc(t) - (tonicPc ?? 0));
+    };
+    const costoDellaFondamentale = costoDi(tones[0]);
+    const daRaddoppiare: ScaleDegreeNote[] = remainingTones.length >= 2
+      ? [tones[0]]
+      : [tones[0], ...tones.filter(t => t !== tones[0] && costoDi(t) < costoDellaFondamentale)];
     const disposizioniInterne: ScaleDegreeNote[][] = [];
     for (const doppia of daRaddoppiare) {
       const it: ScaleDegreeNote[] = [...remainingTones];
