@@ -121,6 +121,35 @@ const somma = (mappa: { [k: string]: number }, nomi: string[]) =>
  */
 const VOCE_DEL_CORPUS = 1;
 
+
+/**
+ * DA UNA FREQUENZA A UN COSTO: LA SORPRESA, NON LA PROPORZIONE.
+ *
+ * Il primo tentativo trasformava la frequenza in un valore lineare, `(conto / massimo) × 10`.
+ * Sembra innocuo e non lo è: schiaccia i rapporti veri dentro una scala additiva. In maggiore
+ * il `I` compare 2,9 volte più del `vi` — un rapporto modesto — ma su quella scala diventa
+ * uno scarto di 6,5 punti, mentre gli altri termini del punteggio (copertura, transizioni,
+ * cadenze) valgono ±3. Il grado più frequente stravinceva ogni volta che entrava in gara.
+ *
+ * MISURATO su Dubois, Delachi e Pedron: il generatore metteva la tonica nel 29,3% degli
+ * accordi contro il 17,7% degli autori, e il `vi` nell'1,6% contro il 6,3%. Su una nota che
+ * poteva essere I o vi prendeva I quasi sempre — che è l'«interpretazione dubbia» che si
+ * sente all'ascolto.
+ *
+ * La conversione giusta da probabilità a costo additivo è il logaritmo: quanto è SORPRENDENTE
+ * incontrare quel grado, dato il corpus. Il rapporto 2,9 a 1 torna a valere ln(2,9) ≈ 1,06 —
+ * poco più di un punto — e i gradi deboli tornano in gara quando la melodia li chiede.
+ *
+ * Vale per tutti i pesi che vengono da un conteggio, altrimenti due parti del punteggio
+ * parlerebbero scale diverse: i gradi, le chiusure di frase e le tonicizzazioni.
+ */
+const SCALA_SORPRESA = 3;
+const MASSIMO_PESO = 10;
+/** Da un conteggio al «peso» che il percorso usa: `MASSIMO_PESO` per il più frequente, meno
+ *  per i più rari, con la distanza misurata in logaritmo. */
+const pesoDaConto = (conto: number, massimo: number) =>
+    MASSIMO_PESO - Math.log(Math.max(massimo, 1) / Math.max(conto, 0.5)) * SCALA_SORPRESA;
+
 /** Quanto ci si fida di un campione di questa dimensione: 0 = per niente, 1 = del tutto. */
 const fiducia = (osservazioni: number) =>
     Math.max(0, Math.min(1, osservazioni / CAMPIONE_PIENO)) * VOCE_DEL_CORPUS;
@@ -147,8 +176,7 @@ export function pesiDeiGradi(isMinor: boolean, forte?: boolean): Record<number, 
     const f = fiducia(totale);
     const fuori: Record<number, number> = {};
     for (let deg = 0; deg < 7; deg++) {
-        const dalCorpus = (conti[deg] / massimo) * 10;
-        fuori[deg] = (1 - f) * (PESI_A_MANO[deg] ?? 1) + f * dalCorpus;
+        fuori[deg] = (1 - f) * (PESI_A_MANO[deg] ?? 1) + f * pesoDaConto(conti[deg], massimo);
     }
     return fuori;
 }
@@ -241,7 +269,7 @@ export function pesoSecondaria(isMinor: boolean, chiave: string): number {
     // La settima non è contata a parte nel corpus (le cifre sono già cadute): `V7/V` e `V/V`
     // pescano dalla stessa voce.
     const base = chiave.replace(/^V7\//, 'V/');
-    return ((uni[base] ?? 0) / massimo) * 10;
+    return pesoDaConto(uni[base] ?? 0, massimo);
 }
 
 
@@ -412,7 +440,7 @@ export function pesiDiChiusura(isMinor: boolean, antecedente: boolean): Record<n
     for (let deg = 0; deg < 7; deg++) {
         // Dove il campione è scarso — il modo minore ne ha meno di cento — si torna verso i
         // pesi generici invece di inventare una consuetudine.
-        fuori[deg] = (1 - f) * (generici[deg] ?? 1) + f * ((conti[deg] / massimo) * 10);
+        fuori[deg] = (1 - f) * (generici[deg] ?? 1) + f * pesoDaConto(conti[deg], massimo);
     }
     return fuori;
 }
