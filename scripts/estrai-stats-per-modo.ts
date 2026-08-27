@@ -64,6 +64,14 @@ type PerModo = {
      *  Il generatore non aveva nessuna nozione di frase, quindi «cadenza sospesa» non era
      *  nemmeno esprimibile: un V a fine semifrase era un V come un altro. */
     chiusure: { antecedente: Record<string, number>; conseguente: Record<string, number> };
+    /** Le stesse chiusure per POSIZIONE NEL BRANO — prima frase, frasi interne, ultima.
+     *
+     *  È l'asse che dice dove sta un gesto nella FORMA, e il corpus lo separa nettamente: la
+     *  prima frase chiude sulla dominante il 40% delle volte (è l'apertura sospesa), l'ultima
+     *  sulla tonica il 36%, e i gradi di deviazione — `III`, `VI`, `♭VII` — chiudono SOLO
+     *  frasi interne, mai l'ultima: zero volte su 55. Ciò che nega una chiusura ha bisogno di
+     *  un seguito, e nell'ultima frase il seguito non c'è. */
+    chiusurePosizione: { prima: Record<string, number>; interna: Record<string, number>; ultima: Record<string, number> };
     /** LE VOCI ESTREME. Soprano e basso tracciano la via; quel che sta in mezzo è colore.
      *  Il corpus le ha scritte e non le avevamo mai guardate.
      *
@@ -79,7 +87,7 @@ type PerModo = {
     rivolti: Mappa;
     brani: number; transizioni: number;
 };
-const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, unigrammiForte: {}, unigrammiDebole: {}, bigrammiForte: {}, bigrammiDebole: {}, intervalliEstremi: { forte: {}, debole: {} }, motoEstremi: {}, chiusure: { antecedente: {}, conseguente: {} }, raddoppi: {}, raddoppiTonali: {}, rivolti: {}, brani: 0, transizioni: 0 });
+const vuoto = (): PerModo => ({ unigrammi: {}, bigrammi: {}, unigrammiForte: {}, unigrammiDebole: {}, bigrammiForte: {}, bigrammiDebole: {}, intervalliEstremi: { forte: {}, debole: {} }, motoEstremi: {}, chiusure: { antecedente: {}, conseguente: {} }, chiusurePosizione: { prima: {}, interna: {}, ultima: {} }, raddoppi: {}, raddoppiTonali: {}, rivolti: {}, brani: 0, transizioni: 0 });
 const modi: Record<'major' | 'minor', PerModo> = { major: vuoto(), minor: vuoto() };
 
 /**
@@ -268,6 +276,11 @@ for (const f of files) {
             const dallaFine = quanteFrasi - 1 - fr;
             const dove = dallaFine % 2 === 0 ? m.chiusure.conseguente : m.chiusure.antecedente;
             dove[seq[ultimo]] = (dove[seq[ultimo]] || 0) + 1;
+            // E per posizione nella forma: prima frase, interne, ultima.
+            const p = fr === 0 ? m.chiusurePosizione.prima
+                : fr === quanteFrasi - 1 ? m.chiusurePosizione.ultima
+                : m.chiusurePosizione.interna;
+            p[seq[ultimo]] = (p[seq[ultimo]] || 0) + 1;
         }
 
         // ── LE VOCI ESTREME ──

@@ -20,7 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
-import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio } from './corpusProgressione';
+import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio, type PosizioneFrase } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -3811,8 +3811,12 @@ export function autoHarmonize(
       }
       // L'ultimo accordo del brano ha già la sua regola (tonica in stato fondamentale).
       if (ultimo < 0 || ultimo === groups.length - 1) continue;
-      const antecedente = (quanteFrasi - 1 - fr) % 2 === 1;
-      chiusureDeiGruppi[ultimo] = usaCorpus ? pesiDiChiusura(isMinor, antecedente) : null;
+      // DOVE STA LA FRASE NELLA FORMA. Non è la stessa cosa chiudere all'inizio, in mezzo o
+      // alla fine: la prima frase sospende, l'ultima conclude, e ciò che NEGA una chiusura —
+      // la cadenza d'inganno, i gradi di deviazione — vuole stare in mezzo, perché ha bisogno
+      // di un seguito. Vedi `pesiDiChiusura`.
+      const posizione: PosizioneFrase = fr === 0 ? 'prima' : fr === quanteFrasi - 1 ? 'ultima' : 'interna';
+      chiusureDeiGruppi[ultimo] = usaCorpus ? pesiDiChiusura(isMinor, posizione) : null;
     }
     const scelte = scegliProgressioneDellaFrase({
       gruppi: groups, schede, forze, chiusure: chiusureDeiGruppi, curaLaCondotta, transizione,

@@ -54,6 +54,7 @@ type PerModo = {
     bigrammiForte: MappaBigrammi;
     bigrammiDebole: MappaBigrammi;
     chiusure: { antecedente: { [g: string]: number }; conseguente: { [g: string]: number } };
+    chiusurePosizione: { prima: { [g: string]: number }; interna: { [g: string]: number }; ultima: { [g: string]: number } };
     raddoppi: { [rivolto: string]: { [membro: string]: number } };
     intervalliEstremi: { [forza: string]: { [semitoni: string]: number } };
     motoEstremi: { [tipo: string]: number };
@@ -409,26 +410,37 @@ export function costoMotoEstremi(tipo: 'contrario' | 'retto' | 'obliquo'): numbe
 
 
 /**
- * COME CHIUDE UNA FRASE, secondo il suo posto nel periodo.
+ * COME CHIUDE UNA FRASE, SECONDO DOVE STA NEL BRANO.
  *
- * La gerarchia è quella di scuola — inciso ≈ una battuta, semifrase due, frase quattro,
- * periodo otto o sedici — e il periodo si divide in ANTECEDENTE, la frase che propone, e
- * CONSEGUENTE, quella che risponde e conclude. Chiudono diversamente, e il corpus lo dice:
+ * È il criterio che risponde alla domanda «dove va messo un gesto», che la statistica da sola
+ * non pone. Un percorso che prende sempre il costo minimo riproduce la MODA di un modello
+ * probabilistico, non la sua distribuzione: dove il corpus dice «dopo il V, il I al 60% e il
+ * vi al 12%», chi sceglie il migliore scrive `V→I` il cento per cento delle volte. La cadenza
+ * d'inganno non si conquista alzandole il peso — si conquista dicendo DOVE sta.
  *
- *      antecedente    V 28%   ·   I 17%      ← la cadenza sospesa
- *      conseguente    I 36%   ·   V 19%      ← la conclusione
+ * E il posto ce l'ha. Detto dall'utente: «in un compito scolastico una cadenza d'inganno la
+ * metterei in una parte intermedia della composizione, non subito all'inizio o verso la
+ * fine». Il corpus lo conferma, e generalizza il principio a tutti i gradi di deviazione:
  *
- * Il generatore non aveva nessuna nozione di frase, quindi «cadenza sospesa» non era
- * esprimibile: un V a fine semifrase era un V come un altro, e la frase finiva dove capitava.
+ *      chiude su      1ª frase   interne   ultima
+ *      I (maggiore)      27%       20%      56%
+ *      vi                 5%        9%       6%
+ *      III (minore)       8%       15%       ~0%
+ *      ♭VII               —         7%       ~0%
  *
- * NOTA SU COME SI CONTANO LE FRASI: dalla FINE. L'ultima conclude sempre, quindi è
- * conseguente, e risalendo si alternano. Contando da capo si sbaglia in modo sistematico —
- * basta un'anacrusi o un'apertura irregolare e l'assegnazione slitta di uno. Provato: il
- * segnale usciva ROVESCIATO, col conseguente che chiudeva sulla dominante.
+ * L'ultima frase conclude — la tonica al 56% in maggiore. I gradi che NEGANO la chiusura
+ * stanno in mezzo, perché ciò che nega una chiusura ha bisogno di un seguito, e nell'ultima
+ * frase il seguito non c'è.
+ *
+ * Sostituisce l'asse antecedente/conseguente, che diceva una cosa vera ma più debole: in un
+ * brano di quattro frasi la seconda e la quarta sono tutt'e due «conseguenti», e la
+ * differenza fra chiudere a metà e chiudere alla fine andava persa.
  */
-export function pesiDiChiusura(isMinor: boolean, antecedente: boolean): Record<number, number> | null {
+export type PosizioneFrase = 'prima' | 'interna' | 'ultima';
+
+export function pesiDiChiusura(isMinor: boolean, posizione: PosizioneFrase): Record<number, number> | null {
     const nomi = etichette(isMinor);
-    const tab = delModo(isMinor).chiusure?.[antecedente ? 'antecedente' : 'conseguente'];
+    const tab = delModo(isMinor).chiusurePosizione?.[posizione];
     if (!tab) return null;
     const conti = nomi.map(gruppo => somma(tab, gruppo));
     const totale = conti.reduce((a, b) => a + b, 0);
@@ -438,8 +450,8 @@ export function pesiDiChiusura(isMinor: boolean, antecedente: boolean): Record<n
     const generici = pesiDeiGradi(isMinor);
     const fuori: Record<number, number> = {};
     for (let deg = 0; deg < 7; deg++) {
-        // Dove il campione è scarso — il modo minore ne ha meno di cento — si torna verso i
-        // pesi generici invece di inventare una consuetudine.
+        // Dove il campione è scarso — l'ultima frase in minore ne ha meno di cinquanta — si
+        // torna verso i pesi generici invece di inventare una consuetudine.
         fuori[deg] = (1 - f) * (generici[deg] ?? 1) + f * pesoDaConto(conti[deg], massimo);
     }
     return fuori;
