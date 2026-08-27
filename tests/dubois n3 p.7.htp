@@ -1,4 +1,494 @@
 {
+  "tonicizationHints": [],
+  "inferredContextSuppressions": [],
+  "repeatBarlines": {},
+  "voltaBrackets": [],
+  "ornamentOverrides": [],
+  "filePreferences": {
+    "analysis.enableInferredContexts": true,
+    "analysis.cadentialPatterns": true,
+    "analysis.profileBaseId": "academic",
+    "analysis.chromaticModulation": false,
+    "analysis.sequencesEnabled": true
+  },
+  "voiceInstruments": {
+    "1": "acoustic_grand_piano",
+    "2": "acoustic_grand_piano",
+    "3": "acoustic_grand_piano",
+    "4": "acoustic_grand_piano"
+  },
+  "voiceVolumes": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "4": 1
+  },
+  "computedLabels": [
+    {
+      "absBeat": 0,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 2,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 4,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 6,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 8,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 10,
+      "roman": "ii°",
+      "romanDisplay": "ii°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 12,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 14,
+      "roman": "ii°",
+      "romanDisplay": "ii°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 16,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 18,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 24,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "5",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 26,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 28,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 30,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 32,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 34,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 36,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "5",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 38,
+      "roman": "ii",
+      "romanDisplay": "ii",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 40,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 42,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 47,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "4",
+        "♭♭2"
+      ]
+    },
+    {
+      "absBeat": 48,
+      "roman": "I",
+      "romanDisplay": "I=V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 50,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 52,
+      "roman": "I",
+      "romanDisplay": "I",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 54,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 58,
+      "roman": "I",
+      "romanDisplay": "I=V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 60,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 64,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 66,
+      "roman": "I",
+      "romanDisplay": "I=V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 70,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 72,
+      "roman": "I",
+      "romanDisplay": "I=V/ii°",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 74,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 76,
+      "roman": "I",
+      "romanDisplay": "I=V/ii°",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 78,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 82,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 84,
+      "roman": "IV",
+      "romanDisplay": "IV",
+      "figures": [
+        "♭6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 88,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "♭6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 90,
+      "roman": "I",
+      "romanDisplay": "I=V/ii°",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 96,
+      "roman": "N",
+      "romanDisplay": "N",
+      "figures": [
+        "♭6",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 102,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "♭6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 108,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 114,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 116,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 118,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 120,
+      "roman": "iv",
+      "romanDisplay": "iv",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 122,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 124,
+      "roman": "ii°",
+      "romanDisplay": "ii°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 126,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 128,
+      "roman": "ii°",
+      "romanDisplay": "ii°",
+      "figures": [
+        "6"
+      ]
+    },
+    {
+      "absBeat": 130,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 132,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 138,
+      "roman": "vi",
+      "romanDisplay": "vi",
+      "figures": [
+        "5",
+        "♭3"
+      ]
+    },
+    {
+      "absBeat": 144,
+      "roman": "N",
+      "romanDisplay": "N",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 148,
+      "roman": "N",
+      "romanDisplay": "N",
+      "figures": [
+        "♭♭6",
+        "4"
+      ]
+    },
+    {
+      "absBeat": 150,
+      "roman": "V",
+      "romanDisplay": "V",
+      "figures": [
+        "5"
+      ]
+    },
+    {
+      "absBeat": 156,
+      "roman": "i",
+      "romanDisplay": "i",
+      "figures": [
+        "5"
+      ]
+    }
+  ],
+  "schemaVersion": 1,
   "notes": [
     {
       "id": "f1b27441-8bf5-4431-8c4e-d1b84c91a0f3",
@@ -18,7 +508,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "8a38752f-c1df-405d-b87a-2b09a074efd3",
@@ -38,7 +529,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "d23571a0-de1e-422d-b833-df23ae6cbe88",
@@ -58,7 +550,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "659709e1-a933-4c80-98dd-045882b57376",
@@ -78,7 +571,8 @@
       "beat": 1,
       "startTick": 0,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "fc08a4b4-de3d-452d-a1fb-414424663178",
@@ -98,7 +592,8 @@
       "beat": 3,
       "startTick": 1920,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "d2632a7d-8004-43c8-8435-088ba3c17374",
@@ -118,7 +613,8 @@
       "beat": 3,
       "startTick": 1920,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "fda8e29d-3a32-4af1-b32f-796b822c249c",
@@ -160,7 +656,8 @@
       "beat": 5,
       "startTick": 3840,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "373bb989-9a78-4b71-8e53-daeabf47ffd0",
@@ -180,7 +677,8 @@
       "beat": 5,
       "startTick": 3840,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "4d7c10f4-5419-4e8a-b7b8-0357a1a539fb",
@@ -200,7 +698,8 @@
       "beat": 5,
       "startTick": 3840,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "9a8c4e12-ba1b-492c-9739-d192238c1d77",
@@ -220,7 +719,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "70c6acc3-bd71-4ca0-9704-78c8a47bed40",
@@ -240,7 +740,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "a0cf5bc6-a25b-4e79-b11b-2ab666f0f0cd",
@@ -260,7 +761,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 3840,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "24c18fc0-3dab-4c88-a34c-67400d35d394",
@@ -280,7 +782,8 @@
       "beat": 1,
       "startTick": 5760,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "88923e14-bc21-4665-988d-6efcd10e3748",
@@ -300,7 +803,8 @@
       "beat": 3,
       "startTick": 7680,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "bd0b343b-7162-4633-ab0b-2c7a2bde5b0a",
@@ -320,7 +824,8 @@
       "beat": 3,
       "startTick": 7680,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "12d4dcbf-3041-4c88-b32e-e7b2e5423a1d",
@@ -340,7 +845,8 @@
       "beat": 3,
       "startTick": 7680,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "06631320-b674-4293-8d8b-23f82b1a3b9a",
@@ -360,7 +866,8 @@
       "beat": 5,
       "startTick": 9600,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "67fbbe35-0f46-49b8-b572-e38440783ca9",
@@ -380,7 +887,8 @@
       "beat": 5,
       "startTick": 9600,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "fdaf2f32-0487-43b0-b9a8-95ed58e50583",
@@ -400,7 +908,8 @@
       "beat": 5,
       "startTick": 9600,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "fd2522a9-aed2-444a-8fb6-c0c2cfd49ad9",
@@ -420,7 +929,8 @@
       "beat": 5,
       "startTick": 9600,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "3d63b400-5f09-4c32-b050-cb267c384ff2",
@@ -440,7 +950,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "8afaf321-feb8-4675-9d0f-67ff27de4b26",
@@ -460,7 +971,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "3bd6f32c-8443-4450-9e37-6043665d324a",
@@ -480,7 +992,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "fa215b81-653e-4b44-8994-2f47de4078ad",
@@ -500,7 +1013,8 @@
       "beat": 1,
       "startTick": 11520,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "7632d95d-cbf4-4db8-bd21-02be3c392c73",
@@ -520,7 +1034,8 @@
       "beat": 3,
       "startTick": 13440,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "78a4dbac-9131-4aee-9050-9ca1ea3b4b3e",
@@ -540,7 +1055,8 @@
       "beat": 3,
       "startTick": 13440,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "d9c7fdf2-0239-4aa1-9856-b8a7b148090e",
@@ -560,7 +1076,8 @@
       "beat": 3,
       "startTick": 13440,
       "durationTicks": 3840,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "cc2d94c2-2cf0-472c-9b42-d529743eeac3",
@@ -580,7 +1097,8 @@
       "beat": 3,
       "startTick": 13440,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "a82c4772-99a2-4d0a-a4a6-225d20483107",
@@ -622,7 +1140,8 @@
       "beat": 5,
       "startTick": 15360,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "7c304187-167b-4663-8f10-198e42eb5150",
@@ -642,7 +1161,8 @@
       "beat": 5,
       "startTick": 15360,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "a9f5b639-5a34-41ce-932d-48deb3ac190d",
@@ -662,7 +1182,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 5760,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "9fb1e034-4429-436d-ad32-8eb249b59ea5",
@@ -682,7 +1203,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "3e8c2203-9e25-46ec-a2c5-9cd2e40652fe",
@@ -702,7 +1224,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 5760,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "634b1272-fccb-40fe-a97c-1cee62bfc919",
@@ -722,7 +1245,8 @@
       "beat": 1,
       "startTick": 17280,
       "durationTicks": 3840,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "ec273eb3-3fe9-4eba-9066-96bbb7d9d9dc",
@@ -742,7 +1266,8 @@
       "beat": 5,
       "startTick": 21120,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "14f36d56-c71d-4440-bd1b-47866fc8a6f3",
@@ -762,7 +1287,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "e8ff95fa-6663-45b9-97ec-ade7e9fc7583",
@@ -783,7 +1309,8 @@
       "startTick": 23040,
       "durationTicks": 1920,
       "voice": 2,
-      "manualStemDirection": "down"
+      "manualStemDirection": "down",
+      "accidental": "flat"
     },
     {
       "id": "93d9c84a-91ca-4fd9-9f99-23150b6b12f5",
@@ -803,7 +1330,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 5760,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "86d77ec7-6eff-4b1c-b71b-de2ba9ae1eca",
@@ -823,7 +1351,8 @@
       "beat": 1,
       "startTick": 23040,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "add66cb7-fa42-45f3-8555-bae808ed5446",
@@ -887,7 +1416,8 @@
       "beat": 3,
       "startTick": 24960,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "771a4093-17ff-44f2-96ea-8393e074ee3a",
@@ -908,7 +1438,8 @@
       "beat": 5,
       "startTick": 26880,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "b76573cc-ac0c-4a07-b0ba-1f61476f2770",
@@ -928,7 +1459,8 @@
       "beat": 5,
       "startTick": 26880,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "25f6bd2f-0617-40b7-be2f-a2585b489fb1",
@@ -948,7 +1480,8 @@
       "beat": 5,
       "startTick": 26880,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "fe6f7e25-13f5-4e79-b905-c7895ae4ecee",
@@ -968,7 +1501,8 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 3840,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "42107854-66cf-4d34-ae23-846624ead939",
@@ -1010,7 +1544,8 @@
       "beat": 1,
       "startTick": 28800,
       "durationTicks": 3840,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "0353c49f-39c9-487a-ade4-776a717d0d7b",
@@ -1052,7 +1587,8 @@
       "beat": 3,
       "startTick": 30720,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "5b0fd358-6c17-4a76-9ea7-7d860f681065",
@@ -1117,7 +1653,8 @@
       "beat": 5,
       "startTick": 32640,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "ba30e55c-de46-424e-8fa3-0101dbb7932a",
@@ -1181,7 +1718,8 @@
       "beat": 1,
       "startTick": 34560,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "cc7dd0cf-e438-4464-8d51-b763c9b922f7",
@@ -1201,7 +1739,8 @@
       "beat": 1,
       "startTick": 34560,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "c37fd9af-c801-41f1-be35-6001dcb03530",
@@ -1265,7 +1804,8 @@
       "beat": 3,
       "startTick": 36480,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "3489b750-45ee-4ac9-a4f8-23e2e3161881",
@@ -1294,7 +1834,7 @@
       "pitch": "C",
       "octave": 3,
       "position": -7,
-      "midi": 59,
+      "midi": 47,
       "noteIndex": 11,
       "clef": "bass",
       "explicitAccidental": "flat",
@@ -1329,7 +1869,8 @@
       "beat": 5,
       "startTick": 38400,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "d57f5164-ca4d-4762-b1fc-1a2c2272508e",
@@ -1372,7 +1913,8 @@
       "beat": 5,
       "startTick": 38400,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "7059bb2b-e9b1-4988-94c4-a93ae9559c71",
@@ -1458,7 +2000,8 @@
       "beat": 1,
       "startTick": 40320,
       "durationTicks": 5760,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "b9015138-b08f-49cb-8053-b4f213bdb9cc",
@@ -1567,7 +2110,8 @@
       "beat": 1,
       "startTick": 46080,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "2aa1b69c-80e8-47a4-b819-f840cadccb34",
@@ -1609,7 +2153,8 @@
       "beat": 1,
       "startTick": 46080,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "617c3acb-2ef0-49a2-95a4-60a650a6af8b",
@@ -1629,7 +2174,8 @@
       "beat": 3,
       "startTick": 48000,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "407d82db-0e0a-4f17-ba0b-b21f5d9389a7",
@@ -1715,7 +2261,8 @@
       "beat": 5,
       "startTick": 49920,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "716082a9-b27f-4b1d-8b47-0fec144f4389",
@@ -1735,7 +2282,8 @@
       "beat": 5,
       "startTick": 49920,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "fde50071-4e54-4730-a851-df10d7ac5de4",
@@ -1799,7 +2347,8 @@
       "beat": 1,
       "startTick": 51840,
       "durationTicks": 5760,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "6cb532b3-03ba-4d3a-ad19-d10d207f578e",
@@ -1819,7 +2368,8 @@
       "beat": 1,
       "startTick": 51840,
       "durationTicks": 3840,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "0a9e8060-6d94-4226-862f-e3b01f3ae831",
@@ -1861,7 +2411,8 @@
       "beat": 5,
       "startTick": 55680,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "fd2d3eaf-5ac8-471e-98e9-754965c77c9c",
@@ -1881,7 +2432,8 @@
       "beat": 5,
       "startTick": 55680,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "17b9ad5e-b108-4471-b41b-a1f505c46805",
@@ -1901,7 +2453,8 @@
       "beat": 1,
       "startTick": 57600,
       "durationTicks": 3840,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "5f784997-922b-43a2-9d72-5d51a0165902",
@@ -1921,7 +2474,8 @@
       "beat": 1,
       "startTick": 57600,
       "durationTicks": 3840,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "bc97736c-f979-4318-aafd-8efc96847802",
@@ -2007,7 +2561,8 @@
       "beat": 5,
       "startTick": 61440,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "b195de5b-92da-4df9-a8b1-c7ee369cd9b3",
@@ -2049,7 +2604,8 @@
       "beat": 5,
       "startTick": 61440,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "bf67bc85-5ab1-4792-88d8-22875a140f76",
@@ -2113,7 +2669,8 @@
       "beat": 1,
       "startTick": 63360,
       "durationTicks": 3840,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "c1bc2037-23cb-4389-adb3-5fba2d676d5f",
@@ -2133,7 +2690,8 @@
       "beat": 1,
       "startTick": 63360,
       "durationTicks": 3840,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "5048f74c-564e-4c47-9249-8fe6308f7bc3",
@@ -2153,7 +2711,8 @@
       "beat": 1,
       "startTick": 63360,
       "durationTicks": 3840,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "9e285fe9-99c6-434c-ac6d-5da2b12c4fb5",
@@ -2174,7 +2733,8 @@
       "beat": 5,
       "startTick": 67200,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "179d83ab-4b59-459b-ac85-ac3cb8b63e4e",
@@ -2348,7 +2908,8 @@
       "beat": 3,
       "startTick": 71040,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "e838e165-bb2f-4668-903d-78f4550b09aa",
@@ -2413,7 +2974,8 @@
       "beat": 5,
       "startTick": 72960,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "sharp"
     },
     {
       "id": "47d51b00-0f34-40e9-93df-59723abe1ef9",
@@ -2434,7 +2996,8 @@
       "beat": 5,
       "startTick": 72960,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "e6dd3f2d-7dad-437e-affc-b509436334d4",
@@ -2456,7 +3019,8 @@
       "startTick": 72960,
       "durationTicks": 1920,
       "voice": 4,
-      "forceAccidental": false
+      "forceAccidental": false,
+      "accidental": "natural"
     },
     {
       "id": "6fcf6085-2557-4b28-b7e8-8c8991dc5642",
@@ -2960,7 +3524,8 @@
       "beat": 1,
       "startTick": 92160,
       "durationTicks": 5760,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "72647df3-2dc5-452e-9275-539c9f10ed79",
@@ -3002,7 +3567,8 @@
       "beat": 1,
       "startTick": 97920,
       "durationTicks": 5760,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "a246e709-83ae-4c2d-acf7-29ac6653436b",
@@ -3022,7 +3588,8 @@
       "beat": 1,
       "startTick": 97920,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "0453bf4b-e810-4db7-a18e-4f6a45b94235",
@@ -3039,11 +3606,11 @@
       "isRest": false,
       "isTriplet": false,
       "isDuplet": false,
-      "isDotted": false,
+      "isDotted": true,
       "measureIndex": 17,
       "beat": 1,
       "startTick": 97920,
-      "durationTicks": 3840,
+      "durationTicks": 5760,
       "voice": 3
     },
     {
@@ -3064,7 +3631,8 @@
       "beat": 1,
       "startTick": 97920,
       "durationTicks": 5760,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "08081878-41ae-49a5-82ad-5d5922baa2b9",
@@ -3106,7 +3674,8 @@
       "beat": 1,
       "startTick": 103680,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "b7068966-5cae-402e-bb2d-0da52c3a7695",
@@ -3126,7 +3695,8 @@
       "beat": 1,
       "startTick": 103680,
       "durationTicks": 5760,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "d556699e-b29e-45c3-aade-3a1701198f14",
@@ -3146,7 +3716,8 @@
       "beat": 1,
       "startTick": 103680,
       "durationTicks": 5760,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "a33fa5b2-423c-4983-8bc5-af5422b3246d",
@@ -3166,7 +3737,8 @@
       "beat": 1,
       "startTick": 109440,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "980d9d95-5187-421d-94ce-c12fe87e99da",
@@ -3186,7 +3758,8 @@
       "beat": 1,
       "startTick": 109440,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "22cf7e8f-d1b5-4ac5-a4bc-336ec77bc0bc",
@@ -3206,7 +3779,8 @@
       "beat": 1,
       "startTick": 109440,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "9db76d3b-0966-4a2f-84f4-50356fd07ade",
@@ -3226,7 +3800,8 @@
       "beat": 1,
       "startTick": 109440,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "2a47efac-41ac-4fce-9ec5-3d9269b05e9d",
@@ -3246,7 +3821,8 @@
       "beat": 3,
       "startTick": 111360,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "a0e5be59-5fd9-4983-92bd-6a2191722505",
@@ -3266,7 +3842,8 @@
       "beat": 3,
       "startTick": 111360,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "00a81646-fb41-40ab-a16a-8b9bba2d50ef",
@@ -3308,7 +3885,8 @@
       "beat": 5,
       "startTick": 113280,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "adf45725-1ca9-423c-993a-b6c736b4eb8b",
@@ -3328,7 +3906,8 @@
       "beat": 5,
       "startTick": 113280,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "2d48a9c3-5157-446f-9b89-3dd2b08f67ee",
@@ -3348,7 +3927,8 @@
       "beat": 5,
       "startTick": 113280,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "3c4d77f0-1dfc-4bf7-9c99-9d4f8e6036a8",
@@ -3368,7 +3948,8 @@
       "beat": 1,
       "startTick": 115200,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "50e6ce44-e98b-4a06-9597-d78355f51efb",
@@ -3388,7 +3969,8 @@
       "beat": 1,
       "startTick": 115200,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "204f2a5c-4895-4204-a4ab-6a6fa0a8d24f",
@@ -3408,7 +3990,8 @@
       "beat": 1,
       "startTick": 115200,
       "durationTicks": 3840,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "086052c6-36c9-4610-a983-08f22eac1771",
@@ -3428,7 +4011,8 @@
       "beat": 1,
       "startTick": 115200,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "bd0245eb-d008-4f70-b8d9-3b472ced3197",
@@ -3448,7 +4032,8 @@
       "beat": 3,
       "startTick": 117120,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "flat"
     },
     {
       "id": "5f4ebac9-7945-4ba0-9a0c-ba7f87d9eabc",
@@ -3468,7 +4053,8 @@
       "beat": 3,
       "startTick": 117120,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "c536e743-f92a-4ec3-a2f7-a00bea12e4e7",
@@ -3488,7 +4074,8 @@
       "beat": 3,
       "startTick": 117120,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "594574d4-e49a-4437-b6bf-2c0bbdd76a4b",
@@ -3508,7 +4095,8 @@
       "beat": 5,
       "startTick": 119040,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "f3d33e2d-c20a-4a2e-8419-1d3ac86a8daf",
@@ -3528,7 +4116,8 @@
       "beat": 5,
       "startTick": 119040,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "036c87fc-eddc-4e8e-8d1d-1901133f44de",
@@ -3548,7 +4137,8 @@
       "beat": 5,
       "startTick": 119040,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "12d0d0cf-1676-4fa9-9201-1256aa18bb10",
@@ -3568,7 +4158,8 @@
       "beat": 5,
       "startTick": 119040,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "1233f0b2-c876-4b64-b04e-88ba60b62ff4",
@@ -3588,7 +4179,8 @@
       "beat": 1,
       "startTick": 120960,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "41c40780-8e67-4e1a-a656-bf18656fb153",
@@ -3608,7 +4200,8 @@
       "beat": 1,
       "startTick": 120960,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "8e257286-fece-4863-8d88-472bc48788d8",
@@ -3628,7 +4221,8 @@
       "beat": 1,
       "startTick": 120960,
       "durationTicks": 1920,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "362fb8eb-9b0d-40c7-9f29-73f332c97bf1",
@@ -3648,7 +4242,8 @@
       "beat": 1,
       "startTick": 120960,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "84c73ebd-7425-4a9f-86b1-0cfe049ac886",
@@ -3668,7 +4263,8 @@
       "beat": 3,
       "startTick": 122880,
       "durationTicks": 1920,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "fa6df417-b323-4446-96b3-41435f110737",
@@ -3688,7 +4284,8 @@
       "beat": 3,
       "startTick": 122880,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "0926684c-8b85-40b3-9f2a-4dafebaf38ce",
@@ -3708,7 +4305,8 @@
       "beat": 3,
       "startTick": 122880,
       "durationTicks": 3840,
-      "voice": 3
+      "voice": 3,
+      "accidental": "natural"
     },
     {
       "id": "872eff57-d4ad-44bb-89b5-f63eae650ab2",
@@ -3728,7 +4326,8 @@
       "beat": 3,
       "startTick": 122880,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "7d044e8e-1612-4fd4-a458-e3873b5247f3",
@@ -3770,7 +4369,8 @@
       "beat": 5,
       "startTick": 124800,
       "durationTicks": 1920,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "6ec097f0-77a0-4d56-9ecb-b0e92dc35000",
@@ -3790,7 +4390,8 @@
       "beat": 5,
       "startTick": 124800,
       "durationTicks": 1920,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "b67f5d78-6179-4bc5-af17-e85cf594537e",
@@ -3810,7 +4411,8 @@
       "beat": 1,
       "startTick": 126720,
       "durationTicks": 5760,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "b30a1f7a-1519-4967-90c6-f856be7b3bbd",
@@ -3830,7 +4432,8 @@
       "beat": 1,
       "startTick": 126720,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "aa02cbf4-06c2-43b7-8475-41674a650a2c",
@@ -3850,7 +4453,8 @@
       "beat": 1,
       "startTick": 126720,
       "durationTicks": 5760,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "0cef002e-51d6-4320-b349-42852769707c",
@@ -3870,7 +4474,8 @@
       "beat": 1,
       "startTick": 126720,
       "durationTicks": 5760,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     },
     {
       "id": "b97f4f7e-85ef-4cad-9df5-a838e3a612b1",
@@ -3912,7 +4517,8 @@
       "beat": 1,
       "startTick": 132480,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "98d24224-75ab-465f-8c4f-4ba8a4828236",
@@ -3932,7 +4538,8 @@
       "beat": 1,
       "startTick": 132480,
       "durationTicks": 5760,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "bcb72708-cff2-4895-967a-5377193182a7",
@@ -3952,7 +4559,8 @@
       "beat": 1,
       "startTick": 132480,
       "durationTicks": 5760,
-      "voice": 4
+      "voice": 4,
+      "accidental": "flat"
     },
     {
       "id": "c44975b5-c63f-4525-bbfe-d9ca6278e761",
@@ -3994,14 +4602,15 @@
       "beat": 1,
       "startTick": 138240,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "flat"
     },
     {
       "id": "307ebb43-10be-456e-854f-fc37d1149dc9",
       "pitch": "C",
       "octave": 4,
       "position": 0,
-      "midi": 71,
+      "midi": 59,
       "noteIndex": 11,
       "clef": "bass",
       "explicitAccidental": "flat",
@@ -4024,7 +4633,7 @@
       "pitch": "C",
       "octave": 3,
       "position": -7,
-      "midi": 59,
+      "midi": 47,
       "noteIndex": 11,
       "clef": "bass",
       "explicitAccidental": "flat",
@@ -4126,7 +4735,8 @@
       "beat": 1,
       "startTick": 144000,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "fbffc0e5-763e-4477-84e8-d4f6b0164e67",
@@ -4190,7 +4800,8 @@
       "beat": 1,
       "startTick": 149760,
       "durationTicks": 5760,
-      "voice": 1
+      "voice": 1,
+      "accidental": "natural"
     },
     {
       "id": "e5ffcccb-e0c4-412a-8bea-e817043c4685",
@@ -4210,7 +4821,8 @@
       "beat": 1,
       "startTick": 149760,
       "durationTicks": 5760,
-      "voice": 2
+      "voice": 2,
+      "accidental": "natural"
     },
     {
       "id": "72251bc4-c862-4fc1-930b-2c1db666c841",
@@ -4230,7 +4842,8 @@
       "beat": 1,
       "startTick": 149760,
       "durationTicks": 5760,
-      "voice": 3
+      "voice": 3,
+      "accidental": "flat"
     },
     {
       "id": "57fc4d0d-3e96-4708-b744-19cba6e2417d",
@@ -4250,7 +4863,8 @@
       "beat": 1,
       "startTick": 149760,
       "durationTicks": 5760,
-      "voice": 4
+      "voice": 4,
+      "accidental": "natural"
     }
   ],
   "staffSystemMode": "grandstaff",
@@ -4262,16 +4876,20 @@
     "numerator": 3,
     "denominator": 2
   },
+  "timeSignatureChanges": [],
   "isMinorMode": true,
   "autoLeadingToneInMinor": true,
   "keyChangeMode": "none",
   "modalTonicOverride": "",
   "analysisContexts": [],
+  "doubleBarlineMeasures": [],
+  "tempoCurves": [],
   "harmonyOverrides": [],
   "bpm": 120,
   "isBpmActive": false,
   "isMetronomeOn": false,
   "metronomeUnit": "quarter",
+  "isSwing": false,
   "toolbarGroupOrder": [
     "insert",
     "voices",
@@ -4283,12 +4901,29 @@
     "notations",
     "analysis",
     "key",
-    "more"
+    "more",
+    "voiceInstrument",
+    "mixer",
+    "chordInsert"
   ],
-  "voiceInstruments": {
-    "1": "acoustic_grand_piano-mp3",
-    "2": "acoustic_grand_piano-mp3",
-    "3": "acoustic_grand_piano-mp3",
-    "4": "acoustic_grand_piano-mp3"
+  "analysisLocked": false,
+  "analysisLockOptions": {
+    "hideViolations": true,
+    "hideRomanLabels": false,
+    "hideChordSymbols": false,
+    "hideOrnaments": false,
+    "hideAlternatives": false,
+    "disableExport": true
+  },
+  "satbName": "SATB",
+  "voiceSoundBanks": {
+    "1": "orchestral",
+    "2": "orchestral",
+    "3": "orchestral",
+    "4": "orchestral"
+  },
+  "reverb": {
+    "preset": "room",
+    "wet": 0.85
   }
 }
