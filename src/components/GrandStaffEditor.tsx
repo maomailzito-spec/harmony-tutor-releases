@@ -4486,6 +4486,47 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     /** Ricalcola il voicing delle note SATB selezionate con la prossima disposizione nel ciclo. */
     // ── IL CICLO DELLE DISPOSIZIONI (diagnostica) ──
+    // `__htMelodia()` risponde a UNA domanda: perche' la spunta «armonizza la melodia
+    // esistente» e' spenta. Quella spunta si disabilita quando il pannello non trova note di
+    // SOPRANO, e legge esattamente cosi': note del coro, non pause, voce 1 (o voce assente).
+    // Qui si stampa lo stesso conto voce per voce, cosi' si vede subito se la melodia c'e' ma
+    // sta su un'altra voce, se e' finita su una traccia di accompagnamento, o se le note sono
+    // diventate pause — che e' cio' che succede cancellandole (l'id resta, il suono no).
+    useEffect(() => {
+        (window as any).__htMelodia = () => {
+            try {
+                const note = (latestRawNotes.current as any[]) || [];
+                const vive = note.filter(n => n && !n.isRest);
+                const perVoce: Record<string, number> = {};
+                for (const n of vive) {
+                    const k = n.voice === undefined ? 'senza voce' : String(n.voice);
+                    perVoce[k] = (perVoce[k] ?? 0) + 1;
+                }
+                const soprani = vive.filter(n => n.voice === 1 || n.voice === undefined).length;
+                const tracce = (latestAccompanimentTracks.current || []);
+                const inAcc = tracce.reduce((t, tr) => t + (tr.notes || []).filter((n: any) => !n.isRest).length, 0);
+                // eslint-disable-next-line no-console
+                console.log({
+                    'note nel coro': note.length,
+                    'di cui pause': note.length - vive.length,
+                    'per voce': perVoce,
+                    'viste come SOPRANO dal pannello': soprani,
+                    'la spunta sara': soprani > 0 ? 'DISPONIBILE' : 'SPENTA',
+                    'note sulle tracce di accompagnamento': inAcc,
+                    'voci non numeriche': vive.filter(n => n.voice !== undefined && typeof n.voice !== 'number').length,
+                });
+                if (soprani === 0 && vive.length > 0) {
+                    // eslint-disable-next-line no-console
+                    console.log('La melodia non e\' sulla voce 1. Le voci presenti sono qui sopra in «per voce»: '
+                        + 'la voce si sceglie da dove si clicca, quindi puo\' essere stata scritta su un\'altra.');
+                }
+            } catch (e) {
+                // eslint-disable-next-line no-console
+                console.log('__htMelodia:', e);
+            }
+        };
+    }, []);
+
     // `__htRevoice()` non cambia niente: legge l'accordo selezionato ESATTAMENTE come lo
     // legge il pulsante, e stampa cosa produrrebbe ogni posizione del ciclo e quali sono
     // considerate uguali all'attuale (quelle vengono saltate). Serve quando il pulsante
