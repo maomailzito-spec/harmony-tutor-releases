@@ -117,6 +117,7 @@ for (const f of process.argv.slice(2)) {
     // cambiando un interruttore e non l'albero di lavoro.
     vetoRegole: !process.env.SENZA_VETO,
     passoIndietro: !process.env.SENZA_PASSO,
+    ripasso: !process.env.SENZA_RIPASSO,
   } as any;
   azzeraContiVeto();
   const generato = realizeChorale(progressione, config);
@@ -148,6 +149,7 @@ for (const f of process.argv.slice(2)) {
   console.log(`   veto: ${vetoDelBrano.controllati} controlli, ${vetoDelBrano.fermati} respinti` +
     (vetoDelBrano.fermati ? ` → ${vetoDelBrano.risolti} risolti, ${vetoDelBrano.migliorati} attenuati` +
       `${vetoDelBrano.passiIndietro ? `, ${vetoDelBrano.passiIndietro} passi indietro` : ''}` +
+      `${vetoDelBrano.ripassati ? `, ${vetoDelBrano.ripassati} ridisposti` : ''}` +
       `  [${Object.entries(vetoDelBrano.perRegola).map(([r, n2]) => `${r}×${n2}`).join(' ')}]` : ''));
   if (process.env.DETTAGLIO) for (const r of b.dettaglio) console.log('      ' + r);
 }

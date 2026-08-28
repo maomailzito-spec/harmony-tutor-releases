@@ -45,6 +45,8 @@ export const contiVeto = {
   migliorati: 0,
   /** Quante volte si è dovuto tornare indietro di un accordo per trovare l'uscita. */
   passiIndietro: 0,
+  /** Quanti accordi il RIPASSO ha ridisposto guardando anche l'accordo dopo. */
+  ripassati: 0,
   perRegola: {} as Record<string, number>,
 };
 
@@ -55,6 +57,7 @@ export function azzeraContiVeto(): void {
   contiVeto.risolti = 0;
   contiVeto.migliorati = 0;
   contiVeto.passiIndietro = 0;
+  contiVeto.ripassati = 0;
   contiVeto.perRegola = {};
 }
 
@@ -142,6 +145,11 @@ export type ChoralConfig = {
    *  per il perché il checker si interroghi solo su una parte delle sue regole.
    *  Attivo di default; `false` riporta al comportamento precedente. */
   vetoRegole?: boolean;
+  /** IL RIPASSO: finito di scrivere, il generatore ripercorre la progressione e riprova le
+   *  disposizioni di ogni accordo — questa volta conoscendo anche l'accordo DOPO, che
+   *  scrivendo da sinistra a destra non poteva conoscere. Attivo di default; `false` serve
+   *  al confronto. */
+  ripasso?: boolean;
   /** Il PASSO INDIETRO del veto: quando nessun candidato per l'accordo in esame passa, si
    *  rimette in gioco quello prima. Attivo di default; `false` serve al confronto. */
   passoIndietro?: boolean;
@@ -2264,6 +2272,21 @@ export function parseModulationToken(token: string): { tonic: string; isMinor: b
   return { tonic, isMinor };
 }
 
+/** Un accordo come è stato scritto: serve al RIPASSO, che li ripercorre tutti alla fine. */
+type Passo = {
+  chord: RomanChord;
+  voicing: SATBVoicing;
+  inv: number;
+  tones: ScaleDegreeNote[];
+  durationName: string;
+  fixedSoprano?: number;
+  fixedBass?: number;
+  isLast: boolean;
+  degree: number;
+  /** Dove cominciano le sue note dentro `allNotes`. */
+  noteStart: number;
+};
+
 export function realizeChorale(
   progression: RomanChord[],
   config: ChoralConfig
@@ -2292,6 +2315,8 @@ export function realizeChorale(
   const displayKeySignature = buildKeySignature(initialTonic, initialIsMinor);
 
   const allNotes: StaffNote[] = [];
+  /** Ogni accordo come è stato scritto, per il RIPASSO in fondo. */
+  const passi: Passo[] = [];
   const allViolations: ChoralViolation[] = [];
   const modulationContexts: ModulationContext[] = [];
   let prevVoicing: SATBVoicing | null = null;
@@ -3106,6 +3131,17 @@ export function realizeChorale(
     const notes = voicingToStaffNotes(voicing, chord.measure, chord.beat, durationName, tones, inv, displayKeySignature, beatsPerMeasure);
     allNotes.push(...notes);
 
+    // Il passo precedente può essere stato RISCRITTO dai due backtracking di sopra: quello
+    // che vale è `prevVoicing`, non quello che si era registrato allora.
+    if (passi.length > 0 && prevVoicing) {
+      passi[passi.length - 1].voicing = prevVoicing;
+      passi[passi.length - 1].inv = prevInvUsed;
+    }
+    passi.push({
+      chord, voicing, inv, tones, durationName, fixedSoprano, fixedBass, isLast,
+      degree: parsed.degree, noteStart: noteStartIdx,
+    });
+
     prevPrevVoicing = prevVoicing;
     prevVoicing = voicing;
     prevChordNoteStart = noteStartIdx; // remember for next iteration's backtracking
@@ -3115,6 +3151,171 @@ export function realizeChorale(
     prevPrevInvUsed = prevInvUsed;
     prevTones = tones;
     prevInvUsed = inv;
+  }
+
+  // ── IL RIPASSO DELLE DISPOSIZIONI ───────────────────────────────────────────
+  //
+  // Il generatore scrive da sinistra a destra: quando sceglie come disporre un accordo,
+  // quello DOPO non esiste ancora. Il veto ha una finestra di tre accordi, ma tutti e tre
+  // già scritti — guarda indietro, mai avanti. Così una disposizione che era la migliore
+  // rispetto a ciò che la precedeva può risultare la peggiore rispetto a ciò che la segue,
+  // e nessuno se ne accorge più.
+  //
+  // Il ripasso ripercorre la progressione FINITA e per ogni accordo riprova le disposizioni,
+  // giudicandole nelle DUE direzioni: l'accordo nuovo contro quello prima, e quello dopo
+  // contro l'accordo nuovo. È l'idea che l'utente usa a mano nell'arpeggiatore — ciclare le
+  // disposizioni su una progressione già scritta e tenere quella che suona meglio — con il
+  // checker al posto dell'orecchio.
+  //
+  // Non cambia MAI l'armonia: gradi, rivolti ammessi, melodia data e basso dato restano
+  // quelli. Cambia solo come le quattro voci si distribuiscono, e solo se il conto delle
+  // violazioni MIGLIORA davvero (`confronta` stretto): a parità, non si tocca niente.
+  if (config.ripasso !== false && config.vetoRegole !== false && passi.length >= 2) {
+    // Gli stessi posti che usa il veto dentro il ciclo: movimenti forti consecutivi, così
+    // che nessuna regola legata al tempo cambi risposta per colpa della collocazione.
+    const battutePerMisura = timeSignature.numerator * (4 / timeSignature.denominator);
+    const POSTI: [number, number][] = [[0, 1], [0, 3], [1, 1]];
+    type Anello = { v: SATBVoicing; tn: ScaleDegreeNote[]; rv: number };
+
+    /** Dispone una catena di al più tre accordi e giudica l'ULTIMO contro quelli prima. */
+    const giudicaCatena = (catena: Anello[]): EsitoVeto => {
+      const n = catena.length;
+      if (n < 2) return { quante: 0, errori: 0, avvisi: 0, licenze: 0, regole: [] };
+      const off = 3 - n;
+      const gruppi = catena.map((g, k) =>
+        voicingToStaffNotes(g.v, POSTI[off + k][0], POSTI[off + k][1], 'half', g.tn, g.rv, keySignature, 4));
+      return veto(gruppi.slice(0, n - 1), gruppi[n - 1], keySignature, tonic, isMinor);
+    };
+
+    const somma = (a: EsitoVeto, b: EsitoVeto): EsitoVeto => ({
+      quante: a.quante + b.quante,
+      errori: a.errori + b.errori,
+      avvisi: a.avvisi + b.avvisi,
+      licenze: a.licenze + b.licenze,
+      regole: [...a.regole, ...b.regole],
+    });
+
+    const anello = (p: Passo): Anello => ({ v: p.voicing, tn: p.tones, rv: p.inv });
+
+    /** Il costo di scrivere l'accordo `i` come (v, rv): indietro E avanti. */
+    const costo = (i: number, v: SATBVoicing, rv: number): EsitoVeto => {
+      const qui: Anello = { v, tn: passi[i].tones, rv };
+      const indietro: Anello[] = [];
+      if (i >= 2) indietro.push(anello(passi[i - 2]));
+      if (i >= 1) indietro.push(anello(passi[i - 1]));
+      indietro.push(qui);
+      const avanti: Anello[] = [];
+      if (i + 1 < passi.length) {
+        if (i >= 1) avanti.push(anello(passi[i - 1]));
+        avanti.push(qui);
+        avanti.push(anello(passi[i + 1]));
+      }
+      return somma(giudicaCatena(indietro), avanti.length > 0 ? giudicaCatena(avanti) : giudicaCatena([]));
+    };
+
+    for (let i = 0; i < passi.length; i++) {
+      const p = passi[i];
+      // L'ultimo accordo non ha un «dopo»: per lui il ripasso non saprebbe niente di nuovo.
+      if (i === passi.length - 1) continue;
+      // Con soprano E basso dati non c'è disposizione da scegliere: le voci interne sole
+      // non fanno una ridisposizione, e ci pensa già il veto.
+      if (p.fixedSoprano != null && p.fixedBass != null) continue;
+
+      // SI RIPASSA SOLO DOVE C'È UN ERRORE VERO. Non basta che ci sia «qualcosa»: una
+      // licenza già concessa, in un testo finito e sano, non è un guasto da riparare. Provato
+      // a innescare anche sulle licenze e sugli avvisi: «Cantata 7» passava da ZERO errori a
+      // SEI — il ripasso rimetteva mano a musica pulita e la rompeva.
+      const attuale = costo(i, p.voicing, p.inv);
+      if (attuale.errori === 0) continue;
+
+      // I rivolti da riprovare sono quelli che il generatore stesso si sarebbe concessi:
+      // se il rivolto è dell'utente resta suo.
+      const rivolti = [p.inv];
+      if (p.chord.inversion == null || p.chord.inversionIsSuggestion) {
+        for (let k = 0; k < Math.min(p.tones.length, 4); k++) if (k !== p.inv) rivolti.push(k);
+      }
+      const prevP = i >= 1 ? passi[i - 1] : null;
+      const prevSet = prevP ? prevP.voicing : p.voicing;
+      const prev7 = prevP && prevP.tones.length >= 4 ? toneToMidiPc(prevP.tones[3]) : undefined;
+
+      const alternative = generaCandidati({
+        tones: p.tones, inv: p.inv, rivoltiDaProvare: rivolti,
+        prevVoicing: prevSet, inCarica: p.voicing, rules,
+        fixedSoprano: p.fixedSoprano, fixedBass: p.fixedBass,
+        tonicPc: tonicPcVal, prevSeventhPc: prev7, isLast: p.isLast,
+        styleCtx: config.styleProfile
+          ? { styleProfile: config.styleProfile, currentDegree: degreeToRoman(p.degree, isMinor), currentInversion: p.inv }
+          : {},
+      });
+      if (alternative.length === 0) continue;
+
+      // In ordine di GUSTO, come nel veto: il punteggio stilistico fa la fila, il checker
+      // dice chi passa. Ma qui il gusto si misura anche sull'accordo DOPO.
+      const punti = new Map<Proposta, number>();
+      for (const c of alternative) {
+        punti.set(c, scoreVoicing({
+          curr: c.v, prev: prevSet, prevPrev: i >= 2 ? passi[i - 2].voicing : null,
+          rules, tonicPc: tonicPcVal, tones: p.tones,
+          ...(config.styleProfile
+            ? { styleProfile: config.styleProfile, currentDegree: degreeToRoman(p.degree, isMinor), currentInversion: c.inv }
+            : {}),
+        }));
+      }
+      alternative.sort((a, b) => (punti.get(a) ?? 0) - (punti.get(b) ?? 0));
+
+      // E si cambia solo per TOGLIERE UN ERRORE. La finestra del ripasso è di tre accordi
+      // messi in posti convenzionali: sugli errori (parallele, intervalli, incroci) la sua
+      // risposta è la stessa che darà il brano intero, sugli avvisi no. Barattare un errore
+      // con due avvisi qui vorrebbe dire fidarsi di una misura che in questa cornice non
+      // regge.
+      let meglio: Proposta | null = null;
+      let meglioEsito = attuale;
+      for (const cand of alternative.slice(0, 40)) {
+        if (cand.v.soprano === p.voicing.soprano && cand.v.alto === p.voicing.alto
+          && cand.v.tenor === p.voicing.tenor && cand.v.bass === p.voicing.bass) continue;
+        const e = costo(i, cand.v, cand.inv);
+        // Per SCOMODARE la scrittura serve un errore in meno. Ma una volta deciso di
+        // cambiare, fra due strade che tolgono lo stesso errore si prende la più pulita:
+        // lì `confronta` (errori, poi avvisi, poi licenze) è al suo posto.
+        const megliora = meglio == null
+          ? (e.errori < meglioEsito.errori && e.avvisi <= attuale.avvisi)
+          : confronta(e, meglioEsito) < 0;
+        if (megliora) { meglio = cand; meglioEsito = e; }
+        if (meglioEsito.quante === 0 && meglioEsito.licenze === 0) break;
+      }
+      if (!meglio) continue;
+
+      // Si riscrive: le note dell'accordo, e le violazioni orizzontali che lo riguardano.
+      p.voicing = meglio.v;
+      p.inv = meglio.inv;
+      contiVeto.ripassati++;
+    }
+
+    // Le note si riscrivono in blocco alla fine: ogni accordo occupa un tratto contiguo di
+    // `allNotes`, e `noteStart` dice dove comincia.
+    if (contiVeto.ripassati > 0) {
+      for (let i = passi.length - 1; i >= 0; i--) {
+        const p = passi[i];
+        const fine = i + 1 < passi.length ? passi[i + 1].noteStart : allNotes.length;
+        const nuove = voicingToStaffNotes(p.voicing, p.chord.measure, p.chord.beat, p.durationName, p.tones, p.inv, displayKeySignature, battutePerMisura);
+        allNotes.splice(p.noteStart, fine - p.noteStart, ...nuove);
+      }
+      // E le violazioni si rifanno da capo sui voicing definitivi — anche le VERTICALI,
+      // che di un accordo ridisposto parlano di una disposizione che non esiste più.
+      allViolations.length = 0;
+      for (let i = 0; i < passi.length; i++) {
+        const q = passi[i];
+        if (i >= 1) allViolations.push(...detectViolations(passi[i - 1].voicing, q.voicing, q.chord.measure, q.chord.beat, rules));
+        const v = q.voicing;
+        if (v.soprano - v.alto > 12) allViolations.push({ type: 'spacing', description: 'Soprano-Alto exceeds an octave', measure: q.chord.measure, beat: q.chord.beat, voices: ['soprano', 'alto'] });
+        if (v.alto - v.tenor > 12) allViolations.push({ type: 'spacing', description: 'Alto-Tenor exceeds an octave', measure: q.chord.measure, beat: q.chord.beat, voices: ['alto', 'tenor'] });
+        if (!rules.allowCrossing) {
+          if (v.bass > v.tenor) allViolations.push({ type: 'voice-crossing', description: 'Bass crosses above tenor', measure: q.chord.measure, beat: q.chord.beat, voices: ['bass', 'tenor'] });
+          if (v.tenor > v.alto) allViolations.push({ type: 'voice-crossing', description: 'Tenor crosses above alto', measure: q.chord.measure, beat: q.chord.beat, voices: ['tenor', 'alto'] });
+          if (v.alto > v.soprano) allViolations.push({ type: 'voice-crossing', description: 'Alto crosses above soprano', measure: q.chord.measure, beat: q.chord.beat, voices: ['alto', 'soprano'] });
+        }
+      }
+    }
   }
 
   return { notes: allNotes, violations: allViolations, modulationContexts };
