@@ -2453,8 +2453,18 @@ export function realizeChorale(
     if (isLast && chord.inversion == null) {
       inv = 0;
     }
-    // PAC: last chord is I in root position → soprano should be on tonic
-    if (isLast && parsed.degree === 0 && inv === 0 && fixedSoprano == null) {
+    // PAC: last chord is I in root position → soprano should be on tonic.
+    //
+    // MA NON SE IL SOPRANO PORTA LA SETTIMA. Una cadenza perfetta è una preferenza; una
+    // settima che non risolve è un difetto, e fra i due vince l'obbligo. Inchiodando il
+    // soprano sulla tonica, la settima che sta lì non può più scendere di grado: sulla
+    // progressione `I – IV – V7 – I` provata con tutte e sette le disposizioni iniziali, è
+    // esattamente il caso che restava sbagliato — la settima al soprano andava a Do invece
+    // che a Mi. La soluzione giusta la scrive l'utente a mano: `V65` col Fa al soprano che
+    // scende sul Mi, e la cadenza resta perfetta lo stesso perché la tonica ce l'ha il basso.
+    const settimaAlSoprano = prevVoicing != null && prevSeventhPc != null
+      && ((prevVoicing.soprano % 12) + 12) % 12 === prevSeventhPc;
+    if (isLast && parsed.degree === 0 && inv === 0 && fixedSoprano == null && !settimaAlSoprano) {
       // Find tonic MIDI in soprano range closest to previous soprano
       const tonicCandidates = pitchesInRange(tones[0], VOICE_RANGES.soprano);
       if (tonicCandidates.length > 0 && prevVoicing) {
