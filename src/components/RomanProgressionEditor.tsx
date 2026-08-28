@@ -556,6 +556,23 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           }));
       }
 
+      // L'ACCORDO CHE PRECEDE, quando si riparte da metà brano. Senza, il generatore
+      // sceglieva il registro come se cominciasse da zero e la giuntura non la controllava
+      // nessuno: sul «Delachi n 12» ripartito dalla misura 3 usciva un moto parallelo di
+      // tutte e quattro le voci con un salto di tredicesima al basso.
+      if (insertMeasure > 0 && existingNotes && existingNotes.length > 0) {
+        const primaDelTaglio = existingNotes.filter(n =>
+          n && !(n as any).isRest && ((n as any).measureIndex ?? 0) < insertMeasure);
+        if (primaDelTaglio.length > 0) {
+          const ultimoTick = Math.max(...primaDelTaglio.map(n => (n as any).startTick ?? 0));
+          const ultimo = primaDelTaglio.filter(n => ((n as any).startTick ?? 0) === ultimoTick);
+          // Solo se l'accordo tenuto ha davvero tutte e quattro le voci: con meno, il
+          // seme direbbe una cosa falsa sulla condotta.
+          const voci = new Set(ultimo.map(n => (n as any).voice ?? 1));
+          if (voci.size === 4) config.notePrecedenti = ultimo;
+        }
+      }
+
       resetNoteIdCounter();
       const result = realizeChorale(progression, config);
 
@@ -567,7 +584,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       setGeneratedNotes(null);
       setViolations([]);
     }
-  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, vetoRegole, passoIndietro, ripasso, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition, insertMeasure]);
+  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, vetoRegole, passoIndietro, ripasso, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition, insertMeasure, existingNotes]);
 
   // Apply to editor
   const handleApply = useCallback(() => {

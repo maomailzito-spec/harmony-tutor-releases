@@ -145,6 +145,19 @@ export type ChoralConfig = {
    *  per il perché il checker si interroghi solo su una parte delle sue regole.
    *  Attivo di default; `false` riporta al comportamento precedente. */
   vetoRegole?: boolean;
+  /** L'ACCORDO CHE PRECEDE, quando si riparte da metà brano.
+   *
+   *  Rigenerando «dalla misura 5 in poi», il generatore partiva dal SILENZIO: sceglieva il
+   *  registro come se cominciasse un brano da zero, e la giuntura non la controllava
+   *  nessuno. Sul «Delachi n 12» ripartito dalla misura 3 usciva un moto parallelo di tutte
+   *  e quattro le voci (`R-13`) con un salto di tredicesima al basso.
+   *
+   *  Qui si passano le QUATTRO NOTE dell'ultimo accordo tenuto, così com'erano scritte:
+   *  servono sia alla condotta (il primo accordo nuovo si lega a quello vecchio) sia al
+   *  veto, che le rimette in finestra e giudica il passaggio come un passaggio qualsiasi.
+   *  Si passano le note vere, non un voicing, perché la GRAFIA cambia la risposta di
+   *  `R-06` (quarta eccedente) e `R-18` (scontro cromatico). */
+  notePrecedenti?: StaffNote[];
   /** IL RIPASSO: finito di scrivere, il generatore ripercorre la progressione e riprova le
    *  disposizioni di ogni accordo — questa volta conoscendo anche l'accordo DOPO, che
    *  scrivendo da sinistra a destra non poteva conoscere. Attivo di default; `false` serve
@@ -2319,7 +2332,23 @@ export function realizeChorale(
   const passi: Passo[] = [];
   const allViolations: ChoralViolation[] = [];
   const modulationContexts: ModulationContext[] = [];
+  // IL SEME DELLA RIPARTENZA: se si riparte da metà brano, il primo accordo nuovo non
+  // nasce dal silenzio ma dall'ultimo accordo tenuto. `prevNoteDate` conserva le note
+  // VERE (grafia compresa) finché non c'è un `prevTones` da cui ricostruirle.
+  const dellaVoce = (nn: StaffNote[], v: number): number | null => {
+    const t = nn.find(n => Number((n as any).voice) === v && !(n as any).isRest);
+    return t ? Number((t as any).midi) : null;
+  };
+  let prevNoteDate: StaffNote[] | null = null;
   let prevVoicing: SATBVoicing | null = null;
+  if (config.notePrecedenti && config.notePrecedenti.length >= 4) {
+    const s1 = dellaVoce(config.notePrecedenti, 1), a1 = dellaVoce(config.notePrecedenti, 2);
+    const t1 = dellaVoce(config.notePrecedenti, 3), b1 = dellaVoce(config.notePrecedenti, 4);
+    if (s1 != null && a1 != null && t1 != null && b1 != null) {
+      prevVoicing = { soprano: s1, alto: a1, tenor: t1, bass: b1 };
+      prevNoteDate = config.notePrecedenti;
+    }
+  }
   let prevPrevVoicing: SATBVoicing | null = null;
   let prevSeventhPc: number | null = null;
   // Note dell'accordo precedente COM'È STATO SCRITTO: al veto serve la grafia vera, e la
@@ -2943,21 +2972,32 @@ export function realizeChorale(
     // si pagano solo quando il veto scatta, e il passo indietro solo quando le alternative
     // non bastano — cioè di rado.
     const vociPrimaDelVeto = voicing;
-    if (voicing && prevVoicing && prevTones && config.vetoRegole !== false) {
+    if (voicing && prevVoicing && (prevTones || prevNoteDate) && config.vetoRegole !== false) {
       // La finestra è di tre accordi quando ci sono — `R-06` e `R-17a` parlano di un salto
       // E della sua risoluzione, che in due accordi non si vede. I posti sono movimenti
       // forti consecutivi (b1, b3 della prima battuta, b1 della seconda) così che nessuna
       // regola legata al tempo forte cambi risposta per colpa della collocazione.
       const noteDi = (v: SATBVoicing, tn: ScaleDegreeNote[], rv: number, m: number, b: number) =>
         voicingToStaffNotes(v, m, b, 'half', tn, rv, keySignature, 4);
-      const finestra = (prevPrev: SATBVoicing | null, prev: SATBVoicing, prevTn: ScaleDegreeNote[], prevRv: number) => {
+      // Le note TENUTE di una ripartenza non hanno `tones` da cui ricostruirle: si
+      // rimettono in scena così come sono scritte, cambiando solo dove cadono. È anche più
+      // fedele che ricostruirle, perché la grafia resta quella vera del brano.
+      const riposiziona = (nn: StaffNote[], m: number, b: number): StaffNote[] =>
+        nn.map(n => ({
+          ...n, id: nextNoteId(), measureIndex: m, beat: b, duration: 'half' as any,
+          startTick: ((m * 4) + (b - 1)) * TICKS_PER_QUARTER,
+          durationTicks: 2 * TICKS_PER_QUARTER,
+        }));
+      const notePrec = (v: SATBVoicing, tn: ScaleDegreeNote[] | null, rv: number, m: number, b: number) =>
+        tn ? noteDi(v, tn, rv, m, b) : riposiziona(prevNoteDate!, m, b);
+      const finestra = (prevPrev: SATBVoicing | null, prev: SATBVoicing, prevTn: ScaleDegreeNote[] | null, prevRv: number) => {
         const passato: StaffNote[][] = [];
         if (prevPrev && prevPrevTones) {
           passato.push(noteDi(prevPrev, prevPrevTones, prevPrevInvUsed, 0, 1));
-          passato.push(noteDi(prev, prevTn, prevRv, 0, 3));
+          passato.push(notePrec(prev, prevTn, prevRv, 0, 3));
           return { passato, m: 1, b: 1 };
         }
-        passato.push(noteDi(prev, prevTn, prevRv, 0, 1));
+        passato.push(notePrec(prev, prevTn, prevRv, 0, 1));
         return { passato, m: 0, b: 3 };
       };
 
@@ -3029,7 +3069,10 @@ export function realizeChorale(
         // da rimettere in discussione (non la prima coppia, e non con basso dato: lì il basso
         // è scritto e cambiarlo vorrebbe dire riscrivere l'esercizio).
         const chordPrima = i >= 1 ? sortedProg[i - 1] : null;
-        if (config.passoIndietro !== false && menoPeggioEsito.quante > 0 && chordPrima && prevPrevVoicing && prevPrevTones && prevChordNoteStart >= 0) {
+        // `prevTones` serve a riscrivere l'accordo precedente. Se manca, quell'accordo è uno
+        // di quelli TENUTI da una ripartenza: non è nostro da riscrivere, e il passo
+        // indietro si ferma prima della giuntura invece di scavalcarla.
+        if (config.passoIndietro !== false && menoPeggioEsito.quante > 0 && chordPrima && prevTones && prevPrevVoicing && prevPrevTones && prevChordNoteStart >= 0) {
           const fixedSopPrima = sopranoMap.get(`${chordPrima.measure}:${chordPrima.beat}`);
           const fixedBasPrima = bassMap.get(`${chordPrima.measure}:${chordPrima.beat}`);
           const fPrima = finestra(prevPrevVoicing, prevPrevVoicing, prevPrevTones, prevPrevInvUsed);
