@@ -3141,6 +3141,31 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const tracce = (latestAccompanimentTracks.current || []).flatMap(t => (t.notes || [])) as any[];
         return [...coro, ...tracce].some(n => selectedNoteIds.has(n.id) && Array.isArray(n.chordPcs) && n.chordPcs.length >= 4);
     }, [selectedNoteIds]);
+    /**
+     * QUANTE DISPOSIZIONI HA IL GIRO, quando la selezione è parziale.
+     *
+     * Il pulsante «Disposizione» mostrava a destra `auto / S:R / S:3 / S:5`, cioè quale nota
+     * sta al soprano. Con le voci bloccate quella scritta MENTE: il soprano può non muoversi
+     * affatto, e le posizioni non sono quattro ma quante ne consente l'accordo. Qui si conta
+     * il giro vero, e il pulsante dice a che punto è invece di inventare un'etichetta.
+     * `null` = selezione piena, dove vale ancora il ciclo delle sette disposizioni.
+     */
+    const revoiceTotali = useMemo<number | null>(() => {
+        if (selectedNoteIds.size === 0) return null;
+        const coro = (latestRawNotes.current as any[]) || [];
+        const sel = coro.filter(n => selectedNoteIds.has(n.id) && !n.isRest);
+        if (sel.length === 0) return null;
+        const primoTick = Math.min(...sel.map((n: any) => Number(n.startTick ?? 0)));
+        const vociScelte = new Set(sel.filter((n: any) => Number(n.startTick ?? 0) === primoTick)
+            .map((n: any) => Number(n.voice)));
+        if (vociScelte.size >= 4) return null;
+        const accordo = coro.filter((n: any) =>
+            Number(n.startTick ?? 0) === primoTick && !n.isRest && [1, 2, 3, 4].includes(Number(n.voice)));
+        if (accordo.length !== 4) return null;
+        const n = disposizioniPossibili(accordo as any, vociScelte, null).length;
+        return n > 1 ? n : null;
+    }, [selectedNoteIds]);
+
     const anyVisibleGrandstaff = visibleAccompanimentTracks.some(
         t => (t.staffMode ?? 'grandstaff') === 'grandstaff'
     );
@@ -18873,6 +18898,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         revoiceDispIdx={revoiceDispIdx}
                         hasSelectedNotes={selectedNoteIds.size > 0}
                         selectedNotesHave7th={selectedNotesHave7th}
+                        revoiceTotali={revoiceTotali}
                         suTracciaAcc={activeStaffArea === 'accompaniment' || hasVisibleAccompaniment}
                         transformMode={transformMode}
                         onToggleTransformMode={() => setTransformMode(m => m === 'tonal' ? 'real' : 'tonal')}

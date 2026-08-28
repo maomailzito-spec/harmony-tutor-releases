@@ -149,6 +149,8 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     revoiceDispIdx?: number;
     hasSelectedNotes?: boolean;
     selectedNotesHave7th?: boolean;
+    /** Quante disposizioni ha il giro quando la selezione è PARZIALE; `null` = giro delle sette. */
+    revoiceTotali?: number | null;
     suTracciaAcc?: boolean;
     /** Trasformazioni melodiche: agiscono sulla selezione. */
     transformMode?: 'tonal' | 'real';
@@ -171,7 +173,7 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
     agganciata: agganciataProp, ancoraggio, onToggleAggancio, onScriviTestoAlCursore,
     durata, onSetDurata, onTogglePausa, onTogglePunto,
     accPattern, onSetAccPattern, accLetRing, onToggleAccLetRing, suTracciaAcc,
-    arpeggioGrid, onSetArpeggioGrid, onRevoiceChord, revoiceDispIdx, hasSelectedNotes, selectedNotesHave7th,
+    arpeggioGrid, onSetArpeggioGrid, onRevoiceChord, revoiceDispIdx, hasSelectedNotes, selectedNotesHave7th, revoiceTotali,
     transformMode, onToggleTransformMode, onMelodicTransform,
     onToggleTie, onToggleBeam, onFlipStem, alterazione, onSetAlterazione, onToggleCorona,
     modoCambioTonalita, onSetModoCambioTonalita, sensibileAutomatica, onSetSensibileAutomatica,
@@ -593,9 +595,14 @@ const DynamicsPalettePanel: React.FC<DynamicsPalettePanelProps & {
                                 >
                                     <span>{t('pal_arp_voicing', { defaultValue: 'Disposizione' })}</span>
                                     <span className="font-mono opacity-80">
-                                        ⟳ {(selectedNotesHave7th
-                                            ? ['auto', 'S:7', 'S:3', 'S:5', 'S:R']
-                                            : ['auto', 'S:R', 'S:3', 'S:5'])[(revoiceDispIdx ?? 0) % (selectedNotesHave7th ? 5 : 4)]}
+                                        {/* A voci bloccate l'etichetta «S:3» direbbe una cosa
+                                            falsa — il soprano può non muoversi. Lì si dice a
+                                            che punto è del giro, che è l'unica cosa vera. */}
+                                        ⟳ {revoiceTotali != null
+                                            ? `${((revoiceDispIdx ?? 0) % revoiceTotali) + 1}/${revoiceTotali}`
+                                            : (selectedNotesHave7th
+                                                ? ['auto', 'S:7', 'S:3', 'S:5', 'S:R']
+                                                : ['auto', 'S:R', 'S:3', 'S:5'])[(revoiceDispIdx ?? 0) % (selectedNotesHave7th ? 5 : 4)]}
                                     </span>
                                 </button>
                                 {suTracciaAcc && (<>
