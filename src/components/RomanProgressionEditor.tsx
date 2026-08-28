@@ -350,6 +350,11 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
 
   // Style profile (adaptive learning)
   const [useStyleProfile, setUseStyleProfile] = useState(true);
+  // Come lavora il generatore. Accesi di default: spegnerli serve a confrontare a orecchio
+  // cosa aggiunge ciascuno dei tre stadi.
+  const [vetoRegole, setVetoRegole] = useState(true);
+  const [passoIndietro, setPassoIndietro] = useState(true);
+  const [ripasso, setRipasso] = useState(true);
   const [styleProfile, setStyleProfile] = useState<StyleProfile | null>(() => loadStyleProfile());
   const [learnFeedback, setLearnFeedback] = useState<string | null>(null);
 
@@ -520,6 +525,9 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           doubleRoot,
         },
         autoSevenths,
+        vetoRegole,
+        passoIndietro,
+        ripasso,
         initialDisposition: initialDisposition as any,
         styleProfile: useStyleProfile ? styleProfile : null,
       };
@@ -559,7 +567,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       setGeneratedNotes(null);
       setViolations([]);
     }
-  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition, insertMeasure]);
+  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, vetoRegole, passoIndietro, ripasso, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition, insertMeasure]);
 
   // Apply to editor
   const handleApply = useCallback(() => {
@@ -1012,6 +1020,26 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={autoSevenths} onChange={() => setAutoSevenths(v => !v)} className="accent-cyan-500" />
                 {t('chorale_auto7')}
+              </label>
+            </div>
+          </div>
+
+          {/* Come lavora il generatore: i tre stadi, per poterli confrontare a orecchio.
+              Il passo indietro e il ripasso sono parti del veto e senza di lui non girano. */}
+          <div className="mb-4">
+            <label className="block text-xs text-gray-300 mb-1">{t('chorale_engine_controls_label')}</label>
+            <div className="flex flex-wrap gap-4 text-xs text-slate-200">
+              <label className="flex items-center gap-1 cursor-pointer" title={t('chorale_veto_rules_hint')}>
+                <input type="checkbox" checked={vetoRegole} onChange={() => setVetoRegole(v => !v)} className="accent-cyan-500" />
+                {t('chorale_veto_rules')}
+              </label>
+              <label className={`flex items-center gap-1 ${vetoRegole ? 'cursor-pointer' : 'cursor-default text-gray-500'}`} title={t('chorale_backstep_hint')}>
+                <input type="checkbox" checked={vetoRegole && passoIndietro} disabled={!vetoRegole} onChange={() => setPassoIndietro(v => !v)} className="accent-cyan-500" />
+                {t('chorale_backstep')}
+              </label>
+              <label className={`flex items-center gap-1 ${vetoRegole ? 'cursor-pointer' : 'cursor-default text-gray-500'}`} title={t('chorale_ripasso_hint')}>
+                <input type="checkbox" checked={vetoRegole && ripasso} disabled={!vetoRegole} onChange={() => setRipasso(v => !v)} className="accent-cyan-500" />
+                {t('chorale_ripasso')}
               </label>
             </div>
           </div>
