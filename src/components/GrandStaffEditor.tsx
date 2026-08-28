@@ -41,6 +41,7 @@ import { usePlayback } from '../hooks/usePlayback';
 import type { MetronomeUnit } from '../hooks/usePlayback';
 import { useNoteEditor } from '../hooks/useNoteEditor';
 import { applyHarmonyRules, getKeySignature, calculateNoteBeats, getRomanAnalysis, getRomanAnalysisDebugSnapshot, getNotePropertiesFromDiatonicPosition, getNotePropertiesFromMidi, getChordSymbol, calculateAccidental, calculateAccidentalWithMeasureContext, ticksToBeats, beatsToTicks, rebuildMeasureTimelineForVoice, normalizeNotePitchFieldsWithKey, identifyChordCandidates, calculateRomanFromChordInfo, computeFiguredBassFromNotes, leadingTonePcInMinor, FIGURED_BASS_UI_OPTIONS } from '../utils/musicTheory';
+import { disposizioniPossibili, grafiaPerClasse, type Disposizione } from '../engine/disposizioniSelezione';
 import { parseChordSymbol, buildChordSATBNotes, revoiceChordAtTick, buildMeasureAccidentals, nextRevoicing, TRIAD_REVOICE_CYCLE, TRIAD_REVOICE_LABELS, SEVENTH_REVOICE_CYCLE, SEVENTH_REVOICE_LABELS, chordAtTickHas7th } from '../utils/parseChordSymbol';
 import { transposeMelody, invertMelody, retrogradeMelody, retrogradeInvertMelody, spelledNoteName, keyAccidentalNotes, type TransformMode } from '../utils/melodicTransforms';
 import { computeAccChordAnalysis } from '../utils/accChordAnalysis';
@@ -4966,6 +4967,69 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 }
             }
         } catch { /* ignora */ }
+
+        // ── SELEZIONE PARZIALE: si muovono SOLO le voci scelte ────────────────────
+        //
+        // Il gesto è quello chiesto dall'utente: «se vedo un passaggio che non mi convince,
+        // seleziono, decido quali parti devono cambiare delle quattro voci e vado muovendole
+        // finché non trovo la disposizione adeguata». La selezione È già l'affermazione
+        // «muovi questi»: se ha preso solo contralto e tenore, il soprano e il basso non si
+        // spostano di un semitono.
+        //
+        // Il ciclo delle sette disposizioni non serve qui — muove tutto e vale solo per gli
+        // accordi cifrati, che portano `chordPcs`. Le disposizioni si enumerano invece dalle
+        // note SCRITTE, e sono molte di più: su un accordo di La maggiore, 87 con tutte le
+        // voci libere e quattro col solo tenore. La prima è sempre com'è adesso, così
+        // scorrendo ci si allontana per gradi invece che saltare.
+        //
+        // Il checker non entra: l'analisi gira già sullo spartito e marca gli errori mentre
+        // si cicla, quindi il giudizio l'utente ce l'ha davanti senza bisogno di ripeterglielo.
+        const vociSelPerTick = new Map<number, Set<number>>();
+        for (const t of sortedTicks) {
+            vociSelPerTick.set(t, new Set((tickGroups.get(t) || []).map((n: any) => Number(n.voice))));
+        }
+        const selezioneParziale = sortedTicks.some(t => (vociSelPerTick.get(t)?.size ?? 0) < 4);
+        if (selezioneParziale) {
+            const idx = revoiceDispIdx + 1;
+            const mosse = new Map<string, any>();
+            let prec: Disposizione | null = prevVoicing
+                ? { 1: prevVoicing.soprano, 2: prevVoicing.alto, 3: prevVoicing.tenor, 4: prevVoicing.bass }
+                : null;
+            for (const tick of sortedTicks) {
+                const noteAccordo = allNotes.filter((n: any) =>
+                    Number(n.startTick) === tick && !n.isRest && [1, 2, 3, 4].includes(Number(n.voice)));
+                if (noteAccordo.length !== 4) continue;
+                const libere = vociSelPerTick.get(tick) ?? new Set<number>();
+                const lista = disposizioniPossibili(noteAccordo as any, libere, prec);
+                if (lista.length <= 1) continue;
+                const scelta = lista[idx % lista.length];
+                const perClasse = grafiaPerClasse(noteAccordo as any);
+                for (const v of [1, 2, 3, 4] as (1 | 2 | 3 | 4)[]) {
+                    const orig: any = noteAccordo.find((n: any) => Number(n.voice) === v);
+                    if (!orig || Number(orig.midi) === scelta[v]) continue;
+                    // La nota nuova si ottiene TRASPORTANDO DI OTTAVE quella che già porta
+                    // quella classe d'altezza: così lettera, alterazione e grafia restano
+                    // esattamente quelle scritte nel brano, senza ricostruirle.
+                    const fonte: any = perClasse.get(((scelta[v] % 12) + 12) % 12) ?? orig;
+                    const k = Math.round((scelta[v] - Number(fonte.midi)) / 12);
+                    mosse.set(orig.id, {
+                        ...fonte,
+                        id: orig.id, voice: orig.voice, clef: orig.clef,
+                        measureIndex: orig.measureIndex, beat: orig.beat,
+                        startTick: orig.startTick, duration: orig.duration,
+                        durationTicks: orig.durationTicks,
+                        midi: scelta[v],
+                        octave: Number(fonte.octave) + k,
+                        position: Number(fonte.position) + 7 * k,
+                    });
+                }
+                prec = scelta;
+            }
+            if (mosse.size === 0) return;
+            setRevoiceDispIdx(idx);
+            setRawNotes(prev => (prev || []).map((n: any) => mosse.get(n.id) ?? n));
+            return;
+        }
 
         // Avanza alla prossima posizione DISTINTA (per-tipo, niente duplicati) usando
         // il primo accordo selezionato come sonda; poi applica quella disposizione a
