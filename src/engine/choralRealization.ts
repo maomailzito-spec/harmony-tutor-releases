@@ -2981,7 +2981,9 @@ export function realizeChorale(
         }
         for (const cand of alternative.slice(0, TETTO)) {
           const e = giudica(cand.v, cand.inv);
-          if (e.quante === 0) { menoPeggio = cand; menoPeggioEsito = e; break; }
+          // «Pulita» vuol dire anche SENZA LICENZE: un'eccezione è ammessa, ma se c'è una
+          // strada che non ne ha bisogno è quella la strada.
+          if (e.quante === 0 && e.licenze === 0) { menoPeggio = cand; menoPeggioEsito = e; break; }
           // `confronta` mette gli errori prima degli avvisi: un'alternativa non si prende
           // solo perché ha MENO violazioni, se quelle poche sono più gravi.
           if (confronta(e, menoPeggioEsito) < 0) { menoPeggio = cand; menoPeggioEsito = e; }
@@ -3015,7 +3017,8 @@ export function realizeChorale(
             // La sostituta deve reggere il veto contro l'accordo ANCORA prima: altrimenti si
             // sposta il guasto indietro di una casella invece di toglierlo.
             const nuoveNotePrima = noteDi(prima.v, prevTones, prima.inv, fPrima.m, fPrima.b);
-            if (veto(fPrima.passato, nuoveNotePrima, keySignature, tonic, isMinor).quante > 0) continue;
+            const esitoPrima = veto(fPrima.passato, nuoveNotePrima, keySignature, tonic, isMinor);
+            if (esitoPrima.quante > 0 || esitoPrima.licenze > 0) continue;
             // Con lei davanti, questo accordo si riscrive da capo.
             const fOra = finestra(prevPrevVoicing, prima.v, prevTones, prima.inv);
             const oraCand = generaCandidati({
@@ -3027,7 +3030,8 @@ export function realizeChorale(
             for (const c of oraCand) puntiOra.set(c, gusto(c, prima.v, prevPrevVoicing, tones, parsed.degree));
             oraCand.sort((a, b) => (puntiOra.get(a) ?? 0) - (puntiOra.get(b) ?? 0));
             for (const ora of oraCand.slice(0, TETTO_AVANTI)) {
-              if (giudica(ora.v, ora.inv, fOra).quante === 0) { trovato = { prima, ora }; break; }
+              const eOra = giudica(ora.v, ora.inv, fOra);
+              if (eOra.quante === 0 && eOra.licenze === 0) { trovato = { prima, ora }; break; }
             }
             if (trovato) break;
           }
@@ -3050,7 +3054,7 @@ export function realizeChorale(
             prevVoicing = trovato.prima.v;
             prevInvUsed = trovato.prima.inv;
             menoPeggio = trovato.ora;
-            menoPeggioEsito = { quante: 0, errori: 0, avvisi: 0, regole: [] };
+            menoPeggioEsito = { quante: 0, errori: 0, avvisi: 0, licenze: 0, regole: [] };
             contiVeto.passiIndietro++;
           }
         }

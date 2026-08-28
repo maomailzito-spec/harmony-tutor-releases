@@ -124,11 +124,56 @@ export type EsitoVeto = {
   errori: number;
   /** E quante AVVISI. */
   avvisi: number;
+  /** Quante LICENZE si è preso — le eccezioni del checker. Non sono violazioni: sono cose
+   *  ammesse. Ma per chi SCRIVE non sono gratis; vedi `confronta`. */
+  licenze: number;
   /** Quali, per poterlo dire a chi guarda (diagnostica, non logica). */
   regole: string[];
 };
 
-const NIENTE: EsitoVeto = { quante: 0, errori: 0, avvisi: 0, regole: [] };
+const NIENTE: EsitoVeto = { quante: 0, errori: 0, avvisi: 0, licenze: 0, regole: [] };
+
+/**
+ * ── LE ECCEZIONI SONO GRATIS PER CHI ANALIZZA, NON PER CHI SCRIVE ────────────────────────
+ *
+ * Il checker emette anche delle ECCEZIONI (`EXC-*`), che non sono violazioni ma il contrario:
+ * dicono «questo si potrebbe segnalare, ma qui è ammesso». Il veto le ha sempre ignorate, ed
+ * era giusto — non c'è niente da vietare.
+ *
+ * Ma ignorarle del tutto le rende GRATIS, e una licenza gratis smette di essere una licenza.
+ * Il caso che l'ha mostrato: la settima del `V7` che invece di scendere sul Mi sale al Sol.
+ * Il checker non protesta, perché il Mi c'è in un'altra voce — è la «risoluzione trasferita»,
+ * `EXC-7m01`, un'eccezione vera e che deve continuare a esistere. Ma la settima del V risolve
+ * sulla TERZA della tonica, e in un accordo di tonica completo quella terza c'è sempre:
+ * l'eccezione si applica quindi a ogni `V7 → I`, e il generatore la usava come regola.
+ * Provato su sette armonizzazioni della stessa progressione, la settima risolveva davvero in
+ * un caso solo.
+ *
+ * Le parole dell'utente: «è un'eccezione che conferma la regola e va vista come tale. Il
+ * generatore la sta usando come regola. Un allievo non può sempre usare l'eccezione quando ci
+ * sono altre soluzioni; nello scrivere si userà quando è veramente necessario».
+ *
+ * Perciò le eccezioni non si vietano — si PAGANO. Ordinano dopo errori e avvisi: fra due
+ * strade altrimenti uguali vince quella che non si prende licenze, e la licenza resta
+ * disponibile quando non c'è altra strada.
+ *
+ * NON TUTTE, però. Provato contando ogni `EXC-*`: 265 errori invece di 232. Molte eccezioni
+ * non sono licenze da centellinare ma RICONOSCIMENTI che una cosa va bene — la quinta per
+ * moto retto fra `IV6` e `V6`, la tolleranza sulla sovrapposizione di voci, la seconda
+ * eccedente che porta alla sensibile. Farle pagare significa spingere il generatore a
+ * evitarle, e le evita facendo errori veri.
+ *
+ * Si pagano quelle della SETTIMA, che sono licenze nel senso stretto: dicono «la settima non
+ * ha risolto come doveva, ma qui passa». Sono esattamente quelle che un allievo non può usare
+ * come strada maestra.
+ */
+const LICENZE_DA_PAGARE = new Set<string>([
+  'EXC-7m01',              // risoluzione trasferita a un'altra voce
+  'EXC-7-TRANSFERRED-RES', // idem, altra forma
+  'EXC-7-TRANSFER',        // la settima passa a un'altra voce e risolve là
+  'EXC-7-STATIC',          // la settima resta ferma, reinterpretata come consonanza
+  'EXC-7-P4-TO7',          // sale di quarta verso un'altra settima
+]);
 
 /**
  * Fra due strade tutt'e due imperfette, quale è meno peggio.
@@ -143,10 +188,15 @@ const NIENTE: EsitoVeto = { quante: 0, errori: 0, avvisi: 0, regole: [] };
  * confrontano gli errori, e solo a parità gli avvisi. Un errore in più non si compra mai
  * con un numero qualsiasi di avvisi in meno.
  *
+ * E dopo gli avvisi vengono le LICENZE: un'eccezione non è un difetto, ma prendersela quando
+ * si poteva fare a meno è una scelta peggiore che non prendersela.
+ *
  * @returns negativo se `a` è preferibile, positivo se lo è `b`, zero se pari.
  */
 export function confronta(a: EsitoVeto, b: EsitoVeto): number {
-  return a.errori !== b.errori ? a.errori - b.errori : a.avvisi - b.avvisi;
+  if (a.errori !== b.errori) return a.errori - b.errori;
+  if (a.avvisi !== b.avvisi) return a.avvisi - b.avvisi;
+  return a.licenze - b.licenze;
 }
 
 /**
@@ -183,9 +233,17 @@ export function veto(
       { numerator: 4, denominator: 4 } as any, [], [], [], { partCount: 4 },
     );
     const regole: string[] = [];
-    let errori = 0, avvisi = 0;
+    let errori = 0, avvisi = 0, licenze = 0;
     for (const v of (res?.violations ?? []) as any[]) {
       const id = String(v?.ruleId ?? '');
+      // LE LICENZE. Si contano tutte, senza elenco: un'eccezione è per definizione qualcosa
+      // che si fa quando serve, e chi scrive deve poterne fare a meno se può.
+      if (v?.severity === 'exception') {
+        if (!LICENZE_DA_PAGARE.has(id)) continue;
+        const ids: string[] = Array.isArray(v?.noteIds) ? v.noteIds : [];
+        if (ids.some(x => idsInEsame.has(x))) { licenze++; regole.push(id); }
+        continue;
+      }
       if (!REGOLE_DI_VETO.has(id) && !SOLO_COME_ERRORE.has(id)) continue;
       if (SOLO_COME_ERRORE.has(id) && v?.severity !== 'error') continue;
       // Solo ciò che TOCCA l'accordo in esame: il resto è già scritto e conterebbe uguale
@@ -195,7 +253,8 @@ export function veto(
       regole.push(id);
       if (v?.severity === 'error') errori++; else avvisi++;
     }
-    return regole.length ? { quante: regole.length, errori, avvisi, regole } : NIENTE;
+    const quante = errori + avvisi;
+    return (quante || licenze) ? { quante, errori, avvisi, licenze, regole } : NIENTE;
   } catch {
     // Un checker che non risponde non deve impedire di generare: senza veto si torna al
     // comportamento di prima, che è imperfetto ma esiste.
