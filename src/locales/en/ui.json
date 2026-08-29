@@ -527,5 +527,13 @@
   "sel_voce": "Select the whole {{voce}} voice",
   "copia_voce": "Copy the whole {{voce}} voice",
   "sel_voce_vuota": "The {{voce}} voice is empty.",
-  "chorale_voice_off_unused": "Careful: {{voce}} is off and there are notes on the staff, but the engine did not take them into account — it chose the harmony ignoring them. It will keep them, and they will almost certainly clash with the other voices. To make them actually count, tick “Harmonise from an inner voice already written” and generate again."
+  "chorale_voice_off_unused": "Careful: {{voce}} is off and there are notes on the staff, but the engine did not take them into account — it chose the harmony ignoring them. It will keep them, and they will almost certainly clash with the other voices. To make them actually count, tick “Harmonise from an inner voice already written” and generate again.",
+  "chorale_who_decides": "The harmony is chosen by: {{chi}}",
+  "chorale_who_text": "the numeral box above",
+  "chorale_who_soprano": "the soprano",
+  "chorale_who_bass": "the bass",
+  "chorale_who_both": "the soprano and the bass together",
+  "chorale_who_inner": "the inner voice ({{voce}})",
+  "chorale_who_none": "nobody — type some numerals or tick a voice already written",
+  "chorale_text_wins": "The box TAKES PRECEDENCE: while it holds anything, the ticked voices are not read to choose the harmony (they still constrain the writing). Empty it to let them decide. Note: after every generation the box is filled with the result, so from the second time on it keeps regenerating that same progression."
 }

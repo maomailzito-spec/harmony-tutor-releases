@@ -526,6 +526,35 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
     }
   }, [progressionText, localTs, selectedDuration]);
 
+  /**
+   * `__htGeneratore()` — che cosa sta per usare davvero il pannello.
+   *
+   * Serve al caso «ho cambiato il motore e il risultato non cambia», che quasi sempre non è
+   * il motore: il riquadro dei gradi NASCE PIENO (`I - IV - V7 - I`) e ha la precedenza su
+   * tutto, e dopo ogni generazione il pannello ci riscrive dentro il risultato. Da lì in poi
+   * si rigenera sempre quella progressione, melodia e basso non vengono nemmeno letti.
+   */
+  useEffect(() => {
+    (window as any).__htGeneratore = () => {
+      const daTesto = progressionText.trim().length > 0;
+      // eslint-disable-next-line no-console
+      console.log({
+        'riquadro dei gradi': progressionText.trim() || '(vuoto)',
+        'CHI SCEGLIE L\'ARMONIA': daTesto
+          ? 'IL RIQUADRO — melodia e basso NON vengono letti. Svuotalo per farli contare.'
+          : (useInner && innerFromScore.length > 0) ? `la voce interna (${innerVoice === 2 ? 'contralto' : 'tenore'})`
+          : (useBass && bassFromScore.length > 0 && !(useMelody && sopranoFromScore.length > 0)) ? 'il basso'
+          : (useMelody && sopranoFromScore.length > 0) ? (useBass && bassFromScore.length > 0 ? 'soprano E basso insieme' : 'il soprano')
+          : 'nessuno: manca sia il testo sia una voce data',
+        'melodia (spunta)': useMelody, 'note di soprano': sopranoFromScore.length,
+        'basso dato (spunta)': useBass, 'note di basso': bassFromScore.length,
+        'voce interna (spunta)': useInner, 'note': innerFromScore.length,
+        'dalla misura': insertMeasure + 1,
+        'tonalita usata': `${localTonic}${localMinor ? ' minore' : ' maggiore'}`,
+      });
+    };
+  }, [progressionText, useMelody, sopranoFromScore, useBass, bassFromScore, useInner, innerVoice, innerFromScore, insertMeasure, localTonic, localMinor]);
+
   // Generate chorale
   const handleGenerate = useCallback(() => {
     try {
@@ -1272,6 +1301,38 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               </div>
             )}
           </div>
+
+          {/* CHI SCEGLIE L'ARMONIA. Il riquadro dei gradi nasce già pieno e ha la
+              precedenza su tutto: senza dirlo, una melodia spuntata non veniva letta e
+              l'utente vedeva «il risultato non cambia mai». E dopo ogni generazione il
+              riquadro viene riempito col risultato, il che congela le generazioni
+              successive. Ora si vede chi decide, e quando il riquadro sta zittendo una
+              voce lo si dice. */}
+          {(() => {
+            const daTesto = progressionText.trim().length > 0;
+            const vociDate = (useMelody && sopranoFromScore.length > 0)
+              || (useBass && bassFromScore.length > 0)
+              || (useInner && innerFromScore.length > 0);
+            const chi = daTesto ? t('chorale_who_text')
+              : (useInner && innerFromScore.length > 0)
+                ? t('chorale_who_inner', { voce: t(innerVoice === 2 ? 'chorale_inner_alto' : 'chorale_inner_tenor') })
+              : (useMelody && sopranoFromScore.length > 0)
+                ? ((useBass && bassFromScore.length > 0) ? t('chorale_who_both') : t('chorale_who_soprano'))
+              : (useBass && bassFromScore.length > 0) ? t('chorale_who_bass')
+              : t('chorale_who_none');
+            return (
+              <div className="mb-3">
+                <div className="text-[11px] text-slate-300">
+                  {t('chorale_who_decides', { chi })}
+                </div>
+                {daTesto && vociDate && (
+                  <div className="mt-1 p-2 rounded border border-amber-600 bg-amber-950/40 text-[10px] text-amber-200">
+                    {t('chorale_text_wins')}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Parsed preview */}
           {parsedPreview.length > 0 && (
