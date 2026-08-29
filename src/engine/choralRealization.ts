@@ -2191,12 +2191,15 @@ export function generaCandidati(args: {
   rules: ChoralRules;
   fixedSoprano?: number;
   fixedBass?: number;
+  /** Voce INTERNA data: contralto e/o tenore inchiodati, come già si fa per soprano e basso. */
+  fixedAlto?: number;
+  fixedTenor?: number;
   tonicPc: number;
   prevSeventhPc?: number;
   isLast: boolean;
   styleCtx: StyleContext;
 }): Proposta[] {
-  const { tones, inv, rivoltiDaProvare, prevVoicing, inCarica, rules, fixedSoprano, fixedBass, tonicPc, prevSeventhPc, isLast, styleCtx } = args;
+  const { tones, inv, rivoltiDaProvare, prevVoicing, inCarica, rules, fixedSoprano, fixedBass, fixedAlto, fixedTenor, tonicPc, prevSeventhPc, isLast, styleCtx } = args;
   const pcDellAccordo = new Set(tones.map(t => toneToMidiPc(t)));
   const eNotaDellAccordo = (midi: number) => pcDellAccordo.has(((midi % 12) + 12) % 12);
   const ammissibile = (c: SATBVoicing, rv: number): boolean => {
@@ -2209,6 +2212,8 @@ export function generaCandidati(args: {
     if (((c.bass % 12) + 12) % 12 !== toneToMidiPc(tones[rv % tones.length])) return false;
     if (fixedSoprano != null && c.soprano !== fixedSoprano) return false;
     if (fixedBass != null && c.bass !== fixedBass) return false;
+    if (fixedAlto != null && c.alto !== fixedAlto) return false;
+    if (fixedTenor != null && c.tenor !== fixedTenor) return false;
     return true;
   };
 
@@ -2223,7 +2228,56 @@ export function generaCandidati(args: {
     fuori.push({ v: c, inv: rv });
   };
 
+  /**
+   * CON UNA VOCE INTERNA DATA SI ENUMERA, non si perturba.
+   *
+   * Le proposte nascono da `realizeNextChord`, che di quel vincolo non sa niente: partono
+   * quasi sempre con il contralto o il tenore sbagliati, e le perturbazioni potrebbero non
+   * arrivare mai a quello giusto — anzi, `ammissibile` le scarterebbe tutte e il generatore
+   * si troverebbe senza candidati. Quando la voce data c'è, le disposizioni si contano: sono
+   * poche, perché due voci su quattro sono già decise.
+   */
+  const enumera = (rv: number) => {
+    const pcOf = (m: number) => ((m % 12) + 12) % 12;
+    const bassoPc = toneToMidiPc(tones[rv % tones.length]);
+    const opzioni = (amb: { min: number; max: number }, fisso?: number, soloPc?: number) => {
+      if (fisso != null) return [fisso];
+      const out: number[] = [];
+      for (let m = amb.min; m <= amb.max; m++) {
+        const p = pcOf(m);
+        if (soloPc != null ? p === soloPc : pcDellAccordo.has(p)) out.push(m);
+      }
+      return out;
+    };
+    const bs = opzioni(VOICE_RANGES.bass, fixedBass, bassoPc);
+    const ts = opzioni(VOICE_RANGES.tenor, fixedTenor);
+    const as = opzioni(VOICE_RANGES.alto, fixedAlto);
+    const ss = opzioni(VOICE_RANGES.soprano, fixedSoprano);
+    // CON UN TETTO. Enumerare senza limite produce centinaia di disposizioni per accordo, e
+    // ognuna viene poi pesata da `scoreVoicing`: sul banco dei 74 brani non finiva in otto
+    // minuti. Si ordinano con un conto CHE NON COSTA NIENTE — quanto si spostano le voci
+    // rispetto a dov'erano — e si passano avanti solo le più vicine. Il punteggio vero, che
+    // è caro, lavora su quelle.
+    const grezzi: SATBVoicing[] = [];
+    for (const b of bs) for (const t of ts) {
+      if (t < b || t - b > 24) continue;
+      for (const a of as) {
+        if (a < t || a - t > 12) continue;
+        for (const sp of ss) {
+          if (sp < a || sp - a > 12) continue;
+          grezzi.push({ soprano: sp, alto: a, tenor: t, bass: b });
+        }
+      }
+    }
+    const distanza = (c: SATBVoicing) =>
+      Math.abs(c.soprano - prevVoicing.soprano) + Math.abs(c.alto - prevVoicing.alto)
+      + Math.abs(c.tenor - prevVoicing.tenor) + Math.abs(c.bass - prevVoicing.bass);
+    grezzi.sort((x, y) => distanza(x) - distanza(y));
+    for (const c of grezzi.slice(0, 24)) proponi(c, rv);
+  };
+
   for (const rv of rivoltiDaProvare) {
+    if (fixedAlto != null || fixedTenor != null) { enumera(rv); continue; }
     const base = (rv === inv && inCarica) ? inCarica
       : realizeNextChord(tones, rv, prevVoicing, rules, fixedSoprano, fixedBass, tonicPc, prevSeventhPc, isLast, styleCtx);
     if (!base) continue;
@@ -2294,6 +2348,8 @@ type Passo = {
   durationName: string;
   fixedSoprano?: number;
   fixedBass?: number;
+  fixedAlto?: number;
+  fixedTenor?: number;
   isLast: boolean;
   degree: number;
   /** Dove cominciano le sue note dentro `allNotes`. */
@@ -2368,6 +2424,20 @@ export function realizeChorale(
   }
 
   // Build bass constraint lookup map: "measure:beat" → MIDI ("basso dato")
+  /**
+   * LE VOCI INTERNE DATE. `lockedVoices` era dichiarato dal 15/02/2026 con la descrizione
+   * «il motore fissa quelle e genera solo le libere» e non è mai stato letto da nessuna riga:
+   * era una promessa scritta nei tipi. Qui viene mantenuta. Soprano e basso continuano ad
+   * avere le loro strade (`sopranoMelody`, `bassMelody`), che sanno anche dedurre l'armonia.
+   */
+  const altoMap = new Map<string, number>();
+  const tenorMap = new Map<string, number>();
+  for (const [v, vincoli] of Object.entries(config.lockedVoices ?? {})) {
+    const dove = Number(v) === 2 ? altoMap : Number(v) === 3 ? tenorMap : null;
+    if (!dove) continue;
+    for (const c of vincoli ?? []) dove.set(`${c.measure}:${c.beat}`, c.midi);
+  }
+
   const bassMap = new Map<string, number>();
   if (config.bassMelody) {
     for (const bc of config.bassMelody) {
@@ -2499,6 +2569,8 @@ export function realizeChorale(
     // Soprano constraint for this chord position
     let fixedSoprano = sopranoMap.get(`${chord.measure}:${chord.beat}`);
     const fixedBass = bassMap.get(`${chord.measure}:${chord.beat}`);
+    const fixedAlto = altoMap.get(`${chord.measure}:${chord.beat}`);
+    const fixedTenor = tenorMap.get(`${chord.measure}:${chord.beat}`);
 
     // ── Cadence enforcement ──
     const isLast = (i === sortedProg.length - 1);
@@ -2971,6 +3043,31 @@ export function realizeChorale(
     // COSTO: l'accordo in carica si controlla SEMPRE (un controllo, ~1,5 ms); le alternative
     // si pagano solo quando il veto scatta, e il passo indietro solo quando le alternative
     // non bastano — cioè di rado.
+    // UNA VOCE INTERNA DATA NON È UNA PREFERENZA. La proposta di sopra nasce da
+    // `realizeNextChord`, che di quel vincolo non sa niente: se c'è, si rifà la scelta fra le
+    // sole disposizioni che lo rispettano. Se non ne esiste nessuna — la nota data non è una
+    // nota di quell'accordo — si tiene quella libera invece di fallire: il vincolo cade dove
+    // è impossibile, e il resto del brano continua a rispettarlo.
+    if (voicing && (fixedAlto != null || fixedTenor != null)) {
+      const conVincolo = generaCandidati({
+        tones, inv, rivoltiDaProvare: [inv], prevVoicing: prevVoicing ?? voicing, inCarica: null,
+        rules, fixedSoprano, fixedBass, fixedAlto, fixedTenor, tonicPc: tonicPcVal,
+        prevSeventhPc: prevSeventhPc ?? undefined, isLast, styleCtx,
+      });
+      if (conVincolo.length > 0) {
+        let meglio = conVincolo[0], punteggio = Infinity;
+        for (const c of conVincolo) {
+          const p = scoreVoicing({
+            curr: c.v, prev: prevVoicing ?? c.v, prevPrev: prevPrevVoicing,
+            rules, tonicPc: tonicPcVal, tones, ...styleCtx,
+          });
+          if (p < punteggio) { punteggio = p; meglio = c; }
+        }
+        voicing = meglio.v;
+        inv = meglio.inv;
+      }
+    }
+
     const vociPrimaDelVeto = voicing;
     if (voicing && prevVoicing && (prevTones || prevNoteDate) && config.vetoRegole !== false) {
       // La finestra è di tre accordi quando ci sono — `R-06` e `R-17a` parlano di un salto
@@ -3031,7 +3128,7 @@ export function realizeChorale(
         // ── Primo tentativo: cambiare SOLO questo accordo ──
         const alternative = generaCandidati({
           tones, inv, rivoltiDaProvare: rivoltiDi(chord, inv, tones, isLast),
-          prevVoicing, inCarica: voicing, rules, fixedSoprano, fixedBass,
+          prevVoicing, inCarica: voicing, rules, fixedSoprano, fixedBass, fixedAlto, fixedTenor,
           tonicPc: tonicPcVal, prevSeventhPc: prevSeventhPc ?? undefined, isLast, styleCtx,
         });
         // Si provano in ordine di GUSTO: il punteggio stilistico (che il corpus alimenta)
@@ -3101,7 +3198,7 @@ export function realizeChorale(
             const fOra = finestra(prevPrevVoicing, prima.v, prevTones, prima.inv);
             const oraCand = generaCandidati({
               tones, inv, rivoltiDaProvare: rivoltiDi(chord, inv, tones, isLast),
-              prevVoicing: prima.v, inCarica: null, rules, fixedSoprano, fixedBass,
+              prevVoicing: prima.v, inCarica: null, rules, fixedSoprano, fixedBass, fixedAlto, fixedTenor,
               tonicPc: tonicPcVal, prevSeventhPc: prevSeventhPc ?? undefined, isLast, styleCtx,
             });
             const puntiOra = new Map<Proposta, number>();
@@ -3181,7 +3278,7 @@ export function realizeChorale(
       passi[passi.length - 1].inv = prevInvUsed;
     }
     passi.push({
-      chord, voicing, inv, tones, durationName, fixedSoprano, fixedBass, isLast,
+      chord, voicing, inv, tones, durationName, fixedSoprano, fixedBass, fixedAlto, fixedTenor, isLast,
       degree: parsed.degree, noteStart: noteStartIdx,
     });
 
@@ -3285,6 +3382,7 @@ export function realizeChorale(
         tones: p.tones, inv: p.inv, rivoltiDaProvare: rivolti,
         prevVoicing: prevSet, inCarica: p.voicing, rules,
         fixedSoprano: p.fixedSoprano, fixedBass: p.fixedBass,
+        fixedAlto: p.fixedAlto, fixedTenor: p.fixedTenor,
         tonicPc: tonicPcVal, prevSeventhPc: prev7, isLast: p.isLast,
         styleCtx: config.styleProfile
           ? { styleProfile: config.styleProfile, currentDegree: degreeToRoman(p.degree, isMinor), currentInversion: p.inv }

@@ -408,6 +408,26 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
     return { caso: 'altraVoce' as const, quante, voce: nome };
   }, [sopranoFromScore, existingNotes]);
 
+  /**
+   * VOCE INTERNA DATA. Il campo `lockedVoices` del motore lo prometteva dal 15/02/2026 e non
+   * era mai stato letto. MISURATO sui 73 brani del banco: armonizzando a partire dal
+   * contralto e tenendolo fermo, il 95,8% delle note date viene rispettato con 217 errori —
+   * la stessa qualità del caso classico dal soprano (215). Dal tenore, 95,4% e 169 errori.
+   * Il resto sono note che l'accordo scelto non contiene: lì il vincolo cade da solo.
+   */
+  const [useInner, setUseInner] = useState(false);
+  const [innerVoice, setInnerVoice] = useState<2 | 3>(2);
+  const innerFromScore = useMemo(() => {
+    if (!existingNotes?.length) return [];
+    return existingNotes
+      .filter(n => n && !(n as any).isRest && Number((n as any).voice) === innerVoice)
+      .sort((a, b) => {
+        const ma = a.measureIndex ?? 0, mb = b.measureIndex ?? 0;
+        if (ma !== mb) return ma - mb;
+        return (a.beat ?? 1) - (b.beat ?? 1);
+      });
+  }, [existingNotes, innerVoice]);
+
   // Bass constraint mode ("basso dato")
   const [useBass, setUseBass] = useState(false);
   // Extract bass notes (voice 4) from existing notes
@@ -512,6 +532,15 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       setError(null);
       let progression = parseProgressionString(progressionText, localTs, selectedDuration);
       // Auto-harmonize when melody mode is active and no progression text
+      // La voce INTERNA data ha la precedenza sull'armonizzazione automatica: se c'è, è lei
+      // a scegliere l'armonia, esattamente come farebbe il soprano.
+      if (progression.length === 0 && useInner && innerFromScore.length > 0) {
+        const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
+        const vincoliInterni: SopranoConstraint[] = innerFromScore
+          .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
+          .map(n => ({ midi: n.midi, measure: (n.measureIndex ?? 0) - insertMeasure, beat: n.beat ?? 1 }));
+        progression = autoHarmonize(vincoliInterni, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
+      }
       if (progression.length === 0 && ((useMelody && sopranoFromScore.length > 0) || (useBass && bassFromScore.length > 0))) {
         const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
         // When continuing from a later measure, keep only notes >= insertMeasure
@@ -589,6 +618,14 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           }));
       }
 
+      if (useInner && innerFromScore.length > 0) {
+        config.lockedVoices = {
+          [innerVoice]: innerFromScore
+            .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
+            .map(n => ({ midi: n.midi, measure: (n.measureIndex ?? 0) - insertMeasure, beat: n.beat ?? 1 })),
+        };
+      }
+
       // L'ACCORDO CHE PRECEDE, quando si riparte da metà brano. Senza, il generatore
       // sceglieva il registro come se cominciasse da zero e la giuntura non la controllava
       // nessuno: sul «Delachi n 12» ripartito dalla misura 3 usciva un moto parallelo di
@@ -617,7 +654,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       setGeneratedNotes(null);
       setViolations([]);
     }
-  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, vetoRegole, passoIndietro, ripasso, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition, insertMeasure, existingNotes]);
+  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, vetoRegole, passoIndietro, ripasso, useInner, innerVoice, innerFromScore, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition, insertMeasure, existingNotes]);
 
   // Apply to editor
   const handleApply = useCallback(() => {
@@ -639,6 +676,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
     const lockedVoices: number[] = [];
     if (useMelody && sopranoFromScore.length > 0) lockedVoices.push(1);
     if (useBass && bassFromScore.length > 0) lockedVoices.push(4);
+    if (useInner && innerFromScore.length > 0) lockedVoices.push(innerVoice);
     if (lockedVoices.length > 0) {
       // Keep only locked-voice notes from the insertion range (>= insertMeasure).
       // Notes from earlier measures are preserved by the merge logic in the parent handler.
@@ -664,7 +702,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       })));
     }
     onClose();
-  }, [generatedNotes, onApplyNotes, onApplyContexts, onClose, useMelody, sopranoFromScore, useBass, bassFromScore, existingNotes, insertMeasure, enabledVoices, localTs, modulationContexts]);
+  }, [generatedNotes, onApplyNotes, onApplyContexts, onClose, useMelody, sopranoFromScore, useBass, bassFromScore, useInner, innerVoice, innerFromScore, existingNotes, insertMeasure, enabledVoices, localTs, modulationContexts]);
 
   // Load preset
   const handlePreset = useCallback((preset: typeof PRESETS[number]) => {
@@ -1188,6 +1226,48 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             )}
           </div>
 
+          {/* Voce INTERNA data. Il campo `lockedVoices` del motore la prometteva dal
+              15/02/2026 senza che nessuno la leggesse; qui la promessa viene mantenuta. */}
+          <div className="mb-4">
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-200">
+              <input
+                type="checkbox"
+                checked={useInner}
+                onChange={() => { setUseInner(v => !v); setGeneratedNotes(null); }}
+                className="accent-green-500"
+                disabled={innerFromScore.length === 0}
+              />
+              <span className={innerFromScore.length === 0 ? 'text-gray-500' : ''}>
+                {t('chorale_harmonize_inner')}
+              </span>
+              <select
+                value={innerVoice}
+                onChange={e => { setInnerVoice(Number(e.target.value) as 2 | 3); setGeneratedNotes(null); }}
+                className="bg-gray-700 border border-gray-600 rounded px-1 py-0.5 text-[11px] text-white"
+              >
+                <option value={2}>{t('chorale_inner_alto')}</option>
+                <option value={3}>{t('chorale_inner_tenor')}</option>
+              </select>
+            </label>
+            {useInner && innerFromScore.length > 0 && (
+              <div className="mt-1 p-2 bg-slate-800 rounded border border-slate-700 text-[10px] text-gray-400">
+                <div>
+                  <span className="text-green-300 font-semibold">{innerFromScore.length}</span>{' '}
+                  {t('chorale_inner_found', { quante: innerFromScore.length, voce: t(innerVoice === 2 ? 'chorale_inner_alto' : 'chorale_inner_tenor') }).replace(/^\d+\s*/, '')}
+                </div>
+                <div className="mt-0.5 text-gray-500">
+                  {innerFromScore.slice(0, 12).map(n => `${n.pitch ?? '?'}${n.octave ?? ''}`).join(' ')}{innerFromScore.length > 12 ? ' …' : ''}
+                </div>
+                <div className="mt-1 text-[9px] text-amber-300/80">{t('chorale_inner_note')}</div>
+              </div>
+            )}
+            {innerFromScore.length === 0 && (
+              <div className="mt-1 text-[10px] text-gray-500">
+                {t('chorale_inner_none', { voce: t(innerVoice === 2 ? 'chorale_inner_alto' : 'chorale_inner_tenor') })}
+              </div>
+            )}
+          </div>
+
           {/* Parsed preview */}
           {parsedPreview.length > 0 && (
             <div className="mb-4 p-2 bg-slate-800 rounded-md border border-slate-700">
@@ -1381,7 +1461,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               onClick={handleGenerate}
               className="px-4 py-2 text-sm rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-semibold
                 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={progressionText.trim().length === 0 && !((useMelody && sopranoFromScore.length > 0) || (useBass && bassFromScore.length > 0))}
+              disabled={progressionText.trim().length === 0 && !((useMelody && sopranoFromScore.length > 0) || (useBass && bassFromScore.length > 0) || (useInner && innerFromScore.length > 0))}
             >
               {t('chorale_generate_btn')}
             </button>
