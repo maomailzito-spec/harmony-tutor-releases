@@ -19317,8 +19317,21 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             <RomanProgressionEditor
                 isOpen={isRomanEditorOpen}
                 onClose={() => setIsRomanEditorOpen(false)}
-                onApplyNotes={(notes) => {
+                onApplyNotes={(notes, vociScritte) => {
                     const minMI = notes.length > 0 ? Math.min(...notes.map(n => (n as any).measureIndex ?? 0)) : 0;
+                    // UNA VOCE SPENTA RESTA COM'È. Il pannello lo dice da sempre — «disabilitato,
+                    // mantenuto dalla generazione precedente» — ma qui si sostituiva tutto:
+                    // generando dalla prima misura con il contralto spento, il contralto non
+                    // veniva mantenuto, veniva CANCELLATO. La promessa c'era, il mantenimento no.
+                    const parziale = vociScritte != null && vociScritte.size > 0 && vociScritte.size < 4;
+                    if (parziale && latestRawNotes.current.length > 0) {
+                        const intatte = latestRawNotes.current.filter(n => {
+                            if (minMI > 0 && (n.measureIndex ?? 0) < minMI) return true;   // prima del punto d'inserimento
+                            return !vociScritte!.has(Number((n as any).voice ?? 1));        // voce non toccata
+                        });
+                        setRawNotes([...intatte, ...notes] as any);
+                        return;
+                    }
                     if (minMI > 0 && latestRawNotes.current.length > 0) {
                         // Merge: keep existing notes before insertion point
                         const existing = latestRawNotes.current.filter(n => (n.measureIndex ?? 0) < minMI);

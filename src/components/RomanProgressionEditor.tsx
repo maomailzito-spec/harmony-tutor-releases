@@ -40,7 +40,10 @@ import { tonicaReale } from '../utils/relativeMinors';
 export interface RomanProgressionEditorProps {
   isOpen: boolean;
   onClose: () => void;
-  onApplyNotes: (notes: StaffNote[]) => void;
+  /** @param vociScritte le voci che questa generazione ha davvero scritto: le altre non
+   *  vanno toccate. Il selettore «voci» promette che una voce spenta resta com'è, e senza
+   *  questo dato chi riceve le note non ha modo di mantenerla. */
+  onApplyNotes: (notes: StaffNote[], vociScritte?: Set<number>) => void;
   /** Callback to apply modulation contexts (tonicizations) to the analysis engine. */
   onApplyContexts?: (contexts: Array<{
     absBeat: number;
@@ -643,9 +646,12 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
         n && lockedVoices.includes((n as any).voice ?? 1) && ((n as any).measureIndex ?? 0) >= offset
       );
       const generatedInner = voiceFiltered.filter(n => !lockedVoices.includes(n.voice ?? 1));
-      onApplyNotes([...originals, ...applyOffset(generatedInner)]);
+      // Le voci scritte sono quelle abilitate PIÙ quelle date (che passano invariate):
+      // tutto il resto non è stato toccato e deve restare dov'è.
+      const scritte = new Set<number>([...enabledVoices, ...lockedVoices]);
+      onApplyNotes([...originals, ...applyOffset(generatedInner)], scritte);
     } else {
-      onApplyNotes(applyOffset(voiceFiltered));
+      onApplyNotes(applyOffset(voiceFiltered), new Set<number>(enabledVoices));
     }
     // Apply modulation contexts (offset absBeat if needed)
     if (onApplyContexts && modulationContexts.length > 0) {
