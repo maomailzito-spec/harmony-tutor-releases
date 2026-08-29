@@ -1344,6 +1344,38 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             </div>
           )}
 
+          {/* DUE COMANDI CHE SEMBRANO LA STESSA COSA, e non lo sono. Questi tasti agiscono
+              quando si APPLICA: conservano la voce, ma l'armonia è già stata scelta
+              ignorandola. La spunta «armonizza da una voce interna» agisce quando si GENERA.
+              Misurato sui 73 brani del banco, la differenza è tutta qui: senza il vincolo il
+              risultato ha 337 incroci e 859 accordi incompleti, con il vincolo 6 e 198.
+              Chi spegne una voce che ha note sul rigo va avvertito, o si ritrova la seconda
+              riga di quei numeri credendo di avere la prima. */}
+          {generatedNotes && generatedNotes.length > 0 && (
+            <div>
+              {(() => {
+                const dateOra = new Set<number>([
+                  ...(useMelody && sopranoFromScore.length > 0 ? [1] : []),
+                  ...(useBass && bassFromScore.length > 0 ? [4] : []),
+                  ...(useInner && innerFromScore.length > 0 ? [innerVoice] : []),
+                ]);
+                const conNote = (v: number) => (existingNotes ?? [])
+                  .some(n => n && !(n as any).isRest && Number((n as any).voice ?? 1) === v);
+                const trascurate = [1, 2, 3, 4]
+                  .filter(v => !enabledVoices.has(v) && !dateOra.has(v) && conNote(v));
+                if (trascurate.length === 0) return null;
+                const nomi = trascurate
+                  .map(v => t(({ 1: 'voice_soprano', 2: 'voice_alto', 3: 'voice_tenor', 4: 'voice_bass' } as const)[v as 1]))
+                  .join(', ');
+                return (
+                  <div className="mt-1 p-2 rounded border border-amber-600 bg-amber-950/40 text-[10px] text-amber-200">
+                    {t('chorale_voice_off_unused', { voce: nomi })}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Inserisci dalla misura (1-indexed for UI, 0-indexed internally) */}
           <div className="flex items-center gap-2 mb-3">
             <label className="text-xs text-gray-300">{t('chorale_insert_from_measure')}</label>

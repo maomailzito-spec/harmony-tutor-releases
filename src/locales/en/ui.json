@@ -526,5 +526,6 @@
   "sel_traccia_vuota": "The track “{{nome}}” is empty.",
   "sel_voce": "Select the whole {{voce}} voice",
   "copia_voce": "Copy the whole {{voce}} voice",
-  "sel_voce_vuota": "The {{voce}} voice is empty."
+  "sel_voce_vuota": "The {{voce}} voice is empty.",
+  "chorale_voice_off_unused": "Careful: {{voce}} is off and there are notes on the staff, but the engine did not take them into account — it chose the harmony ignoring them. It will keep them, and they will almost certainly clash with the other voices. To make them actually count, tick “Harmonise from an inner voice already written” and generate again."
 }
