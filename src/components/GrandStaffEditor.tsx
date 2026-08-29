@@ -3369,7 +3369,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * (⇧↑/⇧↓ per l'ottava, le trasformazioni melodiche, il trasporto per intervallo):
      * mancava il gesto per dire «tutta questa».
      */
-    const selezionaInteraVoce = useCallback((voice: number) => {
+    /**
+     * @param aggiungi tiene la selezione che c'è già e ci somma questa voce. Serve
+     *   all'editing su più voci insieme — copiare o cancellare soprano e basso in un colpo —
+     *   e la selezione di tutte e quattro ha già il suo comando.
+     */
+    const selezionaInteraVoce = useCallback((voice: number, aggiungi = false) => {
         const tutte = (latestRawNotes.current || []).filter(n => Number((n as any).voice ?? 1) === voice);
         if (tutte.length === 0) {
             setCopyPasteError(tUI('sel_voce_vuota', { voce: (['', 'S', 'A', 'T', 'B'][voice] ?? String(voice)), defaultValue: `La voce ${(['', 'S', 'A', 'T', 'B'][voice] ?? voice)} è vuota.` }));
@@ -3378,7 +3383,17 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         activeStaffAreaRef.current = 'satb';
         setActiveStaffArea('satb');
         setSelectedVoice(voice as Voice);
-        setSelectedNoteIds(new Set(tutte.map(n => n.id)));
+        setSelectedNoteIds(prev => {
+            // Aggiungendo si parte da ciò che c'è, ma solo dalle note del CORO: una selezione
+            // che mescola coro e tracce di accompagnamento non è una selezione su cui si
+            // possa poi copiare o cancellare con un gesto solo.
+            if (!aggiungi) return new Set(tutte.map(n => n.id));
+            const delCoro = new Set((latestRawNotes.current || []).map(n => n.id));
+            const somma = new Set<string>();
+            for (const id of (prev ?? new Set<string>())) if (delCoro.has(id)) somma.add(id);
+            for (const n of tutte) somma.add(n.id);
+            return somma;
+        });
     }, [setSelectedNoteIds, setCopyPasteError, tUI]);
 
     const selezionaInteraTraccia = useCallback((trackId: string) => {
@@ -18683,7 +18698,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 soloVoices={soloVoices}
                 onToggleSolo={handleToggleVoiceSolo}
                 onCopyVoice={(voice) => copyEntireVoiceToClipboard(voice)}
-                onSelectVoice={(voice) => selezionaInteraVoce(voice)}
+                onSelectVoice={(voice, aggiungi) => selezionaInteraVoce(voice, aggiungi)}
                 voiceInstruments={voiceInstruments}
                 onChangeVoiceInstrument={(voice: number, instrument: string) => {
                     // Multi-selezione: se ci sono note selezionate appartenenti a più voci

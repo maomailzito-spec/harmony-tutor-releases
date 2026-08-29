@@ -186,7 +186,8 @@ type GrandStaffToolbarProps = {
     /** Copia l'INTERA voce SATB (tutte le note nel brano). Esposto via tasto destro
      *  sui pulsanti S/A/T/B (oltre alla scorciatoia ⇧⌘C). */
     onCopyVoice?: (voice: Voice) => void;
-    onSelectVoice?: (voice: Voice) => void;
+    /** @param aggiungi somma la voce alla selezione invece di sostituirla. */
+    onSelectVoice?: (voice: Voice, aggiungi?: boolean) => void;
     voiceInstruments?: Record<number, string>;
     onChangeVoiceInstrument?: (voice: number, instrument: string) => void;
     /** Traccia ACC attiva (quando activeStaffArea === 'accompaniment'): il selettore
@@ -931,9 +932,19 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                         key={v}
                         onClick={() => { setSelectedVoice(v as Voice); if (hasNoteSelection) onReassignSelectionToVoice?.(v as Voice); }}
                         onDoubleClick={(e) => { e.preventDefault(); onToggleSolo?.(v); }}
-                        onContextMenu={onCopyVoice ? (e) => { e.preventDefault(); setVoiceCopyMenu({ x: e.clientX, y: e.clientY, voice: v as Voice }); } : undefined}
+                        onContextMenu={(e) => {
+                            e.preventDefault();
+                            // ⇧ o ⌘ col tasto destro: aggiunge la voce alla selezione senza
+                            // passare dal menu. È il gesto per prendere due o tre voci di
+                            // seguito, che col menu costerebbe due clic per voce.
+                            if ((e.shiftKey || e.metaKey || e.ctrlKey) && onSelectVoice) {
+                                onSelectVoice(v as Voice, true);
+                                return;
+                            }
+                            if (onCopyVoice) setVoiceCopyMenu({ x: e.clientX, y: e.clientY, voice: v as Voice });
+                        }}
                         className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${soloVoices?.has(v) ? 'ring-2 ring-yellow-400 ' : ''}${selectedVoice === v ? (v === 1 ? 'bg-blue-600 text-white' : v === 2 ? 'bg-orange-500 text-white' : v === 3 ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-gray-300 hover:bg-gray-600'}`}
-                        title={`${voiceName(v)}${soloVoices?.has(v) ? tT('voice_solo_suffix') : ''}${hasNoteSelection ? tT('voice_reassign_suffix') : tT('voice_tooltip_suffix')}${onCopyVoice ? ' · tasto destro: copia intera voce' : ''}`}
+                        title={`${voiceName(v)}${soloVoices?.has(v) ? tT('voice_solo_suffix') : ''}${hasNoteSelection ? tT('voice_reassign_suffix') : tT('voice_tooltip_suffix')}${onCopyVoice || onSelectVoice ? tT('voice_rightclick_suffix') : ''}`}
                     >
                         {v === 1 ? 'S' : v === 2 ? 'A' : v === 3 ? 'T' : 'B'}
                     </button>
@@ -1990,6 +2001,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             className="w-full text-left px-3 py-1.5 text-xs text-gray-100 hover:bg-slate-600 whitespace-nowrap"
                         >
                             {t('sel_voce', { voce: voiceName(voiceCopyMenu.voice), defaultValue: `Seleziona intera voce ${voiceName(voiceCopyMenu.voice)}` })}
+                        </button>
+                    )}
+                    {onSelectVoice && (
+                        <button
+                            onClick={() => { onSelectVoice(voiceCopyMenu.voice, true); setVoiceCopyMenu(null); }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-gray-100 hover:bg-slate-600 whitespace-nowrap"
+                        >
+                            {t('sel_voce_aggiungi', { voce: voiceName(voiceCopyMenu.voice), defaultValue: `Aggiungi la voce ${voiceName(voiceCopyMenu.voice)} alla selezione` })}
                         </button>
                     )}
                     <button

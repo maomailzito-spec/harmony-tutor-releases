@@ -140,5 +140,6 @@
   "customize_add_break_hint": "Compare in fondo alla barra: trascinalo dove vuoi che cominci la riga nuova. Da lì l'ordine non dipende più dalla larghezza della finestra.",
   "mix_reverb_send": "Mandata riverbero (tipo e livello globale dal master)",
   "mix_eq_channel": "EQ del canale — apri/chiudi",
-  "mix_comp_channel": "Compressore del canale — apri/chiudi"
+  "mix_comp_channel": "Compressore del canale — apri/chiudi",
+  "voice_rightclick_suffix": " · tasto destro: seleziona o copia · ⇧+destro: aggiungi alla selezione"
 }
