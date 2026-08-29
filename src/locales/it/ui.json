@@ -155,7 +155,7 @@
   "chorale_no_violations": " — nessuna violazione",
   "chorale_soprano_locked": "Soprano vincolato dalla melodia",
   "chorale_voice_enabled": "{{label}} abilitato — verrà rigenerato",
-  "chorale_voice_disabled": "{{label}} disabilitato — mantenuto dalla generazione precedente",
+  "chorale_voice_disabled": "{{label}} spento — resta com'è sul rigo, il generatore non lo tocca",
   "chorale_regen_hint": "Rigenera: solo le voci abilitate cambieranno",
   "chorale_insert_from_measure": "Inserisci dalla misura:",
   "chorale_adapt_style": "Adatta allo stile dei miei brani",

@@ -180,7 +180,7 @@
   "chorale_no_violations": " — no violations",
   "chorale_soprano_locked": "Soprano locked by melody",
   "chorale_voice_enabled": "{{label}} enabled — will be regenerated",
-  "chorale_voice_disabled": "{{label}} disabled — kept from previous generation",
+  "chorale_voice_disabled": "{{label}} off — stays as it is on the staff, the generator leaves it alone",
   "chorale_regen_hint": "Regenerate: only enabled voices will change",
   "chorale_insert_from_measure": "Insert from measure:",
   "chorale_adapt_style": "Adapt to my pieces' style",
