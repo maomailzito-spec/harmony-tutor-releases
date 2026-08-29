@@ -930,19 +930,19 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 {activeVoicesForPartCount(partCount).map(v => (
                     <button
                         key={v}
-                        onClick={() => { setSelectedVoice(v as Voice); if (hasNoteSelection) onReassignSelectionToVoice?.(v as Voice); }}
-                        onDoubleClick={(e) => { e.preventDefault(); onToggleSolo?.(v); }}
-                        onContextMenu={(e) => {
-                            e.preventDefault();
-                            // ⇧ o ⌘ col tasto destro: aggiunge la voce alla selezione senza
-                            // passare dal menu. È il gesto per prendere due o tre voci di
-                            // seguito, che col menu costerebbe due clic per voce.
-                            if ((e.shiftKey || e.metaKey || e.ctrlKey) && onSelectVoice) {
-                                onSelectVoice(v as Voice, true);
-                                return;
-                            }
-                            if (onCopyVoice) setVoiceCopyMenu({ x: e.clientX, y: e.clientY, voice: v as Voice });
+                        onClick={(e) => {
+                            // ⇧+click AGGIUNGE la voce alla selezione. È la stessa convenzione
+                            // che vale sulle note — ⇧ col rettangolo o ⇧ sulla nota — e qui non
+                            // confligge con niente: il click SEMPLICE continua a fare le sue due
+                            // cose (attiva la voce, e se ci sono note selezionate le sposta qui),
+                            // ed è proprio il ⇧ a distinguere «spostale qui» da «prendi anche
+                            // questa».
+                            if (e.shiftKey && onSelectVoice) { onSelectVoice(v as Voice, true); return; }
+                            setSelectedVoice(v as Voice);
+                            if (hasNoteSelection) onReassignSelectionToVoice?.(v as Voice);
                         }}
+                        onDoubleClick={(e) => { e.preventDefault(); onToggleSolo?.(v); }}
+                        onContextMenu={onCopyVoice ? (e) => { e.preventDefault(); setVoiceCopyMenu({ x: e.clientX, y: e.clientY, voice: v as Voice }); } : undefined}
                         className={`px-2.5 py-0.5 text-xs font-semibold rounded-sm transition-all ${soloVoices?.has(v) ? 'ring-2 ring-yellow-400 ' : ''}${selectedVoice === v ? (v === 1 ? 'bg-blue-600 text-white' : v === 2 ? 'bg-orange-500 text-white' : v === 3 ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-gray-300 hover:bg-gray-600'}`}
                         title={`${voiceName(v)}${soloVoices?.has(v) ? tT('voice_solo_suffix') : ''}${hasNoteSelection ? tT('voice_reassign_suffix') : tT('voice_tooltip_suffix')}${onCopyVoice || onSelectVoice ? tT('voice_rightclick_suffix') : ''}`}
                     >

@@ -141,5 +141,5 @@
   "mix_reverb_send": "Mandata riverbero (tipo e livello globale dal master)",
   "mix_eq_channel": "EQ del canale — apri/chiudi",
   "mix_comp_channel": "Compressore del canale — apri/chiudi",
-  "voice_rightclick_suffix": " · tasto destro: seleziona o copia · ⇧+destro: aggiungi alla selezione"
+  "voice_rightclick_suffix": " · ⇧+click: aggiungi la voce alla selezione · tasto destro: seleziona o copia"
 }
