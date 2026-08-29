@@ -375,6 +375,36 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       });
   }, [existingNotes]);
 
+  /**
+   * PERCHÉ la spunta «armonizza melodia esistente» è spenta.
+   *
+   * Diceva sempre «Inserisci prima la melodia», anche quando la melodia c'era ed era sotto
+   * gli occhi — solo su un'altra voce. L'utente l'ha letto come un guasto e ha riavviato tre
+   * volte: il messaggio gli chiedeva di fare una cosa che aveva già fatto. Ora si guarda cosa
+   * c'è davvero sul rigo e si dice quello.
+   */
+  const perchePuntaSpenta = useMemo(() => {
+    if (sopranoFromScore.length > 0) return null;
+    const tutte = existingNotes ?? [];
+    const vive = tutte.filter(n => n && !(n as any).isRest);
+    if (vive.length === 0) return { caso: 'vuoto' as const };
+    // Le note ci sono: su quale voce stanno?
+    const perVoce = new Map<number, number>();
+    for (const n of vive) {
+      const v = Number((n as any).voice ?? 1);
+      perVoce.set(v, (perVoce.get(v) ?? 0) + 1);
+    }
+    let voceMax = 0, quante = 0;
+    for (const [v, q] of perVoce) if (q > quante) { voceMax = v; quante = q; }
+    if (voceMax === 1 || quante === 0) {
+      // Voce 1 presente ma tutte pause: cancellare lascia l'id e toglie il suono.
+      const pause = tutte.filter(n => n && (n as any).isRest && Number((n as any).voice ?? 1) === 1).length;
+      return { caso: 'pause' as const, quante: pause };
+    }
+    const nome = { 2: 'voice_alto', 3: 'voice_tenor', 4: 'voice_bass' }[voceMax] ?? 'voice_soprano';
+    return { caso: 'altraVoce' as const, quante, voce: nome };
+  }, [sopranoFromScore, existingNotes]);
+
   // Bass constraint mode ("basso dato")
   const [useBass, setUseBass] = useState(false);
   // Extract bass notes (voice 4) from existing notes
@@ -1109,9 +1139,13 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 </div>
               </div>
             )}
-            {sopranoFromScore.length === 0 && (
-              <div className="mt-1 text-[10px] text-gray-500">
-                {t('chorale_no_voice1')}
+            {perchePuntaSpenta && (
+              <div className={`mt-1 text-[10px] ${perchePuntaSpenta.caso === 'vuoto' ? 'text-gray-500' : 'text-amber-300'}`}>
+                {perchePuntaSpenta.caso === 'altraVoce'
+                  ? t('chorale_melody_other_voice', { quante: perchePuntaSpenta.quante, voce: t(perchePuntaSpenta.voce) })
+                  : perchePuntaSpenta.caso === 'pause'
+                    ? t('chorale_melody_only_rests', { quante: perchePuntaSpenta.quante })
+                    : t('chorale_no_voice1')}
               </div>
             )}
           </div>
