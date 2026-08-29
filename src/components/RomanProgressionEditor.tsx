@@ -566,7 +566,12 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             measure: n.measureIndex ?? 0,
             beat: n.beat ?? 1,
           }));
-          progression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
+          // Se c'è ANCHE il basso, entra nella SCELTA dell'armonia e non solo nella
+          // scrittura: è la voce che dice pure il rivolto.
+          progression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure,
+            (useBass && rebaseBass.length > 0)
+              ? { bassoDato: rebaseBass.map(n => ({ midi: n.midi, measure: n.measureIndex ?? 0, beat: n.beat ?? 1 })) }
+              : undefined);
         }
         setProgressionText(progression.map(c => c.roman).join(' - '));
       }

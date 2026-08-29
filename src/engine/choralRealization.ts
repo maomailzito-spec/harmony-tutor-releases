@@ -3546,7 +3546,12 @@ function scontoDellaQuartaSesta(forzaQui: number, gradoQui: number, gradoDopo: n
 }
 
 /** Un gruppo di melodia da armonizzare: le classi d'altezza che ci suonano sopra, e dove sta. */
-type GruppoMelodia = { pcs: number[]; measure: number; beat: number; sopranoMidi?: number };
+type GruppoMelodia = {
+  pcs: number[]; measure: number; beat: number; sopranoMidi?: number;
+  /** La classe d'altezza del BASSO DATO su questo tempo, se c'è. Non è un'altra nota da
+   *  coprire: è un vincolo duro, perché il basso dice anche il RIVOLTO. */
+  bassoPc?: number;
+};
 
 /** Che cosa serve sapere di un accordo candidato, indipendentemente da dove si trova. */
 type SchedaAccordo = {
@@ -3597,12 +3602,32 @@ function scegliProgressioneDellaFrase(args: {
   for (let i = 0; i < n; i++) {
     const pcs = gruppi[i].pcs;
     const pose: Posa[] = [];
+    const bassoPc = gruppi[i].bassoPc;
     for (let a = 0; a < schede.length; a++) {
       const sc = schede[a];
       if (!pcs.some(pc => sc.pcs.includes(pc))) continue;
       // Una tonicizzazione non apre un brano e non lo chiude: è un accordo che PROMETTE.
       if (sc.bersaglio >= 0 && (i === 0 || i === n - 1)) continue;
-      for (const inv of sc.rivolti) pose.push({ acc: a, inv });
+      for (const inv of sc.rivolti) {
+        // IL BASSO DATO NON È UNA PREFERENZA. Se c'è, l'accordo deve contenerlo E averlo
+        // proprio al basso: il rivolto è già la scelta di quale nota ci va. Senza questo
+        // filtro il basso veniva ignorato nella scelta dell'armonia e poi imposto nella
+        // scrittura, e uscivano accordi con un basso che non gli appartiene — sul «Dubois
+        // n5», con soprano e basso dati, un Fa-La-Do sopra un Mi al basso.
+        if (bassoPc != null && sc.pcs[inv % sc.pcs.length] !== bassoPc) continue;
+        pose.push({ acc: a, inv });
+      }
+    }
+    // Se il basso dato non sta in nessun accordo diatonico (nota di passaggio al basso, o
+    // cromatismo), il vincolo CADE per quel tempo invece di far fallire tutto: si riprovano
+    // le pose senza di lui.
+    if (pose.length === 0 && bassoPc != null) {
+      for (let a = 0; a < schede.length; a++) {
+        const sc = schede[a];
+        if (!pcs.some(pc => sc.pcs.includes(pc))) continue;
+        if (sc.bersaglio >= 0 && (i === 0 || i === n - 1)) continue;
+        for (const inv of sc.rivolti) pose.push({ acc: a, inv });
+      }
     }
     // Se nessun accordo copre la nota, resta la tonica: è il ripiego di sempre, e la vera
     // cura sta altrove (riconoscere che quella nota può NON essere nota d'accordo).
@@ -3984,7 +4009,14 @@ export function autoHarmonize(
   /** `corpus: false` torna ai pesi scritti a mano; `condotta: false` toglie il trattamento
    *  della nota tenuta; `frase: false` torna alla scelta golosa, un accordo per volta.
    *  Servono al confronto. */
-  opts?: { corpus?: boolean; condotta?: boolean; frase?: boolean }
+  opts?: {
+    corpus?: boolean; condotta?: boolean; frase?: boolean;
+    /** IL BASSO DATO, quando c'è ANCHE la melodia. Prima, con tutte e due le voci date,
+     *  l'armonia si sceglieva dal solo soprano e il basso veniva imposto dopo: uscivano
+     *  accordi con un basso estraneo. Il basso non è una nota in più da coprire — dice anche
+     *  il RIVOLTO — quindi entra come vincolo duro sulle pose possibili. */
+    bassoDato?: SopranoConstraint[];
+  }
 ): RomanChord[] {
   if (melody.length === 0) return [];
 
@@ -4082,7 +4114,11 @@ export function autoHarmonize(
   let prevDeg = -1;
 
   // ── Group melody notes by harmonic rhythm slots ─────────────────────
-  type MelodyGroup = { pcs: number[]; measure: number; beat: number; sopranoMidi?: number };
+  type MelodyGroup = {
+    pcs: number[]; measure: number; beat: number; sopranoMidi?: number;
+    /** Il basso DATO su questo tempo, se c'è: vincolo duro, non nota da coprire. */
+    bassoPc?: number;
+  };
   let groups: MelodyGroup[];
 
   if (harmonicRhythmBeats > 0) {
@@ -4115,6 +4151,17 @@ export function autoHarmonize(
       // sapere se sale o scende, e una classe d'altezza non lo dice.
       sopranoMidi: m.midi,
     }));
+  }
+
+  // Il basso dato si appende ai gruppi: la DP lo legge come vincolo duro (accordo che lo
+  // contiene E che ce l'ha al basso).
+  if (opts?.bassoDato?.length) {
+    const perTempo = new Map<string, number>();
+    for (const b of opts.bassoDato) perTempo.set(`${b.measure}:${b.beat}`, ((b.midi % 12) + 12) % 12);
+    for (const g of groups) {
+      const pc = perTempo.get(`${g.measure}:${g.beat}`);
+      if (pc != null) g.bassoPc = pc;
+    }
   }
 
   const totalGroups = groups.length;
