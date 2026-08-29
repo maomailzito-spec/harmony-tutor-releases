@@ -333,7 +333,16 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
 }) => {
   const { t } = useTranslation('ui');
 
-  const [progressionText, setProgressionText] = useState('I - IV - V7 - I');
+  /**
+   * VUOTO all'apertura, deciso dall'utente il 29/08/2026.
+   *
+   * Nasceva con `I - IV - V7 - I` dentro, e quel testo ha la PRECEDENZA su tutto: chi
+   * apriva il pannello con una melodia sul rigo e spuntava «armonizza melodia esistente»
+   * si trovava la melodia ignorata, senza che niente lo dicesse. Un valore di comodo che
+   * zittisce il resto non è un valore di comodo. L'esempio resta come segnaposto grigio
+   * nel campo, che si vede ma non conta.
+   */
+  const [progressionText, setProgressionText] = useState('');
   // `keySignatureRoot` è la fondamentale MAGGIORE relativa, non la tonica: su un brano in
   // Mi minore vale 'G'. Passandolo tale e quale, il pannello proponeva «Sol minore» e il
   // generatore armonizzava in una tonalità dove i Mi e i Si naturali del brano sono
@@ -605,7 +614,9 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
         setProgressionText(progression.map(c => c.roman).join(' - '));
       }
       if (progression.length === 0) {
-        setError('Inserisci almeno un accordo.');
+        // Ora si arriva qui premendo Invio col riquadro vuoto, che dalla 29/08/2026 è lo
+        // stato d'apertura: il messaggio deve dire tutte e due le strade, non solo i gradi.
+        setError(t('chorale_nothing_to_do'));
         return;
       }
 

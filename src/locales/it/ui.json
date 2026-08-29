@@ -510,5 +510,6 @@
   "chorale_who_both": "il soprano e il basso insieme",
   "chorale_who_inner": "la voce interna ({{voce}})",
   "chorale_who_none": "nessuno — scrivi dei gradi o spunta una voce già scritta",
-  "chorale_text_wins": "Il riquadro ha la PRECEDENZA: finché contiene qualcosa, le voci spuntate non vengono lette per scegliere l'armonia (restano però come vincolo nella scrittura). Svuotalo per far decidere loro. Attenzione: dopo ogni generazione il riquadro viene riempito col risultato, quindi dalla seconda volta in poi rigenera sempre quella progressione."
+  "chorale_text_wins": "Il riquadro ha la PRECEDENZA: finché contiene qualcosa, le voci spuntate non vengono lette per scegliere l'armonia (restano però come vincolo nella scrittura). Svuotalo per far decidere loro. Attenzione: dopo ogni generazione il riquadro viene riempito col risultato, quindi dalla seconda volta in poi rigenera sempre quella progressione.",
+  "chorale_nothing_to_do": "Non c'è niente da armonizzare: scrivi dei gradi qui sopra, oppure spunta una voce già scritta sul rigo (melodia, basso dato o voce interna)."
 }
