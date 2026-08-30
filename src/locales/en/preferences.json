@@ -38,8 +38,8 @@
   "pref_analysis_filters": "Analysis filters (error/warn/exception + disabled)",
   "pref_analysis_statistical_correction": "Statistical progression correction",
   "pref_analysis_statistical_correction_hint": "Use statistics extracted from exercises to correct unlikely Roman labels. Requires a large exercise corpus.",
-  "pref_analysis_statistical_bias_threshold": "Statistical bias threshold",
-  "pref_analysis_statistical_bias_threshold_hint": "R14 kicks in when the score difference between the two top candidates is below this threshold.",
+  "pref_analysis_statistical_bias_threshold": "How far statistics may correct",
+  "pref_analysis_statistical_bias_threshold_hint": "When the app hesitates between two readings of the same chord, it picks the one the exercise corpus uses more often — but only if the two are genuinely close. This is the distance within which it counts them as close: higher means statistics has the last word more often.",
   "opt_bias_conservative": "Conservative (1)",
   "opt_bias_moderate": "Moderate (2)",
   "opt_bias_aggressive": "Aggressive (4)",
@@ -49,7 +49,7 @@
   "pref_analysis_strict_passing_notes_hint": "Apply tighter guards on the duration and ornamental profile of passing notes. Disable it to fall back to a more permissive behavior.",
   "pref_analysis_tonicization_compact": "Compact tonicizations",
   "pref_analysis_tonicization_compact_hint": "Show [in IV]: ii → V → I instead of ii/IV → V/IV → I/IV. Ideal for fast note values.",
-  "pref_analysis_cadential_patterns": "Cadential pattern recognition",
+  "pref_analysis_cadential_patterns": "Recognise cadences",
   "pref_analysis_cadential_patterns_hint": "Automatically detect cadences (ii–V–I, IV–V–I, etc.) and inject temporary tonicizations toward the target key.",
   "pref_analysis_chromatic_modulation": "Chromatic modulation (experimental)",
   "pref_analysis_chromatic_modulation_hint": "Detect modulations without cadential preparation by analysing chromatic content over windows of ≥ 3 consecutive measures.",
@@ -98,5 +98,12 @@
   "pref_editor_orchestral_grouping": "Group staves like a score",
   "pref_editor_orchestral_grouping_desc": "Draws a square bracket around consecutive staves of the same instrument family (woodwinds, brass, strings…), joins their barlines, and ties choir and tracks together with a single line on the left. The family is inferred from the track’s instrument and can be overridden by clicking the staff’s clef.",
   "pref_editor_voice_from_chord": "Voice inferred from the chord",
-  "pref_editor_voice_from_chord_desc": "Write notes without picking a voice: vertical order within the staff decides, the way a printed page reads. The order you write in does not matter. It corrects voice crossings as you write: if you meant the crossing, set the voice by hand and it stays. Rests keep the voice of wherever you place them, and say who is silent."
+  "pref_editor_voice_from_chord_desc": "Write notes without picking a voice: vertical order within the staff decides, the way a printed page reads. The order you write in does not matter. It corrects voice crossings as you write: if you meant the crossing, set the voice by hand and it stays. Rests keep the voice of wherever you place them, and say who is silent.",
+  "rule_sugg_filter": "Filter by name or code…",
+  "rule_sugg_group_rules": "Rules",
+  "rule_sugg_group_exc": "Exceptions",
+  "rule_sugg_group_cad": "Cadences",
+  "rule_sugg_group_orn": "Ornaments",
+  "rule_sugg_group_chrom": "Chromatic",
+  "rule_sugg_empty": "No rule matches that name."
 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { RULE_TEXTS } from '../utils/ruleTexts';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { ANALYSIS_PROFILE_PRESETS, type AnalysisProfileBaseId } from '../utils/analysisProfiles';
@@ -18,25 +19,28 @@ export type PreferencesModalProps = {
   onActivateMidi?: () => void | Promise<void>;
 };
 
-// ─── Consigli personalizzati – costanti e editor inline ───
-const RULE_LABELS: Record<string, string> = {
-  'R-01': 'Ottave/unisoni paralleli', 'R-02': 'Quinte parallele',
-  'R-04': 'Incrocio di voci', 'R-05': 'Quinte/ottave nascoste',
-  'R-06': 'Risoluzione salti aug/dim', 'R-07': 'Risoluzione sensibile',
-  'R-08': 'Spaziatura eccessiva', 'R-09': 'Falsa relazione cromatica',
-  'R-10': 'Raddoppio sensibile', 'R-10-7TH': 'Raddoppio 7ª',
-  'R-12': 'Risoluzione della 7ª', 'R-13': 'Moto parallelo tutte le voci',
-  'R-14': 'Moto simile voci estreme', 'R-15': 'Salti ampi voci interne',
-  'R-16': 'Sincope armonica', 'R-17a': 'Due salti → 7ª/9ª (proibito)',
-  'R-17b': '7ª/9ª senza grado congiunto', 'R-17c': 'Successione di tritono',
-  'R-N-RES': 'Risoluz. nota non armonica', 'R-AUG6-RES': 'Risoluz. 6ª aumentata',
-  'R-CAD64': 'Risoluz. accordo cadenzale 6/4',
-};
-const KNOWN_RULE_IDS = Object.keys(RULE_LABELS);
+// ─── Consigli personalizzati – catalogo e editor inline ───
+//
+// L'ELENCO SI COSTRUISCE DAL CATALOGO VERO, non a mano. Prima era una tabella scritta a
+// mano di 21 regole, e l'applicazione ne conosce 78: mancavano TUTTE le eccezioni, tutte le
+// cadenze, tutti gli ornamenti e diciotto regole di condotta — comprese quelle aggiunte di
+// recente, come l'accordo incompleto, la grafia incoerente e la falsa relazione di tritono.
+// Una lista scritta a mano non cresce quando cresce il programma; questa sì.
+const FAMIGLIE: { chiave: string; test: (id: string) => boolean }[] = [
+  { chiave: 'rule_sugg_group_orn', test: id => id.startsWith('ORN-') || id.startsWith('R-ORN-') },
+  { chiave: 'rule_sugg_group_exc', test: id => id.startsWith('EXC-') },
+  { chiave: 'rule_sugg_group_cad', test: id => id.startsWith('CAD-') },
+  { chiave: 'rule_sugg_group_chrom', test: id => id.startsWith('CHROM-') },
+  { chiave: 'rule_sugg_group_rules', test: id => id.startsWith('R-') },
+];
+const ORDINE_FAMIGLIE = ['rule_sugg_group_rules', 'rule_sugg_group_exc', 'rule_sugg_group_cad', 'rule_sugg_group_orn', 'rule_sugg_group_chrom'];
+const famigliaDi = (id: string) => (FAMIGLIE.find(f => f.test(id))?.chiave ?? 'rule_sugg_group_rules');
+const CATALOGO_REGOLE = Object.keys(RULE_TEXTS).sort();
 
 function RuleSuggestionsEditor() {
   const { t } = useTranslation('preferences');
   const { t: tRule } = useTranslation('rules');
+  const { t: tRuleTexts } = useTranslation('ruleTexts');
   const [suggestions, setSuggestions] = usePreference<Record<string, string>>('analysis.ruleSuggestions');
   const suggs = (suggestions ?? {}) as Record<string, string>;
   const [expanded, setExpanded] = React.useState(false);
@@ -48,6 +52,40 @@ function RuleSuggestionsEditor() {
   };
 
   const customCount = Object.keys(suggs).filter(k => suggs[k]?.trim()).length;
+  const [filtro, setFiltro] = React.useState('');
+
+  /**
+   * Il nome leggibile di una regola. I TITOLI NON STANNO NEL REGISTRO TypeScript — lì ci
+   * sono solo `body` e `suggestion` — ma nel file di lingua `ruleTexts`. Cercandoli nel
+   * posto sbagliato quarantotto regole su sessantanove si sarebbero presentate col solo
+   * codice, che è esattamente il modo in cui l'app non deve parlare.
+   */
+  const nomeRegola = React.useCallback((ruleId: string): string => {
+    const dalCatalogo = tRuleTexts(`${ruleId}.title`, { defaultValue: '' });
+    if (dalCatalogo) return dalCatalogo;
+    const breve = tRule(`rule.${ruleId}`, { defaultValue: '' });
+    return breve || ruleId;
+  }, [tRule, tRuleTexts]);
+
+  // Le regole già commentate vengono in cima alla loro famiglia: sono quelle che si torna a
+  // rileggere, e in un elenco di settantotto voci cercarle a scorrimento è una penitenza.
+  const perFamiglia = React.useMemo(() => {
+    const q = filtro.trim().toLowerCase();
+    const mappa = new Map<string, string[]>();
+    for (const id of CATALOGO_REGOLE) {
+      if (q && !id.toLowerCase().includes(q) && !nomeRegola(id).toLowerCase().includes(q)) continue;
+      const f = famigliaDi(id);
+      if (!mappa.has(f)) mappa.set(f, []);
+      mappa.get(f)!.push(id);
+    }
+    for (const lista of mappa.values()) {
+      lista.sort((a, b) => {
+        const ca = suggs[a]?.trim() ? 0 : 1, cb = suggs[b]?.trim() ? 0 : 1;
+        return ca !== cb ? ca - cb : nomeRegola(a).localeCompare(nomeRegola(b));
+      });
+    }
+    return ORDINE_FAMIGLIE.filter(f => mappa.has(f)).map(f => [f, mappa.get(f)!] as const);
+  }, [filtro, suggs, nomeRegola]);
 
   return (
     <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
@@ -64,11 +102,27 @@ function RuleSuggestionsEditor() {
       </button>
 
       {expanded && (
-        <div className="mt-3 space-y-2 max-h-64 overflow-y-auto pr-1">
-          {KNOWN_RULE_IDS.map(ruleId => (
+        <div className="mt-3">
+          <input
+            type="text"
+            value={filtro}
+            onChange={e => setFiltro(e.target.value)}
+            placeholder={t('rule_sugg_filter', { defaultValue: 'Filtra per nome o codice…' })}
+            className="w-full mb-2 bg-slate-800 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1 focus:border-cyan-500 focus:outline-none"
+          />
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+          {perFamiglia.length === 0 && (
+            <div className="text-xs text-slate-500 py-2">{t('rule_sugg_empty', { defaultValue: 'Nessuna regola col nome cercato.' })}</div>
+          )}
+          {perFamiglia.map(([famiglia, regole]) => (
+            <React.Fragment key={famiglia}>
+              <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold pt-2 pb-0.5 sticky top-0 bg-slate-900/95">
+                {t(famiglia, { defaultValue: famiglia })} <span className="text-slate-600">· {regole.length}</span>
+              </div>
+              {regole.map(ruleId => (
             <div key={ruleId} className="flex flex-col gap-0.5">
               <label className="text-xs text-slate-300 font-semibold select-none">
-                {ruleId} — {tRule(`rule.${ruleId}`, { defaultValue: RULE_LABELS[ruleId] })}
+                {ruleId} — {nomeRegola(ruleId)}
               </label>
               <textarea
                 className="bg-slate-800 border border-slate-600 text-slate-100 text-xs rounded px-2 py-1 resize-none focus:border-cyan-500 focus:outline-none"
@@ -78,7 +132,10 @@ function RuleSuggestionsEditor() {
                 onChange={(e) => handleChange(ruleId, e.target.value)}
               />
             </div>
+              ))}
+            </React.Fragment>
           ))}
+          </div>
         </div>
       )}
     </div>

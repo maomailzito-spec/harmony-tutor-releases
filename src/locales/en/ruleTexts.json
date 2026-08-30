@@ -83,6 +83,7 @@
     "title": "Atypical doubling in a 6/4 chord (2nd inversion)"
   },
   "R-10-3RD": {
+    "title": "Atypical doubling: third doubled in root position",
     "body": "In a root-position chord, the preferred doubling choice is the root (or secondarily the fifth). The third — especially if major — is the least suitable note to double because it most strongly characterizes the chord's quality, and its double presence can make the sound heavy and create voice-leading difficulties.\nThe rule is not absolute: in certain contexts, doubling the third is not only acceptable but recommended.\n• In imitative progressions and sequences: the need to maintain melodic symmetry prevails; doubling is tolerated.\n• In the deceptive cadence V–vi: the vi chord that follows the dominant has a third that corresponds to the tonic; doubling it is recommended to facilitate correct voice-leading and avoid parallel octaves.\n• In the Neapolitan chord (♭II): doubling the third (scale degree IV) is the preferred choice to emphasize the chord's function.\n• In first inversion: if the bass note (the chord's third) is a strong scale degree (I, IV, or V), its doubling is acceptable.\n• Minor chords: the severity of the warning is reduced — doubling the minor third is considered much more acceptable than the major third.",
     "suggestion": "In root position, favor doubling the root. If the context requires doubling the third (deceptive cadence, Neapolitan chord, imitative sequence), verify that the voice-leading is correct and that no parallels are created in the progression.",
     "titleVariants": {
@@ -252,6 +253,7 @@
     }
   },
   "R-18": {
+    "title": "Chromatic clash (same note, different accidentals)",
     "body": "Two notes with the same letter name but different accidentals (e.g., B natural and B♭) sound simultaneously in the same chord.\nThis \"simultaneous chromatic clash\" creates a strong minor-second dissonance (or enharmonic equivalent) that has no functional justification in tonal harmony. Unlike the cross relation (R-09), which occurs between consecutive chords, here the two versions of the same note coexist at the same moment.\nThe result is a confused sound: the ear cannot decide which is the \"true\" version of the note.",
     "suggestion": "Correct one of the two notes so they have the same accidental, or verify whether one of them is an input error.",
     "titlePrefix": "Chromatic clash: ",
@@ -281,10 +283,12 @@
     "title": "Excessive spacing between Tenor and Bass (> 2 octaves + 5th)"
   },
   "EXC-M03": {
+    "title": "Consecutive octaves and fifths in contrary motion",
     "body": "Consecutive octaves and fifths in contrary motion (when voices move in opposite directions while passing through the same perfect interval) are considered less serious than direct-motion parallels, and are tolerated in certain contexts.\nThis exception is recognized in classical treatises: contrary motion attenuates the \"sliding\" effect of parallels because the voices open up instead of converging. It remains a solution to avoid when possible, preferring voice-leading that entirely avoids the succession of perfect intervals.",
     "suggestion": "While tolerated, try to avoid even contrary-motion parallels by modifying the doubling or chord voicing. Use them only when the voice-leading offers no better solutions."
   },
   "EXC-M04": {
+    "title": "Fifth or octave reached by oblique motion",
     "body": "Oblique motion occurs when one voice remains stationary while the other moves. When this produces a perfect fifth or octave, the result is permitted: since one of the two voices does not move, it does not create the \"parallel sliding\" effect typical of direct-motion parallels.\nUnison and perfect intervals reached by oblique motion are generally permitted, except for unison by direct motion which should always be avoided.",
     "suggestion": "Oblique motion toward perfect intervals is acceptable. Just ensure that the moving voice does not create other voice-leading problems (incorrect leaps, register violations, etc.)."
   },
@@ -393,6 +397,7 @@
     "title": "Leading tone in a chromatic line (exception)"
   },
   "EXC-LT-FREE": {
+    "title": "Free resolution of the leading tone",
     "body": "The obligation for the leading tone to resolve upward (VII → I) is suspended when the destination chord does not exert a tonic-attracting resolving function (is neither I nor vi).\nLinear priority: in non-cadential passages (e.g., VII → IV or VII → III), the leading tone is considered a mobile melodic note. If the Soprano or an inner voice follows a descending pattern, the coherence of the line takes precedence over the scale degree's tension.\nTension neutralization: the pull toward the tonic is strongest only in the V → I or vii° → I succession. In non-cadential successions, the leading tone may descend by step or leap to the fifth of the next chord to ensure harmonic completeness.\nThe leading tone is defined as \"free\" even if the destination chord contains the tonic as a chord tone (e.g., the IV chord in root position contains the tonic), provided the succession is not classifiable as a perfect or deceptive cadence.",
     "suggestion": "Valid exception. The destination chord is neither I nor vi: the leading tone is melodically free in a non-cadential context.",
     "titleVariants": {
@@ -441,6 +446,7 @@
     "title": "Exception: no resolution available for the seventh in the destination chord"
   },
   "EXC-R17-Duration": {
+    "title": "Two leaps tolerated by the middle note's duration",
     "body": "",
     "suggestion": "",
     "titleVariants": {
@@ -454,22 +460,27 @@
     "title": "Neighbor note (neighbor tone) recognized"
   },
   "R-ORN-NEIGH": {
+    "title": "Atypical neighbour tone",
     "body": "The detected neighbor note has atypical characteristics: it may be on a strong beat instead of a weak one, may not return exactly to the starting note, or may have an interval other than a second.\nA neighbor note on a strong beat is permitted — it is called an upper or lower appoggiatura in certain treatises — but requires greater attention: the dissonant effect is more pronounced and the resolution must be even clearer.",
     "suggestion": "Verify that the note returns to the chord tone by step and that the rhythmic context justifies the unusual position. If the note is on a strong beat and has significant duration, it might be more correctly classified as an appoggiatura."
   },
   "ORN-APP": {
+    "title": "Appoggiatura recognised",
     "body": "The appoggiatura is a non-harmonic note found on a strong or relatively strong beat, creating a dissonance with the underlying harmony, and resolving by step (usually descending) to the chord tone.\nThe name itself (from the Italian \"appoggiarsi,\" meaning \"to lean\") indicates its function: the voice \"leans\" on the dissonance before descending to the chord tone. This creates an expressive effect of tension and release that is particularly effective.\nThe appoggiatura has been correctly identified: it is on a strong position, is dissonant with the chord, and resolves by step in the expected direction.",
     "suggestion": "Correctly voiced appoggiatura. No modification necessary."
   },
   "R-ORN-APP": {
+    "title": "Appoggiatura with unusual features",
     "body": "The detected appoggiatura has unusual characteristics: it may be on a weak beat, resolve in an unexpected direction, or have a resolution interval other than a second.\nIn the academic tradition, the appoggiatura is strictly tied to its strong metrical position and descending stepwise resolution. An appoggiatura that resolves upward or is found on a weak beat is less typical and might be classified differently (neighbor note, passing tone).",
     "suggestion": "Verify the metrical position and the direction of resolution. If the note is on a weak beat, consider whether it is instead a neighbor note or passing tone. If the resolution is ascending, the appoggiatura is stylistically less conventional but not necessarily incorrect."
   },
   "ORN-ANT": {
+    "title": "Anticipation recognised",
     "body": "The anticipation is a non-harmonic note that \"anticipates\" a note of the next chord before that chord arrives. It is typically found on a weak beat or on a subdivision, has a short value, and coincides exactly with a note of the chord that will follow.\nUnlike the appoggiatura, the anticipation does not create tension to be resolved: it is already the \"right\" note of the next chord, just presented early. The effect is one of fluidity and forward projection toward the next chord.\nThe anticipation has been correctly identified.",
     "suggestion": "Correctly voiced anticipation. No modification necessary."
   },
   "R-ORN-ANT": {
+    "title": "Anticipation with unusual features",
     "body": "The detected anticipation has unusual characteristics: it is on a strong beat or has a long rhythmic value relative to the note it anticipates.\nA long or strong-beat anticipation risks being perceived as a dissonance or as a misplaced chord tone, losing its function of \"projection\" toward the next chord. In standard academic writing, anticipations are short and on weak beats.",
     "suggestion": "If the note is long or on a strong beat, evaluate whether it is an intentional anticipation or a voice-leading problem. An effective anticipation is usually short (sixteenth, eighth note) and on a weak beat or subdivision."
   },
@@ -479,6 +490,7 @@
     "title": "Escape note recognized"
   },
   "R-ORN-ESC": {
+    "title": "Atypical escape tone",
     "body": "The detected escape note has atypical characteristics: it may be on a strong beat, have an excessively wide final leap, or the stepwise approach may be absent.\nThe escape note is typically on weak beats and the final leap is generally a third. On strong beats or with wider leaps, the effect becomes harsher and may be stylistically out of context in standard academic writing.",
     "suggestion": "Verify the metrical position and the width of the final leap. If the note is on a strong beat or the leap exceeds a third, consider whether the voice-leading is stylistically justified or whether modifying the melodic line is preferable.",
     "titleVariants": {
@@ -488,6 +500,7 @@
     }
   },
   "ORN-PASS": {
+    "title": "Passing note recognised",
     "body": "The passing tone is a non-harmonic note that connects two consecutive chord tones by step in the same voice. It may be diatonic (within the scale) or chromatic (with an accidental).\nThe passing tone is usually found on a weak beat, has a short value, and moves between two chord tones a third apart (diatonic) or an augmented second apart (chromatic).\nIt has been correctly identified: it moves by step between two chord tones and is in an appropriate metrical position.",
     "suggestion": "Correctly voiced passing tone. No modification necessary."
   },
