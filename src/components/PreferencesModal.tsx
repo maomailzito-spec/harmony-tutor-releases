@@ -26,16 +26,20 @@ export type PreferencesModalProps = {
 // cadenze, tutti gli ornamenti e diciotto regole di condotta — comprese quelle aggiunte di
 // recente, come l'accordo incompleto, la grafia incoerente e la falsa relazione di tritono.
 // Una lista scritta a mano non cresce quando cresce il programma; questa sì.
+// SOLO REGOLE ED ECCEZIONI, e il criterio è dell'utente: qui si personalizza il CONSIGLIO,
+// cioè il commento su qualcosa che il pannello scrive e su cui un insegnante o un allievo
+// possono avere un'opinione diversa. Una cadenza perfetta o un'anticipazione riconosciuta
+// non sono giudizi: sono identificazioni, e non c'è niente da controbattere. Fuori anche
+// perché sei sigle di ornamento non compaiono MAI — provate su 296 brani del corpus.
 const FAMIGLIE: { chiave: string; test: (id: string) => boolean }[] = [
-  { chiave: 'rule_sugg_group_orn', test: id => id.startsWith('ORN-') || id.startsWith('R-ORN-') },
   { chiave: 'rule_sugg_group_exc', test: id => id.startsWith('EXC-') },
-  { chiave: 'rule_sugg_group_cad', test: id => id.startsWith('CAD-') },
-  { chiave: 'rule_sugg_group_chrom', test: id => id.startsWith('CHROM-') },
   { chiave: 'rule_sugg_group_rules', test: id => id.startsWith('R-') },
 ];
-const ORDINE_FAMIGLIE = ['rule_sugg_group_rules', 'rule_sugg_group_exc', 'rule_sugg_group_cad', 'rule_sugg_group_orn', 'rule_sugg_group_chrom'];
+const ORDINE_FAMIGLIE = ['rule_sugg_group_rules', 'rule_sugg_group_exc'];
 const famigliaDi = (id: string) => (FAMIGLIE.find(f => f.test(id))?.chiave ?? 'rule_sugg_group_rules');
-const CATALOGO_REGOLE = Object.keys(RULE_TEXTS).sort();
+const CATALOGO_REGOLE = Object.keys(RULE_TEXTS)
+  .filter(id => FAMIGLIE.some(f => f.test(id)))
+  .sort();
 
 function RuleSuggestionsEditor() {
   const { t } = useTranslation('preferences');
