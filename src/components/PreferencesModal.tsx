@@ -26,19 +26,26 @@ export type PreferencesModalProps = {
 // cadenze, tutti gli ornamenti e diciotto regole di condotta — comprese quelle aggiunte di
 // recente, come l'accordo incompleto, la grafia incoerente e la falsa relazione di tritono.
 // Una lista scritta a mano non cresce quando cresce il programma; questa sì.
-// SOLO REGOLE ED ECCEZIONI, e il criterio è dell'utente: qui si personalizza il CONSIGLIO,
-// cioè il commento su qualcosa che il pannello scrive e su cui un insegnante o un allievo
-// possono avere un'opinione diversa. Una cadenza perfetta o un'anticipazione riconosciuta
-// non sono giudizi: sono identificazioni, e non c'è niente da controbattere. Fuori anche
-// perché sei sigle di ornamento non compaiono MAI — provate su 296 brani del corpus.
+// TUTTO CIÒ CHE IL PANNELLO SCRIVE DAVVERO — che è il criterio dell'utente: si personalizza
+// il commento a qualcosa che sta scritto lì e su cui un insegnante o un allievo possono
+// avere un'opinione diversa.
+//
+// Misurato girando l'analisi sui 296 brani del corpus: le CADENZE escono come eccezioni e
+// sono fra le cose più scritte in assoluto (`CAD-IAC` 267 volte, `CAD-PAC` 192, `CAD-HC`
+// 169), e due ornamenti compaiono regolarmente (`ORN-ESC` 67, `ORN-NEIGH` 61). Restano
+// fuori solo i tre che in tutto il corpus non si presentano MAI: su una cosa che non compare
+// non c'è niente da commentare.
+const MAI_VISTE = new Set(['ORN-APP', 'ORN-ANT', 'ORN-PASS']);
 const FAMIGLIE: { chiave: string; test: (id: string) => boolean }[] = [
+  { chiave: 'rule_sugg_group_orn', test: id => id.startsWith('ORN-') || id.startsWith('R-ORN-') },
   { chiave: 'rule_sugg_group_exc', test: id => id.startsWith('EXC-') },
+  { chiave: 'rule_sugg_group_cad', test: id => id.startsWith('CAD-') },
   { chiave: 'rule_sugg_group_rules', test: id => id.startsWith('R-') },
 ];
-const ORDINE_FAMIGLIE = ['rule_sugg_group_rules', 'rule_sugg_group_exc'];
+const ORDINE_FAMIGLIE = ['rule_sugg_group_rules', 'rule_sugg_group_exc', 'rule_sugg_group_cad', 'rule_sugg_group_orn'];
 const famigliaDi = (id: string) => (FAMIGLIE.find(f => f.test(id))?.chiave ?? 'rule_sugg_group_rules');
 const CATALOGO_REGOLE = Object.keys(RULE_TEXTS)
-  .filter(id => FAMIGLIE.some(f => f.test(id)))
+  .filter(id => !MAI_VISTE.has(id) && FAMIGLIE.some(f => f.test(id)))
   .sort();
 
 function RuleSuggestionsEditor() {

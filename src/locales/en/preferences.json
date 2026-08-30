@@ -102,5 +102,7 @@
   "rule_sugg_filter": "Filter by name or code…",
   "rule_sugg_group_rules": "Rules",
   "rule_sugg_group_exc": "Exceptions",
-  "rule_sugg_empty": "No rule matches that name."
+  "rule_sugg_empty": "No rule matches that name.",
+  "rule_sugg_group_cad": "Cadences",
+  "rule_sugg_group_orn": "Ornaments"
 }
