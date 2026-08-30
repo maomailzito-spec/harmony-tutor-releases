@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { RULE_TEXTS } from '../utils/ruleTexts';
+import itRuleTexts from '../locales/it/ruleTexts.json';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { ANALYSIS_PROFILE_PRESETS, type AnalysisProfileBaseId } from '../utils/analysisProfiles';
@@ -40,11 +41,19 @@ const FAMIGLIE: { chiave: string; test: (id: string) => boolean }[] = [
   { chiave: 'rule_sugg_group_orn', test: id => id.startsWith('ORN-') || id.startsWith('R-ORN-') },
   { chiave: 'rule_sugg_group_exc', test: id => id.startsWith('EXC-') },
   { chiave: 'rule_sugg_group_cad', test: id => id.startsWith('CAD-') },
+  { chiave: 'rule_sugg_group_chrom', test: id => id.startsWith('CHROM-') },
   { chiave: 'rule_sugg_group_rules', test: id => id.startsWith('R-') },
 ];
-const ORDINE_FAMIGLIE = ['rule_sugg_group_rules', 'rule_sugg_group_exc', 'rule_sugg_group_cad', 'rule_sugg_group_orn'];
+const ORDINE_FAMIGLIE = ['rule_sugg_group_rules', 'rule_sugg_group_exc', 'rule_sugg_group_cad', 'rule_sugg_group_orn', 'rule_sugg_group_chrom'];
 const famigliaDi = (id: string) => (FAMIGLIE.find(f => f.test(id))?.chiave ?? 'rule_sugg_group_rules');
-const CATALOGO_REGOLE = Object.keys(RULE_TEXTS)
+// L'UNIONE DEI DUE CATALOGHI. Il registro TypeScript e il file di lingua NON coincidono —
+// 69 voci contro 78 — e prendendo solo il primo si perdevano nove regole che il pannello
+// scrive regolarmente, fra cui la falsa relazione di tritono e la grafia incoerente. Il
+// testo che l'utente legge viene dal file di lingua: è quello la fonte da non perdere.
+const CATALOGO_REGOLE = Array.from(new Set([
+  ...Object.keys(RULE_TEXTS),
+  ...Object.keys(itRuleTexts as Record<string, unknown>),
+]))
   .filter(id => !MAI_VISTE.has(id) && FAMIGLIE.some(f => f.test(id)))
   .sort();
 

@@ -104,5 +104,6 @@
   "rule_sugg_group_exc": "Eccezioni",
   "rule_sugg_empty": "Nessuna regola col nome cercato.",
   "rule_sugg_group_cad": "Cadenze",
-  "rule_sugg_group_orn": "Ornamenti"
+  "rule_sugg_group_orn": "Ornamenti",
+  "rule_sugg_group_chrom": "Cromatismi"
 }

@@ -8481,7 +8481,13 @@ export function applyHarmonyRules(
                                 + `Alterazioni rilevate:\n`
                                 + varDetailLines.join('\n')
                                 + `\n\nQueste alterazioni possono comparire singolarmente o in combinazione. Con quattro voci a disposizione, l'inclusione di ciascuna alterazione richiede l'omissione di un'altra nota dell'accordo base.`,
-                            suggestion: '⚠️ Nota Tecnica: Il riconoscimento avviene come post-processing su un accordo già classificato come sesta aumentata. Il motore verifica la presenza di intervalli a 14 semitoni (8x), 9 semitoni (5x) o 5 semitoni (3+) dal basso, con controllo di non-conflitto. La label e le figure vengono renderizzate in colore viola per distinguere l\'accordo dagli accordi tradizionali. L\'accordo non genera warning né errori — è un riconoscimento informativo di armonia cromatica funzionale.',
+                            // NIENTE CONSIGLIO QUI. Il campo «Consiglio» è quello che legge
+                            // l'allievo, e conteneva una nota tecnica su come funziona il
+                            // riconoscimento — post-processing, intervalli a 14 semitoni, il
+                            // colore viola delle etichette. Documentazione per noi, nel posto
+                            // sbagliato, e per giunta scritta nel codice quindi mai tradotta.
+                            // Il consiglio vero sta ora nei file di lingua (`CHROM-AUG6-VAR`),
+                            // dove `enrichViolationsWithText` lo pesca solo se qui non ce n'è.
                             noteIds: (a.notes || []).slice(0, 4).map(n => n.id),
                         });
                     }

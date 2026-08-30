@@ -581,7 +581,8 @@
       "ottava più che eccedente": "more-than-augmented octave",
       "quinta più che eccedente": "more-than-augmented fifth",
       "terza eccedente": "augmented third"
-    }
+    },
+    "suggestion": "This is not a mistake to fix. Academic rules would flag these intervals as forbidden, but here every altered note has a precise function: it is a leading tone resolving up by a semitone onto a note of the destination chord. That is exactly the check to make — verify that EVERY alteration really does resolve up by a semitone into the next chord. If it does, the writing is correct and the effect is intended; if one does not, then that interval is a genuine error."
   },
   "EXC-IV6-V6": {
     "title": "Fifth by direct motion in the chain of first inversions of IV and V",
