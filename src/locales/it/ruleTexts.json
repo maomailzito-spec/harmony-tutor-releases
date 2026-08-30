@@ -582,7 +582,7 @@
       "quinta più che eccedente": "quinta più che eccedente",
       "terza eccedente": "terza eccedente"
     },
-    "suggestion": "Non è un errore da correggere. Le regole accademiche segnalerebbero questi intervalli come proibiti, ma qui ogni nota alterata ha una funzione precisa: è una sensibile che risolve salendo di semitono su una nota dell'accordo d'arrivo. La verifica da fare è proprio questa — controlla che OGNI alterazione risolva davvero per semitono ascendente sull'accordo successivo. Se lo fa, la scrittura è corretta e l'effetto è voluto; se una non risolve, allora quell'intervallo è un errore vero."
+    "suggestion": "Dipende dal repertorio. In un corale o in un pezzo settecentesco questa è una falsa relazione da correggere, e l'esercizio è proprio trovare la soluzione diatonica. Nell'armonia romantica, nel Novecento e nel jazz è invece una risorsa: ogni nota alterata fa da sensibile e sale di semitono su una nota dell'accordo d'arrivo. Il controllo da fare è questo — che OGNI alterazione risolva davvero per semitono ascendente. Se non risolve, è un errore in qualunque stile."
   },
   "EXC-IV6-V6": {
     "title": "Quinta per moto retto nell'incatenamento dei primi rivolti di IV e V",

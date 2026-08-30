@@ -582,7 +582,7 @@
       "quinta più che eccedente": "more-than-augmented fifth",
       "terza eccedente": "augmented third"
     },
-    "suggestion": "This is not a mistake to fix. Academic rules would flag these intervals as forbidden, but here every altered note has a precise function: it is a leading tone resolving up by a semitone onto a note of the destination chord. That is exactly the check to make — verify that EVERY alteration really does resolve up by a semitone into the next chord. If it does, the writing is correct and the effect is intended; if one does not, then that interval is a genuine error."
+    "suggestion": "It depends on the repertoire. In a chorale or an eighteenth-century piece this is a chromatic false relation to be corrected, and finding the diatonic solution is precisely the exercise. In Romantic, twentieth-century and jazz harmony it is instead a resource: every altered note acts as a leading tone, rising by a semitone onto a note of the destination chord. This is the check to make — that EVERY alteration really does resolve up by a semitone. If it does not, it is an error in any style."
   },
   "EXC-IV6-V6": {
     "title": "Fifth by direct motion in the chain of first inversions of IV and V",
