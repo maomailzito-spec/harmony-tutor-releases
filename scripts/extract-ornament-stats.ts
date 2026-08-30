@@ -298,13 +298,57 @@ function addTotals(pats: Record<string, Record<string, number>>) {
     );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SI ACCUMULA, NON SI SOSTITUISCE.
+//
+// La tavola del 1° maggio era stata estratta da 188 file. Rilanciando l'estrattore oggi
+// se ne trovano meno — file sostituiti, e i doppioni tolti dal corpus — e il risultato era
+// PEGGIORE di quello che sostituiva: 997 campioni scesi a 951, e le situazioni capaci di
+// intervenire da 49 a 43, senza guadagnarne nemmeno una. Rigenerare alla cieca cancella
+// conoscenza che l'utente ha prodotto a mano e che non tornerà indietro.
+//
+// Quindi ogni situazione si tiene nella versione con PIÙ campioni: il conto non scende mai
+// per il solo fatto che un file ha cambiato nome o è uscito dal corpus. `--rigenera` forza
+// la ricostruzione da zero, per quando si vuole davvero ripartire.
+const RIGENERA = process.argv.includes('--rigenera');
+type Conteggi = Record<string, number>;
+function accumula(nuovi: Record<string, Conteggi>, vecchiFile: string): Record<string, Conteggi> {
+    if (RIGENERA) return nuovi;
+    let precedenti: Record<string, any> = {};
+    try {
+        const grezzo = JSON.parse(fs.readFileSync(vecchiFile, 'utf8'));
+        precedenti = grezzo?.patterns ?? {};
+    } catch { return nuovi; }
+    const fuori: Record<string, Conteggi> = { ...nuovi };
+    let tenute = 0;
+    for (const [chiave, vecchio] of Object.entries(precedenti)) {
+        const totVecchio = Number((vecchio as any)._total ?? 0);
+        const adesso = nuovi[chiave];
+        const totAdesso = adesso ? Object.values(adesso).reduce((a, b) => a + b, 0) : 0;
+        if (totAdesso >= totVecchio) continue;
+        const senzaMeta: Conteggi = {};
+        for (const [t, n] of Object.entries(vecchio as any)) {
+            if (t.startsWith('_')) continue;
+            senzaMeta[t] = Number(n);
+        }
+        if (Object.keys(senzaMeta).length === 0) continue;
+        fuori[chiave] = senzaMeta;
+        tenute++;
+    }
+    if (tenute > 0) console.log(`   (${tenute} situazioni conservate dall'estrazione precedente: oggi il corpus ne ha meno)`);
+    return fuori;
+}
+
+const _vecchioJson = path.join(path.resolve(__dirname, '..', 'src', 'data'), 'ornamentLearning.json');
+const patternsAccumulati = accumula(patterns, _vecchioJson);
+
 const output = {
     version: 1,
     extractedAt: new Date().toISOString().slice(0, 10),
     totalFiles,
     totalSamples,
     typeCounts,
-    patterns: addTotals(patterns),
+    patterns: addTotals(patternsAccumulati),
     detailedPatterns: addTotals(detailedPatterns),
     samples,
 };
@@ -325,7 +369,7 @@ const tsLines: string[] = [
     '    [type: string]: string | number;',
     '}> = {',
 ];
-for (const [key, counts] of Object.entries(patterns)) {
+for (const [key, counts] of Object.entries(patternsAccumulati)) {
     const total = Object.values(counts as Record<string, number>).reduce((s, v) => s + v, 0);
     let dominant = '';
     let maxCount = 0;

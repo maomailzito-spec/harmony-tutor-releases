@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "extractedAt": "2026-05-01",
-  "totalFiles": 188,
-  "totalSamples": 997,
+  "extractedAt": "2026-08-30",
+  "totalFiles": 179,
+  "totalSamples": 951,
   "typeCounts": {
-    "neighbor": 99,
-    "passing": 373,
-    "suspension": 109,
-    "anticipation": 28,
-    "appoggiatura": 276,
-    "escape": 63,
-    "cambiata": 49
+    "neighbor": 103,
+    "passing": 359,
+    "appoggiatura": 249,
+    "cambiata": 50,
+    "suspension": 105,
+    "anticipation": 26,
+    "escape": 59
   },
   "patterns": {
     "short_weak_step-down_step-down": {
@@ -59,24 +59,24 @@
       "_probability": 0.897
     },
     "short_moderate_unison_step-down": {
-      "appoggiatura": 13,
-      "suspension": 12,
+      "appoggiatura": 14,
+      "suspension": 11,
       "_total": 25,
       "_dominant": "appoggiatura",
-      "_probability": 0.52
+      "_probability": 0.56
+    },
+    "short_strong_unison_step-down": {
+      "suspension": 8,
+      "appoggiatura": 14,
+      "_total": 22,
+      "_dominant": "appoggiatura",
+      "_probability": 0.636
     },
     "medium_moderate_step-down_step-down": {
       "passing": 22,
       "_total": 22,
       "_dominant": "passing",
       "_probability": 1
-    },
-    "short_strong_unison_step-down": {
-      "suspension": 7,
-      "appoggiatura": 14,
-      "_total": 21,
-      "_dominant": "appoggiatura",
-      "_probability": 0.667
     },
     "short_weak_step-up_skip-down": {
       "escape": 21,
@@ -94,14 +94,6 @@
       "_dominant": "passing",
       "_probability": 0.8
     },
-    "short_weak_step-up_step-down": {
-      "neighbor": 13,
-      "passing": 3,
-      "appoggiatura": 2,
-      "_total": 18,
-      "_dominant": "neighbor",
-      "_probability": 0.722
-    },
     "medium_strong_step-up_step-down": {
       "appoggiatura": 16,
       "neighbor": 1,
@@ -109,6 +101,14 @@
       "_total": 18,
       "_dominant": "appoggiatura",
       "_probability": 0.889
+    },
+    "short_weak_step-up_step-down": {
+      "neighbor": 13,
+      "passing": 3,
+      "appoggiatura": 2,
+      "_total": 18,
+      "_dominant": "neighbor",
+      "_probability": 0.722
     },
     "medium_strong_skip-up_step-down": {
       "appoggiatura": 12,
@@ -139,6 +139,14 @@
       "_dominant": "appoggiatura",
       "_probability": 0.667
     },
+    "medium_strong_step-up_step-up": {
+      "passing": 7,
+      "appoggiatura": 4,
+      "suspension": 1,
+      "_total": 12,
+      "_dominant": "passing",
+      "_probability": 0.583
+    },
     "medium_weak_step-down_step-down": {
       "passing": 11,
       "suspension": 1,
@@ -162,20 +170,20 @@
       "_dominant": "cambiata",
       "_probability": 0.833
     },
+    "short_weak_skip-down_step-up": {
+      "cambiata": 7,
+      "escape": 2,
+      "appoggiatura": 2,
+      "_total": 11,
+      "_dominant": "cambiata",
+      "_probability": 0.636
+    },
     "short_weak_step-up_unison": {
       "passing": 2,
       "anticipation": 9,
       "_total": 11,
       "_dominant": "anticipation",
       "_probability": 0.818
-    },
-    "short_weak_skip-down_step-up": {
-      "escape": 3,
-      "appoggiatura": 2,
-      "cambiata": 6,
-      "_total": 11,
-      "_dominant": "cambiata",
-      "_probability": 0.545
     },
     "short_moderate_leap-up_step-down": {
       "appoggiatura": 10,
@@ -192,11 +200,31 @@
       "_dominant": "appoggiatura",
       "_probability": 0.4
     },
+    "medium_strong_step-down_step-up": {
+      "neighbor": 5,
+      "appoggiatura": 3,
+      "_total": 8,
+      "_dominant": "neighbor",
+      "_probability": 0.625
+    },
+    "very-short_weak_step-up_step-down": {
+      "neighbor": 8,
+      "_total": 8,
+      "_dominant": "neighbor",
+      "_probability": 1
+    },
     "medium_strong_unison_step-up": {
       "suspension": 8,
       "_total": 8,
       "_dominant": "suspension",
       "_probability": 1
+    },
+    "medium_weak_step-up_step-down": {
+      "neighbor": 6,
+      "appoggiatura": 1,
+      "_total": 7,
+      "_dominant": "neighbor",
+      "_probability": 0.857
     },
     "short_weak_step-down_unison": {
       "anticipation": 5,
@@ -205,10 +233,10 @@
       "_dominant": "anticipation",
       "_probability": 0.714
     },
-    "very-short_weak_step-up_step-down": {
-      "neighbor": 7,
+    "medium_strong_leap-down_step-up": {
+      "appoggiatura": 7,
       "_total": 7,
-      "_dominant": "neighbor",
+      "_dominant": "appoggiatura",
       "_probability": 1
     },
     "short_moderate_step-up_step-down": {
@@ -219,20 +247,6 @@
       "_dominant": "neighbor",
       "_probability": 0.714
     },
-    "medium_strong_step-up_step-up": {
-      "appoggiatura": 5,
-      "suspension": 1,
-      "passing": 1,
-      "_total": 7,
-      "_dominant": "appoggiatura",
-      "_probability": 0.714
-    },
-    "medium_strong_leap-down_step-up": {
-      "appoggiatura": 7,
-      "_total": 7,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
     "short_weak_step-down_skip-up": {
       "escape": 6,
       "passing": 1,
@@ -240,26 +254,12 @@
       "_dominant": "escape",
       "_probability": 0.857
     },
-    "medium_weak_step-up_step-down": {
-      "neighbor": 5,
-      "appoggiatura": 1,
-      "_total": 6,
-      "_dominant": "neighbor",
-      "_probability": 0.833
-    },
     "short_moderate_skip-up_step-down": {
       "appoggiatura": 4,
       "cambiata": 2,
       "_total": 6,
       "_dominant": "appoggiatura",
       "_probability": 0.667
-    },
-    "short_strong_skip-down_step-up": {
-      "appoggiatura": 5,
-      "cambiata": 1,
-      "_total": 6,
-      "_dominant": "appoggiatura",
-      "_probability": 0.833
     },
     "short_moderate_step-up_step-up": {
       "appoggiatura": 4,
@@ -274,6 +274,13 @@
       "_total": 6,
       "_dominant": "passing",
       "_probability": 1
+    },
+    "short_strong_skip-down_step-up": {
+      "appoggiatura": 5,
+      "cambiata": 1,
+      "_total": 6,
+      "_dominant": "appoggiatura",
+      "_probability": 0.833
     },
     "short_weak_leap-up_step-down": {
       "neighbor": 1,
@@ -302,6 +309,12 @@
       "_dominant": "neighbor",
       "_probability": 0.6
     },
+    "medium_strong_none_step-up": {
+      "appoggiatura": 5,
+      "_total": 5,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
     "very-short_weak_skip-up_step-down": {
       "passing": 2,
       "cambiata": 2,
@@ -310,22 +323,22 @@
       "_dominant": "passing",
       "_probability": 0.4
     },
-    "short_strong_leap-down_step-up": {
-      "appoggiatura": 5,
-      "_total": 5,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
     "medium_strong_none_step-down": {
       "appoggiatura": 5,
       "_total": 5,
       "_dominant": "appoggiatura",
       "_probability": 1
     },
-    "medium_strong_none_step-up": {
+    "short_strong_leap-down_step-up": {
       "appoggiatura": 5,
       "_total": 5,
       "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_weak_step-up_step-up": {
+      "passing": 5,
+      "_total": 5,
+      "_dominant": "passing",
       "_probability": 1
     },
     "short_strong_unison_step-up": {
@@ -340,19 +353,6 @@
       "_dominant": "suspension",
       "_probability": 1
     },
-    "medium_strong_step-down_step-up": {
-      "appoggiatura": 3,
-      "neighbor": 2,
-      "_total": 5,
-      "_dominant": "appoggiatura",
-      "_probability": 0.6
-    },
-    "medium_weak_step-up_step-up": {
-      "passing": 5,
-      "_total": 5,
-      "_dominant": "passing",
-      "_probability": 1
-    },
     "medium_weak_skip-up_step-down": {
       "cambiata": 5,
       "_total": 5,
@@ -365,12 +365,25 @@
       "_dominant": "suspension",
       "_probability": 1
     },
+    "short_strong_leap-up_step-down": {
+      "appoggiatura": 4,
+      "_total": 4,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
     "short_weak_leap-down_leap-up": {
       "passing": 2,
       "escape": 2,
       "_total": 4,
       "_dominant": "passing",
       "_probability": 0.5
+    },
+    "short_moderate_skip-down_step-up": {
+      "appoggiatura": 3,
+      "cambiata": 1,
+      "_total": 4,
+      "_dominant": "appoggiatura",
+      "_probability": 0.75
     },
     "short_strong_none_step-up": {
       "appoggiatura": 4,
@@ -385,23 +398,16 @@
       "_dominant": "appoggiatura",
       "_probability": 0.75
     },
-    "short_moderate_skip-down_step-up": {
-      "appoggiatura": 3,
-      "cambiata": 1,
-      "_total": 4,
-      "_dominant": "appoggiatura",
-      "_probability": 0.75
-    },
-    "short_strong_leap-up_step-down": {
-      "appoggiatura": 4,
-      "_total": 4,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
     "very-short_weak_step-up_skip-down": {
       "escape": 4,
       "_total": 4,
       "_dominant": "escape",
+      "_probability": 1
+    },
+    "short_strong_skip-up_step-down": {
+      "appoggiatura": 4,
+      "_total": 4,
+      "_dominant": "appoggiatura",
       "_probability": 1
     },
     "medium_weak_skip-down_step-up": {
@@ -429,6 +435,13 @@
       "_dominant": "anticipation",
       "_probability": 1
     },
+    "short_weak_skip-down_leap-up": {
+      "passing": 2,
+      "neighbor": 1,
+      "_total": 3,
+      "_dominant": "passing",
+      "_probability": 0.667
+    },
     "medium_moderate_skip-up_step-down": {
       "passing": 2,
       "cambiata": 1,
@@ -442,19 +455,6 @@
       "_dominant": "anticipation",
       "_probability": 1
     },
-    "short_strong_step-down_step-up": {
-      "appoggiatura": 3,
-      "_total": 3,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_weak_skip-down_leap-up": {
-      "passing": 2,
-      "neighbor": 1,
-      "_total": 3,
-      "_dominant": "passing",
-      "_probability": 0.667
-    },
     "long_strong_none_step-down": {
       "appoggiatura": 3,
       "_total": 3,
@@ -467,6 +467,12 @@
       "_total": 3,
       "_dominant": "passing",
       "_probability": 0.667
+    },
+    "short_strong_step-down_step-up": {
+      "appoggiatura": 3,
+      "_total": 3,
+      "_dominant": "appoggiatura",
+      "_probability": 1
     },
     "long_strong_step-up_step-down": {
       "appoggiatura": 3,
@@ -487,12 +493,6 @@
       "_dominant": "escape",
       "_probability": 0.667
     },
-    "short_strong_skip-up_step-down": {
-      "appoggiatura": 3,
-      "_total": 3,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
     "short_strong_step-down_skip-up": {
       "appoggiatura": 2,
       "_total": 2,
@@ -500,30 +500,6 @@
       "_probability": 1
     },
     "short_strong_step-up_skip-up": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "very-short_weak_skip-up_skip-up": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_strong_none_step-down": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_moderate_skip-up_step-up": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "long_strong_leap-up_step-down": {
       "appoggiatura": 2,
       "_total": 2,
       "_dominant": "appoggiatura",
@@ -543,11 +519,42 @@
       "_dominant": "passing",
       "_probability": 0.5
     },
+    "very-short_weak_skip-up_skip-up": {
+      "passing": 2,
+      "_total": 2,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "short_strong_none_step-down": {
+      "appoggiatura": 2,
+      "_total": 2,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_moderate_skip-up_step-up": {
+      "appoggiatura": 2,
+      "_total": 2,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
     "long_strong_skip-down_step-up": {
       "appoggiatura": 2,
       "_total": 2,
       "_dominant": "appoggiatura",
       "_probability": 1
+    },
+    "long_strong_leap-up_step-down": {
+      "appoggiatura": 2,
+      "_total": 2,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "very-short_weak_skip-down_step-up": {
+      "passing": 1,
+      "cambiata": 1,
+      "_total": 2,
+      "_dominant": "passing",
+      "_probability": 0.5
     },
     "short_weak_skip-down_skip-up": {
       "cambiata": 1,
@@ -618,6 +625,12 @@
       "_dominant": "escape",
       "_probability": 1
     },
+    "short_moderate_unison_skip-down": {
+      "cambiata": 1,
+      "_total": 1,
+      "_dominant": "cambiata",
+      "_probability": 1
+    },
     "medium_weak_none_unison": {
       "anticipation": 1,
       "_total": 1,
@@ -676,12 +689,6 @@
       "suspension": 1,
       "_total": 1,
       "_dominant": "suspension",
-      "_probability": 1
-    },
-    "very-short_weak_skip-down_step-up": {
-      "passing": 1,
-      "_total": 1,
-      "_dominant": "passing",
       "_probability": 1
     },
     "medium_strong_none_unison": {
@@ -852,6 +859,12 @@
       "_dominant": "neighbor",
       "_probability": 1
     },
+    "medium_moderate_skip-down_step-down": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
     "very-short_weak_step-down_skip-up": {
       "escape": 1,
       "_total": 1,
@@ -899,83 +912,77 @@
       "_total": 1,
       "_dominant": "escape",
       "_probability": 1
+    },
+    "medium_strong_leap-down_step-down": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
     }
   },
   "detailedPatterns": {
     "short_weak_step-down_step-down_v4_unk_same": {
-      "passing": 48,
-      "_total": 48,
+      "passing": 46,
+      "_total": 46,
       "_dominant": "passing",
       "_probability": 1
     },
-    "short_weak_step-down_step-down_v3_unk_same": {
+    "short_weak_step-up_step-up_v1_unk_same": {
       "passing": 25,
       "_total": 25,
       "_dominant": "passing",
       "_probability": 1
     },
+    "short_weak_step-down_step-down_v3_unk_same": {
+      "passing": 24,
+      "_total": 24,
+      "_dominant": "passing",
+      "_probability": 1
+    },
     "short_weak_step-down_step-down_v1_unk_same": {
-      "passing": 23,
+      "passing": 21,
       "appoggiatura": 1,
       "suspension": 1,
-      "_total": 25,
-      "_dominant": "passing",
-      "_probability": 0.92
-    },
-    "short_weak_step-up_step-up_v1_unk_same": {
-      "passing": 23,
       "_total": 23,
+      "_dominant": "passing",
+      "_probability": 0.913
+    },
+    "short_weak_step-up_step-up_v2_unk_same": {
+      "passing": 21,
+      "_total": 21,
       "_dominant": "passing",
       "_probability": 1
     },
     "short_weak_step-up_step-up_v4_unk_same": {
-      "passing": 20,
-      "_total": 20,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_weak_step-up_step-up_v2_unk_same": {
-      "passing": 20,
-      "_total": 20,
+      "passing": 18,
+      "_total": 18,
       "_dominant": "passing",
       "_probability": 1
     },
     "short_weak_step-down_step-down_v2_unk_same": {
-      "passing": 16,
-      "_total": 16,
+      "passing": 15,
+      "_total": 15,
       "_dominant": "passing",
       "_probability": 1
     },
     "short_moderate_step-down_step-down_v4_unk_same": {
-      "appoggiatura": 14,
+      "appoggiatura": 13,
       "passing": 1,
-      "_total": 15,
+      "_total": 14,
       "_dominant": "appoggiatura",
-      "_probability": 0.933
+      "_probability": 0.929
+    },
+    "short_weak_step-down_step-down_v3_cons_same": {
+      "passing": 11,
+      "appoggiatura": 2,
+      "_total": 13,
+      "_dominant": "passing",
+      "_probability": 0.846
     },
     "short_weak_step-up_step-up_v3_unk_same": {
       "passing": 13,
       "_total": 13,
       "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_weak_step-down_step-down_v3_cons_same": {
-      "appoggiatura": 2,
-      "passing": 10,
-      "_total": 12,
-      "_dominant": "passing",
-      "_probability": 0.833
-    },
-    "medium_moderate_step-down_step-down_v1_unk_same": {
-      "passing": 9,
-      "_total": 9,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_weak_skip-up_step-down_v1_unk_same": {
-      "cambiata": 9,
-      "_total": 9,
-      "_dominant": "cambiata",
       "_probability": 1
     },
     "short_weak_step-down_step-up_v1_unk_same": {
@@ -990,16 +997,16 @@
       "_dominant": "passing",
       "_probability": 1
     },
-    "short_weak_step-down_step-down_v1_cons_same": {
-      "passing": 7,
-      "_total": 7,
+    "medium_moderate_step-down_step-down_v1_unk_same": {
+      "passing": 8,
+      "_total": 8,
       "_dominant": "passing",
       "_probability": 1
     },
-    "short_weak_step-up_step-up_v1_cons_same": {
-      "passing": 7,
-      "_total": 7,
-      "_dominant": "passing",
+    "short_weak_skip-up_step-down_v1_unk_same": {
+      "cambiata": 8,
+      "_total": 8,
+      "_dominant": "cambiata",
       "_probability": 1
     },
     "short_moderate_unison_step-down_v2_diss_same": {
@@ -1009,16 +1016,16 @@
       "_dominant": "appoggiatura",
       "_probability": 0.857
     },
-    "long_strong_unison_step-down_v4_unk_same": {
-      "suspension": 7,
-      "_total": 7,
-      "_dominant": "suspension",
-      "_probability": 1
-    },
     "short_weak_step-up_skip-down_v1_unk_same": {
       "escape": 7,
       "_total": 7,
       "_dominant": "escape",
+      "_probability": 1
+    },
+    "medium_strong_step-up_step-up_v1_unk_same": {
+      "passing": 6,
+      "_total": 6,
+      "_dominant": "passing",
       "_probability": 1
     },
     "short_weak_step-up_step-down_v1_unk_same": {
@@ -1027,10 +1034,10 @@
       "_dominant": "neighbor",
       "_probability": 1
     },
-    "short_weak_step-down_step-down_v2_cons_same": {
-      "passing": 6,
+    "short_weak_skip-down_step-up_v1_unk_same": {
+      "cambiata": 6,
       "_total": 6,
-      "_dominant": "passing",
+      "_dominant": "cambiata",
       "_probability": 1
     },
     "short_weak_step-down_step-up_v4_unk_same": {
@@ -1060,17 +1067,29 @@
       "_dominant": "neighbor",
       "_probability": 0.833
     },
-    "short_weak_step-down_step-down_v1_diss_same": {
-      "passing": 3,
-      "appoggiatura": 3,
-      "_total": 6,
-      "_dominant": "passing",
-      "_probability": 0.5
-    },
     "short_weak_step-down_step-up_v3_unk_same": {
       "neighbor": 6,
       "_total": 6,
       "_dominant": "neighbor",
+      "_probability": 1
+    },
+    "long_strong_unison_step-down_v4_unk_same": {
+      "suspension": 6,
+      "_total": 6,
+      "_dominant": "suspension",
+      "_probability": 1
+    },
+    "short_strong_unison_step-down_v1_cons_same": {
+      "suspension": 4,
+      "appoggiatura": 2,
+      "_total": 6,
+      "_dominant": "suspension",
+      "_probability": 0.667
+    },
+    "short_weak_step-down_step-down_v1_cons_same": {
+      "passing": 5,
+      "_total": 5,
+      "_dominant": "passing",
       "_probability": 1
     },
     "medium_strong_unison_step-down_v2_cons_same": {
@@ -1079,6 +1098,12 @@
       "_total": 5,
       "_dominant": "appoggiatura",
       "_probability": 0.8
+    },
+    "short_weak_step-up_step-up_v1_cons_same": {
+      "passing": 5,
+      "_total": 5,
+      "_dominant": "passing",
+      "_probability": 1
     },
     "short_moderate_step-down_step-down_v4_unk_shorter": {
       "appoggiatura": 4,
@@ -1094,30 +1119,12 @@
       "_dominant": "appoggiatura",
       "_probability": 0.8
     },
-    "short_weak_step-down_step-down_v4_unk_much-shorter": {
-      "passing": 5,
-      "_total": 5,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "medium_strong_step-up_step-down_v3_cons_shorter": {
-      "appoggiatura": 5,
+    "short_weak_step-down_step-down_v1_diss_same": {
+      "passing": 2,
+      "appoggiatura": 3,
       "_total": 5,
       "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_weak_step-up_skip-down_v1_unk_much-shorter": {
-      "escape": 5,
-      "_total": 5,
-      "_dominant": "escape",
-      "_probability": 1
-    },
-    "medium_strong_skip-up_step-down_v2_cons_same": {
-      "appoggiatura": 4,
-      "cambiata": 1,
-      "_total": 5,
-      "_dominant": "appoggiatura",
-      "_probability": 0.8
+      "_probability": 0.6
     },
     "short_moderate_unison_step-down_v1_unk_shorter": {
       "suspension": 4,
@@ -1132,29 +1139,28 @@
       "_dominant": "neighbor",
       "_probability": 1
     },
-    "short_strong_unison_step-down_v1_cons_same": {
-      "suspension": 3,
-      "appoggiatura": 2,
-      "_total": 5,
-      "_dominant": "suspension",
-      "_probability": 0.6
-    },
-    "short_weak_skip-down_step-up_v1_unk_same": {
-      "cambiata": 5,
-      "_total": 5,
-      "_dominant": "cambiata",
-      "_probability": 1
-    },
     "long_strong_unison_step-down_v1_cons_shorter": {
       "suspension": 5,
       "_total": 5,
       "_dominant": "suspension",
       "_probability": 1
     },
+    "short_weak_step-up_step-up_v2_cons_same": {
+      "passing": 4,
+      "_total": 4,
+      "_dominant": "passing",
+      "_probability": 1
+    },
     "short_moderate_step-down_step-down_v1_cons_shorter": {
       "appoggiatura": 4,
       "_total": 4,
       "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_weak_step-down_step-down_v2_cons_same": {
+      "passing": 4,
+      "_total": 4,
+      "_dominant": "passing",
       "_probability": 1
     },
     "very-short_weak_step-down_step-up_v2_unk_same": {
@@ -1170,10 +1176,22 @@
       "_dominant": "neighbor",
       "_probability": 1
     },
-    "medium_strong_step-up_step-down_v1_cons_longer": {
+    "medium_strong_step-up_step-down_v3_cons_shorter": {
       "appoggiatura": 4,
       "_total": 4,
       "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_weak_step-down_step-down_v4_unk_much-shorter": {
+      "passing": 4,
+      "_total": 4,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "short_weak_step-up_skip-down_v1_unk_much-shorter": {
+      "escape": 4,
+      "_total": 4,
+      "_dominant": "escape",
       "_probability": 1
     },
     "very-short_weak_step-down_step-down_v1_unk_same": {
@@ -1233,18 +1251,30 @@
       "_dominant": "suspension",
       "_probability": 1
     },
+    "medium_weak_step-up_step-down_v3_unk_longer": {
+      "neighbor": 2,
+      "appoggiatura": 1,
+      "_total": 3,
+      "_dominant": "neighbor",
+      "_probability": 0.667
+    },
+    "short_moderate_unison_step-down_v2_cons_same": {
+      "appoggiatura": 3,
+      "_total": 3,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "very-short_weak_step-up_step-down_v1_unk_same": {
+      "neighbor": 3,
+      "_total": 3,
+      "_dominant": "neighbor",
+      "_probability": 1
+    },
     "medium_weak_step-down_step-down_v1_unk_same": {
       "passing": 3,
       "_total": 3,
       "_dominant": "passing",
       "_probability": 1
-    },
-    "short_weak_step-up_step-up_v2_unk_much-shorter": {
-      "passing": 1,
-      "cambiata": 2,
-      "_total": 3,
-      "_dominant": "cambiata",
-      "_probability": 0.667
     },
     "short_strong_unison_step-down_v2_diss_shorter": {
       "appoggiatura": 2,
@@ -1254,12 +1284,6 @@
       "_probability": 0.667
     },
     "very-short_weak_step-up_step-up_v3_unk_shorter": {
-      "passing": 3,
-      "_total": 3,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_weak_step-up_step-up_v2_cons_same": {
       "passing": 3,
       "_total": 3,
       "_dominant": "passing",
@@ -1279,28 +1303,22 @@
       "_dominant": "appoggiatura",
       "_probability": 0.667
     },
-    "short_weak_unison_unison_v1_unk_much-shorter": {
-      "anticipation": 3,
-      "_total": 3,
-      "_dominant": "anticipation",
-      "_probability": 1
-    },
-    "short_moderate_leap-up_step-down_v1_unk_same": {
-      "appoggiatura": 2,
-      "neighbor": 1,
+    "medium_strong_step-up_step-down_v1_cons_longer": {
+      "appoggiatura": 3,
       "_total": 3,
       "_dominant": "appoggiatura",
-      "_probability": 0.667
-    },
-    "medium_strong_unison_step-down_v3_cons_shorter": {
-      "suspension": 3,
-      "_total": 3,
-      "_dominant": "suspension",
       "_probability": 1
     },
     "short_moderate_step-up_step-up_v1_unk_same": {
       "appoggiatura": 2,
       "passing": 1,
+      "_total": 3,
+      "_dominant": "appoggiatura",
+      "_probability": 0.667
+    },
+    "medium_strong_skip-up_step-down_v2_cons_same": {
+      "appoggiatura": 2,
+      "cambiata": 1,
       "_total": 3,
       "_dominant": "appoggiatura",
       "_probability": 0.667
@@ -1399,6 +1417,12 @@
       "_dominant": "suspension",
       "_probability": 1
     },
+    "medium_strong_step-down_step-up_v1_unk_same": {
+      "neighbor": 2,
+      "_total": 2,
+      "_dominant": "neighbor",
+      "_probability": 1
+    },
     "very-short_weak_step-up_step-up_v3_unk_same": {
       "passing": 2,
       "_total": 2,
@@ -1443,24 +1467,18 @@
       "_dominant": "passing",
       "_probability": 1
     },
-    "short_moderate_unison_step-down_v2_cons_same": {
-      "appoggiatura": 2,
+    "short_weak_step-up_step-up_v2_unk_much-shorter": {
+      "passing": 1,
+      "cambiata": 1,
       "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
+      "_dominant": "passing",
+      "_probability": 0.5
     },
     "short_weak_step-down_leap-up_v4_unk_same": {
       "passing": 2,
       "_total": 2,
       "_dominant": "passing",
       "_probability": 1
-    },
-    "medium_weak_step-up_step-down_v3_unk_longer": {
-      "neighbor": 1,
-      "appoggiatura": 1,
-      "_total": 2,
-      "_dominant": "neighbor",
-      "_probability": 0.5
     },
     "short_moderate_skip-up_step-down_v2_diss_shorter": {
       "appoggiatura": 2,
@@ -1558,36 +1576,6 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
-    "short_moderate_step-up_step-down_v2_cons_shorter": {
-      "neighbor": 2,
-      "_total": 2,
-      "_dominant": "neighbor",
-      "_probability": 1
-    },
-    "short_moderate_unison_step-down_v1_diss_shorter": {
-      "suspension": 2,
-      "_total": 2,
-      "_dominant": "suspension",
-      "_probability": 1
-    },
-    "very-short_weak_step-down_step-down_v1_cons_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "very-short_weak_step-down_step-down_v3_cons_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "very-short_weak_step-up_step-up_v4_unk_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
     "medium_moderate_step-down_step-down_v2_unk_same": {
       "passing": 2,
       "_total": 2,
@@ -1618,178 +1606,10 @@
       "_dominant": "suspension",
       "_probability": 1
     },
-    "medium_moderate_skip-up_step-down_v1_unk_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_weak_leap-down_leap-up_v1_unk_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
     "short_strong_step-down_skip-up_v1_cons_much-shorter": {
       "appoggiatura": 2,
       "_total": 2,
       "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "very-short_weak_skip-up_skip-up_v4_unk_shorter": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "very-short_weak_skip-up_step-down_v4_unk_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_weak_skip-down_step-up_v3_unk_same": {
-      "escape": 2,
-      "_total": 2,
-      "_dominant": "escape",
-      "_probability": 1
-    },
-    "short_weak_leap-down_leap-up_v4_unk_much-shorter": {
-      "escape": 2,
-      "_total": 2,
-      "_dominant": "escape",
-      "_probability": 1
-    },
-    "short_strong_none_step-down_v1_diss_unknown": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_strong_none_step-up_v2_cons_unknown": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_strong_none_step-up_v3_diss_unknown": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_moderate_leap-down_step-up_v1_unk_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_moderate_step-down_step-up_v2_unk_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_moderate_leap-up_step-down_v3_unk_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_strong_skip-down_step-up_v1_unk_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_strong_step-down_step-down_v2_unk_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_strong_leap-down_step-up_v3_unk_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_moderate_skip-up_step-up_v2_unk_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_strong_skip-down_step-up_v2_diss_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_moderate_skip-down_step-up_v1_diss_shorter": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_moderate_leap-up_step-down_v4_unk_shorter": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_strong_skip-down_step-up_v2_diss_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_moderate_step-up_step-down_v2_unk_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "short_strong_step-down_step-up_v3_cons_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_strong_none_step-down_v4_unk_unknown": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_strong_step-up_step-up_v2_diss_shorter": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_strong_step-down_step-down_v1_diss_shorter": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "long_strong_leap-up_step-down_v4_unk_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_moderate_step-down_step-down_v2_diss_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
-      "_probability": 1
-    },
-    "short_weak_step-up_step-up_v1_diss_same": {
-      "passing": 2,
-      "_total": 2,
-      "_dominant": "passing",
       "_probability": 1
     },
     "medium_strong_none_step-up_v3_diss_unknown": {
@@ -1810,34 +1630,16 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
-    "short_weak_step-up_skip-down_v4_unk_same": {
-      "escape": 2,
-      "_total": 2,
-      "_dominant": "escape",
-      "_probability": 1
-    },
-    "short_strong_unison_step-up_v1_diss_much-shorter": {
-      "suspension": 2,
-      "_total": 2,
-      "_dominant": "suspension",
-      "_probability": 1
-    },
-    "medium_strong_unison_skip-down_v3_cons_shorter": {
-      "suspension": 2,
-      "_total": 2,
-      "_dominant": "suspension",
-      "_probability": 1
-    },
-    "short_weak_step-up_unison_v1_unk_same": {
-      "anticipation": 2,
-      "_total": 2,
-      "_dominant": "anticipation",
-      "_probability": 1
-    },
     "medium_moderate_step-up_step-up_v1_unk_same": {
       "passing": 2,
       "_total": 2,
       "_dominant": "passing",
+      "_probability": 1
+    },
+    "medium_strong_unison_step-down_v3_cons_shorter": {
+      "suspension": 2,
+      "_total": 2,
+      "_dominant": "suspension",
       "_probability": 1
     },
     "short_weak_step-down_skip-down_v1_unk_same": {
@@ -1854,6 +1656,12 @@
       "_dominant": "appoggiatura",
       "_probability": 0.5
     },
+    "short_weak_unison_unison_v1_unk_much-shorter": {
+      "anticipation": 2,
+      "_total": 2,
+      "_dominant": "anticipation",
+      "_probability": 1
+    },
     "medium_strong_unison_step-down_v1_diss_longer": {
       "appoggiatura": 2,
       "_total": 2,
@@ -1866,47 +1674,12 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
-    "medium_strong_skip-down_step-up_v2_diss_shorter": {
-      "appoggiatura": 2,
+    "short_moderate_leap-up_step-down_v1_unk_same": {
+      "appoggiatura": 1,
+      "neighbor": 1,
       "_total": 2,
       "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_strong_unison_step-up_v4_unk_shorter": {
-      "suspension": 2,
-      "_total": 2,
-      "_dominant": "suspension",
-      "_probability": 1
-    },
-    "long_strong_skip-down_step-up_v3_diss_shorter": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "long_strong_step-up_step-down_v3_cons_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_strong_none_step-up_v2_diss_unknown": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_strong_leap-down_step-up_v2_diss_same": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
-    },
-    "medium_strong_step-down_step-down_v4_unk_shorter": {
-      "appoggiatura": 2,
-      "_total": 2,
-      "_dominant": "appoggiatura",
-      "_probability": 1
+      "_probability": 0.5
     },
     "short_moderate_leap-up_step-down_v1_unk_shorter": {
       "appoggiatura": 2,
@@ -2102,10 +1875,22 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
-    "very-short_weak_step-up_step-down_v1_unk_same": {
-      "neighbor": 2,
-      "_total": 2,
+    "medium_strong_step-down_step-up_v1_unk_shorter": {
+      "neighbor": 1,
+      "_total": 1,
       "_dominant": "neighbor",
+      "_probability": 1
+    },
+    "medium_strong_step-up_step-down_v1_cons_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_moderate_unison_skip-down_v1_unk_much-shorter": {
+      "cambiata": 1,
+      "_total": 1,
+      "_dominant": "cambiata",
       "_probability": 1
     },
     "medium_strong_step-down_step-down_v1_cons_same": {
@@ -2336,10 +2121,46 @@
       "_dominant": "passing",
       "_probability": 1
     },
+    "medium_moderate_skip-up_step-down_v1_unk_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "short_weak_leap-down_leap-up_v1_unk_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
     "medium_strong_step-down_step-down_v1_unk_same": {
       "appoggiatura": 1,
       "_total": 1,
       "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "very-short_weak_skip-up_skip-up_v4_unk_shorter": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "very-short_weak_skip-up_step-down_v4_unk_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "short_weak_skip-down_step-up_v3_unk_same": {
+      "escape": 1,
+      "_total": 1,
+      "_dominant": "escape",
+      "_probability": 1
+    },
+    "short_weak_leap-down_leap-up_v4_unk_much-shorter": {
+      "escape": 1,
+      "_total": 1,
+      "_dominant": "escape",
       "_probability": 1
     },
     "medium_strong_unison_step-up_v1_cons_shorter": {
@@ -2444,6 +2265,144 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
+    "short_strong_none_step-down_v1_diss_unknown": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_strong_none_step-up_v2_cons_unknown": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_strong_none_step-up_v3_diss_unknown": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_moderate_leap-down_step-up_v1_unk_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_moderate_step-down_step-up_v2_unk_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_moderate_leap-up_step-down_v3_unk_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_strong_skip-down_step-up_v1_unk_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_strong_step-down_step-down_v2_unk_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_strong_leap-down_step-up_v3_unk_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_moderate_skip-up_step-up_v2_unk_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_strong_skip-down_step-up_v2_diss_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_moderate_skip-down_step-up_v1_diss_shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_moderate_leap-up_step-down_v4_unk_shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_skip-down_step-up_v2_diss_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_moderate_step-up_step-down_v2_unk_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "short_strong_step-down_step-up_v3_cons_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_skip-down_step-up_v2_diss_shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_unison_step-up_v4_unk_shorter": {
+      "suspension": 1,
+      "_total": 1,
+      "_dominant": "suspension",
+      "_probability": 1
+    },
+    "long_strong_skip-down_step-up_v3_diss_shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "long_strong_step-up_step-down_v3_cons_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_none_step-up_v2_diss_unknown": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_leap-down_step-up_v2_diss_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_step-down_step-down_v4_unk_shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
     "long_strong_none_unison_v1_cons_unknown": {
       "suspension": 1,
       "_total": 1,
@@ -2451,6 +2410,30 @@
       "_probability": 1
     },
     "short_moderate_unison_step-up_v1_diss_shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_none_step-down_v4_unk_unknown": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_step-up_step-up_v2_diss_shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_step-down_step-down_v1_diss_shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "long_strong_leap-up_step-down_v4_unk_same": {
       "appoggiatura": 1,
       "_total": 1,
       "_dominant": "appoggiatura",
@@ -2484,6 +2467,18 @@
       "suspension": 1,
       "_total": 1,
       "_dominant": "suspension",
+      "_probability": 1
+    },
+    "medium_moderate_step-down_step-down_v2_diss_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "short_weak_step-up_step-up_v1_diss_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
       "_probability": 1
     },
     "medium_strong_leap-down_step-up_v3_diss_same": {
@@ -2580,6 +2575,30 @@
       "passing": 1,
       "_total": 1,
       "_dominant": "passing",
+      "_probability": 1
+    },
+    "short_weak_step-up_skip-down_v4_unk_same": {
+      "escape": 1,
+      "_total": 1,
+      "_dominant": "escape",
+      "_probability": 1
+    },
+    "short_strong_unison_step-up_v1_diss_much-shorter": {
+      "suspension": 1,
+      "_total": 1,
+      "_dominant": "suspension",
+      "_probability": 1
+    },
+    "medium_strong_unison_skip-down_v3_cons_shorter": {
+      "suspension": 1,
+      "_total": 1,
+      "_dominant": "suspension",
+      "_probability": 1
+    },
+    "short_weak_step-up_unison_v1_unk_same": {
+      "anticipation": 1,
+      "_total": 1,
+      "_dominant": "anticipation",
       "_probability": 1
     },
     "very-short_weak_skip-down_step-up_v1_unk_same": {
@@ -2960,6 +2979,36 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
+    "short_moderate_step-up_step-down_v2_cons_shorter": {
+      "neighbor": 1,
+      "_total": 1,
+      "_dominant": "neighbor",
+      "_probability": 1
+    },
+    "short_moderate_unison_step-down_v1_diss_shorter": {
+      "suspension": 1,
+      "_total": 1,
+      "_dominant": "suspension",
+      "_probability": 1
+    },
+    "very-short_weak_step-down_step-down_v1_cons_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "very-short_weak_step-down_step-down_v3_cons_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
+    "very-short_weak_step-up_step-up_v4_unk_same": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
     "medium_strong_step-down_step-down_v2_cons_same": {
       "passing": 1,
       "_total": 1,
@@ -3272,6 +3321,12 @@
       "_dominant": "cambiata",
       "_probability": 1
     },
+    "medium_moderate_skip-down_step-down_v4_unk_longer": {
+      "passing": 1,
+      "_total": 1,
+      "_dominant": "passing",
+      "_probability": 1
+    },
     "very-short_weak_step-down_skip-up_v1_unk_much-shorter": {
       "escape": 1,
       "_total": 1,
@@ -3348,6 +3403,12 @@
       "cambiata": 1,
       "_total": 1,
       "_dominant": "cambiata",
+      "_probability": 1
+    },
+    "short_strong_unison_step-up_v1_diss_shorter": {
+      "suspension": 1,
+      "_total": 1,
+      "_dominant": "suspension",
       "_probability": 1
     },
     "long_strong_step-down_step-down_v1_cons_same": {
@@ -3542,6 +3603,12 @@
       "_dominant": "appoggiatura",
       "_probability": 1
     },
+    "very-short_weak_skip-down_step-up_v3_cons_shorter": {
+      "cambiata": 1,
+      "_total": 1,
+      "_dominant": "cambiata",
+      "_probability": 1
+    },
     "short_strong_step-down_step-down_v1_diss_same": {
       "appoggiatura": 1,
       "_total": 1,
@@ -3552,6 +3619,24 @@
       "suspension": 1,
       "_total": 1,
       "_dominant": "suspension",
+      "_probability": 1
+    },
+    "short_strong_skip-up_step-down_v3_diss_same": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_skip-up_step-down_v3_cons_longer": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
+      "_probability": 1
+    },
+    "medium_strong_leap-down_step-down_v1_diss_much-shorter": {
+      "appoggiatura": 1,
+      "_total": 1,
+      "_dominant": "appoggiatura",
       "_probability": 1
     },
     "long_strong_none_step-down_v1_cons_unknown": {
@@ -3568,6 +3653,380 @@
     }
   },
   "samples": [
+    {
+      "file": "Autumn Leaves.htp",
+      "noteId": "7cfaf98c-ae8b-4b26-9f92-e5eba6cc8025",
+      "type": "neighbor",
+      "patternKey": "medium_strong_step-down_step-up",
+      "detailedKey": "medium_strong_step-down_step-up_v1_unk_same",
+      "pitch": "A4",
+      "midi": 69,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 20,
+      "beatStrength": "strong",
+      "entryInterval": -1,
+      "exitInterval": 1,
+      "entryBucket": "step-down",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Autumn Leaves.htp",
+      "noteId": "de9761fe-1fd0-42aa-8cdc-0e87f7466ae6",
+      "type": "neighbor",
+      "patternKey": "medium_strong_step-down_step-up",
+      "detailedKey": "medium_strong_step-down_step-up_v1_unk_shorter",
+      "pitch": "F4",
+      "midi": 66,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 16,
+      "beatStrength": "strong",
+      "entryInterval": -1,
+      "exitInterval": 1,
+      "entryBucket": "step-down",
+      "exitBucket": "step-up",
+      "durationRatio": 0.5,
+      "durationRatioCategory": "shorter",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Autumn Leaves.htp",
+      "noteId": "b7bb0ab8-5a14-4028-86c6-4d4b4e5c95bd",
+      "type": "passing",
+      "patternKey": "medium_strong_step-up_step-up",
+      "detailedKey": "medium_strong_step-up_step-up_v1_unk_same",
+      "pitch": "A4",
+      "midi": 69,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 0,
+      "beatStrength": "strong",
+      "entryInterval": 2,
+      "exitInterval": 1,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Autumn Leaves.htp",
+      "noteId": "b4d68ba9-ae15-4e9d-b9c8-99fdbc5f7e0a",
+      "type": "neighbor",
+      "patternKey": "medium_strong_step-down_step-up",
+      "detailedKey": "medium_strong_step-down_step-up_v1_unk_same",
+      "pitch": "G4",
+      "midi": 67,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 18,
+      "beatStrength": "strong",
+      "entryInterval": -2,
+      "exitInterval": 2,
+      "entryBucket": "step-down",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Autumn Leaves.htp",
+      "noteId": "62694722-65a7-4d71-bd73-f57815732c2c",
+      "type": "passing",
+      "patternKey": "medium_strong_step-up_step-up",
+      "detailedKey": "medium_strong_step-up_step-up_v1_unk_same",
+      "pitch": "E4",
+      "midi": 64,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 6,
+      "beatStrength": "strong",
+      "entryInterval": 2,
+      "exitInterval": 2,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Autumn Leaves.htp",
+      "noteId": "5fa4dff7-c76c-40f8-8140-dc0ea6f3ed20",
+      "type": "passing",
+      "patternKey": "medium_strong_step-up_step-up",
+      "detailedKey": "medium_strong_step-up_step-up_v1_unk_same",
+      "pitch": "G4",
+      "midi": 67,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 2,
+      "beatStrength": "strong",
+      "entryInterval": 2,
+      "exitInterval": 2,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Autumn Leaves.htp",
+      "noteId": "d0a8a345-2b20-490f-abff-405279d551f1",
+      "type": "passing",
+      "patternKey": "medium_strong_step-up_step-up",
+      "detailedKey": "medium_strong_step-up_step-up_v1_unk_same",
+      "pitch": "A4",
+      "midi": 69,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 8,
+      "beatStrength": "strong",
+      "entryInterval": 2,
+      "exitInterval": 1,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Autumn Leaves.htp",
+      "noteId": "68cdebea-0140-4c0f-baa6-c0ae0dd5723c",
+      "type": "passing",
+      "patternKey": "medium_strong_step-up_step-up",
+      "detailedKey": "medium_strong_step-up_step-up_v1_unk_same",
+      "pitch": "G4",
+      "midi": 67,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 10,
+      "beatStrength": "strong",
+      "entryInterval": 2,
+      "exitInterval": 2,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Autumn Leaves.htp",
+      "noteId": "917b848c-5e0e-4645-b2bd-cd250c7c7f9f",
+      "type": "passing",
+      "patternKey": "medium_strong_step-up_step-up",
+      "detailedKey": "medium_strong_step-up_step-up_v1_unk_same",
+      "pitch": "F4",
+      "midi": 65,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 3,
+      "measureIndex": 12,
+      "beatStrength": "strong",
+      "entryInterval": 2,
+      "exitInterval": 2,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Bach Cantata BWV 18.5.htp",
+      "noteId": "fd16d67d-a1b3-48f0-bc49-841f42f24284",
+      "type": "neighbor",
+      "patternKey": "medium_weak_step-up_step-down",
+      "detailedKey": "medium_weak_step-up_step-down_v3_unk_longer",
+      "pitch": "G3",
+      "midi": 55,
+      "voice": 3,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 1.5,
+      "measureIndex": 4,
+      "beatStrength": "weak",
+      "entryInterval": 1,
+      "exitInterval": -1,
+      "entryBucket": "step-up",
+      "exitBucket": "step-down",
+      "durationRatio": 2,
+      "durationRatioCategory": "longer",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Bach Cantata BWV 18.5.htp",
+      "noteId": "61d83bb2-ab0c-43a7-9279-7f2911af4301",
+      "type": "appoggiatura",
+      "patternKey": "medium_strong_step-up_step-down",
+      "detailedKey": "medium_strong_step-up_step-down_v1_cons_same",
+      "pitch": "B4",
+      "midi": 70,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 1,
+      "measureIndex": 4,
+      "beatStrength": "strong",
+      "entryInterval": 1,
+      "exitInterval": -1,
+      "entryBucket": "step-up",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": false
+    },
+    {
+      "file": "Bach Cantata BWV 18.5.htp",
+      "noteId": "438b8b0f-04ae-4262-aa34-feb278cf6c6e",
+      "type": "passing",
+      "patternKey": "short_weak_step-down_step-down",
+      "detailedKey": "short_weak_step-down_step-down_v3_cons_same",
+      "pitch": "A3",
+      "midi": 57,
+      "voice": 3,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 1.5,
+      "measureIndex": 3,
+      "beatStrength": "weak",
+      "entryInterval": -1,
+      "exitInterval": -2,
+      "entryBucket": "step-down",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": false
+    },
+    {
+      "file": "Bach Cantata BWV 18.5.htp",
+      "noteId": "ac065e15-40d1-4b04-af94-39b09075f595",
+      "type": "passing",
+      "patternKey": "short_weak_step-down_step-down",
+      "detailedKey": "short_weak_step-down_step-down_v4_unk_same",
+      "pitch": "F3",
+      "midi": 53,
+      "voice": 4,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 1.5,
+      "measureIndex": 3,
+      "beatStrength": "weak",
+      "entryInterval": -2,
+      "exitInterval": -2,
+      "entryBucket": "step-down",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Bach Cantata BWV 18.5.htp",
+      "noteId": "7259c34d-525d-47f7-bf61-353b31490770",
+      "type": "passing",
+      "patternKey": "short_weak_step-down_step-down",
+      "detailedKey": "short_weak_step-down_step-down_v4_unk_same",
+      "pitch": "D3",
+      "midi": 50,
+      "voice": 4,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 2.5,
+      "measureIndex": 3,
+      "beatStrength": "weak",
+      "entryInterval": -1,
+      "exitInterval": -2,
+      "entryBucket": "step-down",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Bach Cantata BWV 18.5.htp",
+      "noteId": "bdf6886a-b781-43ac-bf68-ecdcbc47d312",
+      "type": "appoggiatura",
+      "patternKey": "short_moderate_unison_step-down",
+      "detailedKey": "short_moderate_unison_step-down_v2_cons_same",
+      "pitch": "C4",
+      "midi": 60,
+      "voice": 2,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 2,
+      "measureIndex": 2,
+      "beatStrength": "moderate",
+      "entryInterval": 0,
+      "exitInterval": -2,
+      "entryBucket": "unison",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": false
+    },
+    {
+      "file": "Bach Cantata BWV 18.5.htp",
+      "noteId": "de8d82da-10f1-4666-a11a-d567b33f3ccb",
+      "type": "passing",
+      "patternKey": "short_weak_step-up_step-up",
+      "detailedKey": "short_weak_step-up_step-up_v1_unk_same",
+      "pitch": "A4",
+      "midi": 69,
+      "voice": 1,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 4.5,
+      "measureIndex": 2,
+      "beatStrength": "weak",
+      "entryInterval": 2,
+      "exitInterval": 1,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Bach Cantata BWV 18.5.htp",
+      "noteId": "49edbd2a-abee-47ac-b530-f67aef57524d",
+      "type": "passing",
+      "patternKey": "short_weak_step-up_step-up",
+      "detailedKey": "short_weak_step-up_step-up_v2_cons_same",
+      "pitch": "D4",
+      "midi": 62,
+      "voice": 2,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 2.5,
+      "measureIndex": 3,
+      "beatStrength": "weak",
+      "entryInterval": 2,
+      "exitInterval": 1,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": false
+    },
     {
       "file": "Bach cantata 71.htp",
       "noteId": "midi-125-32160-72",
@@ -3607,6 +4066,72 @@
       "entryInterval": 1,
       "exitInterval": 2,
       "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Bach cantata 71.htp",
+      "noteId": "midi-185-42480-77",
+      "type": "neighbor",
+      "patternKey": "very-short_weak_step-up_step-down",
+      "detailedKey": "very-short_weak_step-up_step-down_v1_unk_same",
+      "pitch": "F5",
+      "midi": 77,
+      "voice": 1,
+      "duration": "sixteenth",
+      "durationCategory": "very-short",
+      "beat": 1.25,
+      "measureIndex": 11,
+      "beatStrength": "weak",
+      "entryInterval": 1,
+      "exitInterval": -1,
+      "entryBucket": "step-up",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Because.htp",
+      "noteId": "c38d1b0c-96ab-4e95-829a-a3ab5f400179",
+      "type": "cambiata",
+      "patternKey": "short_moderate_unison_skip-down",
+      "detailedKey": "short_moderate_unison_skip-down_v1_unk_much-shorter",
+      "pitch": "A4",
+      "midi": 69,
+      "voice": 1,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 4,
+      "measureIndex": 20,
+      "beatStrength": "moderate",
+      "entryInterval": 0,
+      "exitInterval": -3,
+      "entryBucket": "unison",
+      "exitBucket": "skip-down",
+      "durationRatio": 0.167,
+      "durationRatioCategory": "much-shorter",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Because.htp",
+      "noteId": "c0d26996-3ba0-4dcf-ba07-adc1a788c6b0",
+      "type": "cambiata",
+      "patternKey": "short_weak_skip-down_step-up",
+      "detailedKey": "short_weak_skip-down_step-up_v1_unk_same",
+      "pitch": "F4",
+      "midi": 66,
+      "voice": 1,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 4.5,
+      "measureIndex": 20,
+      "beatStrength": "weak",
+      "entryInterval": -3,
+      "exitInterval": 2,
+      "entryBucket": "skip-down",
       "exitBucket": "step-up",
       "durationRatio": 1,
       "durationRatioCategory": "same",
@@ -8365,358 +8890,6 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "de4a68c9-5b83-4e91-98e1-f680610ae7ff",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v4_unk_much-shorter",
-      "pitch": "F3",
-      "midi": 53,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.5,
-      "measureIndex": 4,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 0.333,
-      "durationRatioCategory": "much-shorter",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "f66737ca-7546-4e80-b0c7-1e0485890cd2",
-      "type": "passing",
-      "patternKey": "short_weak_step-up_step-up",
-      "detailedKey": "short_weak_step-up_step-up_v1_cons_same",
-      "pitch": "A4",
-      "midi": 70,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.5,
-      "measureIndex": 4,
-      "beatStrength": "weak",
-      "entryInterval": 1,
-      "exitInterval": 1,
-      "entryBucket": "step-up",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "b8d41566-9c60-419c-a91e-30ada6a35beb",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v1_unk_same",
-      "pitch": "F5",
-      "midi": 77,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.5,
-      "measureIndex": 5,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "9de84c34-b93e-4e22-b134-5df5f22432cf",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v2_unk_same",
-      "pitch": "A4",
-      "midi": 68,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.5,
-      "measureIndex": 5,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "6c7ef8dd-989f-4a76-aa06-f59d4c8abfd4",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v3_unk_same",
-      "pitch": "C4",
-      "midi": 60,
-      "voice": 3,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.5,
-      "measureIndex": 5,
-      "beatStrength": "weak",
-      "entryInterval": -2,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "50adb271-0ff3-471a-97ca-81d4b519f2ba",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v4_unk_same",
-      "pitch": "D3",
-      "midi": 51,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 3.5,
-      "measureIndex": 5,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "5085696a-557f-439f-b596-ddb446f83ecf",
-      "type": "neighbor",
-      "patternKey": "short_moderate_step-up_step-down",
-      "detailedKey": "short_moderate_step-up_step-down_v2_cons_shorter",
-      "pitch": "A4",
-      "midi": 69,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4,
-      "measureIndex": 5,
-      "beatStrength": "moderate",
-      "entryInterval": 2,
-      "exitInterval": -2,
-      "entryBucket": "step-up",
-      "exitBucket": "step-down",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "f1b35d2b-d547-4ba2-9e3a-db3123c76365",
-      "type": "suspension",
-      "patternKey": "short_moderate_unison_step-down",
-      "detailedKey": "short_moderate_unison_step-down_v1_diss_shorter",
-      "pitch": "E5",
-      "midi": 76,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4,
-      "measureIndex": 5,
-      "beatStrength": "moderate",
-      "entryInterval": 0,
-      "exitInterval": -1,
-      "entryBucket": "unison",
-      "exitBucket": "step-down",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "9bc9d7fd-b3b2-4b24-8003-3798d51df9fa",
-      "type": "appoggiatura",
-      "patternKey": "short_moderate_step-down_step-down",
-      "detailedKey": "short_moderate_step-down_step-down_v4_unk_same",
-      "pitch": "D3",
-      "midi": 50,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4,
-      "measureIndex": 5,
-      "beatStrength": "moderate",
-      "entryInterval": -1,
-      "exitInterval": -2,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "500ccdde-68d0-496e-bff2-0c8f6c6e0936",
-      "type": "passing",
-      "patternKey": "very-short_weak_step-down_step-down",
-      "detailedKey": "very-short_weak_step-down_step-down_v1_cons_same",
-      "pitch": "E5",
-      "midi": 76,
-      "voice": 1,
-      "duration": "sixteenth",
-      "durationCategory": "very-short",
-      "beat": 4.5,
-      "measureIndex": 6,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "52eca760-2932-4426-9ee4-a42c9803254f",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v2_cons_same",
-      "pitch": "G4",
-      "midi": 67,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.5,
-      "measureIndex": 6,
-      "beatStrength": "weak",
-      "entryInterval": -2,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "be2d11f8-8b5a-495e-8951-6cf5bc809d61",
-      "type": "passing",
-      "patternKey": "very-short_weak_step-down_step-down",
-      "detailedKey": "very-short_weak_step-down_step-down_v3_cons_same",
-      "pitch": "B3",
-      "midi": 59,
-      "voice": 3,
-      "duration": "sixteenth",
-      "durationCategory": "very-short",
-      "beat": 4.5,
-      "measureIndex": 6,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "98a5ce06-69b2-4f55-9c27-f6b73ed0eabc",
-      "type": "passing",
-      "patternKey": "very-short_weak_step-up_step-up",
-      "detailedKey": "very-short_weak_step-up_step-up_v4_unk_same",
-      "pitch": "B2",
-      "midi": 47,
-      "voice": 4,
-      "duration": "sixteenth",
-      "durationCategory": "very-short",
-      "beat": 4.5,
-      "measureIndex": 6,
-      "beatStrength": "weak",
-      "entryInterval": 1,
-      "exitInterval": 2,
-      "entryBucket": "step-up",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "9d9abe4b-5dec-43f5-9ad8-9523175d0d4d",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v1_diss_same",
-      "pitch": "B4",
-      "midi": 71,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.5,
-      "measureIndex": 6,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "7c769ad6-6255-4736-9b00-0eac16624d1d",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v2_cons_same",
-      "pitch": "G4",
-      "midi": 68,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.5,
-      "measureIndex": 6,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Compito 77 Riduzione.htp",
-      "noteId": "931f91d4-9e37-46e7-9d7c-dab3bb402060",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v4_unk_same",
-      "pitch": "F3",
-      "midi": 53,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.5,
-      "measureIndex": 6,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
       "file": "Corale 1D Bach.htp",
       "noteId": "6c5687bb-b05c-4079-900b-f4dcac9c4593",
       "type": "passing",
@@ -8932,6 +9105,50 @@
       "exitInterval": -1,
       "entryBucket": "step-down",
       "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Corale 1D Bach.htp",
+      "noteId": "648224b2-f39b-472f-b768-86f93af28417",
+      "type": "passing",
+      "patternKey": "short_weak_step-up_step-up",
+      "detailedKey": "short_weak_step-up_step-up_v1_unk_same",
+      "pitch": "D5",
+      "midi": 74,
+      "voice": 1,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 4.5,
+      "measureIndex": 4,
+      "beatStrength": "weak",
+      "entryInterval": 2,
+      "exitInterval": 2,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": null
+    },
+    {
+      "file": "Corale 1D Bach.htp",
+      "noteId": "9b4482f3-4f3b-484b-957c-a5c1a4630614",
+      "type": "passing",
+      "patternKey": "short_weak_step-up_step-up",
+      "detailedKey": "short_weak_step-up_step-up_v2_unk_same",
+      "pitch": "F4",
+      "midi": 65,
+      "voice": 2,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 4.5,
+      "measureIndex": 4,
+      "beatStrength": "weak",
+      "entryInterval": 1,
+      "exitInterval": 2,
+      "entryBucket": "step-up",
+      "exitBucket": "step-up",
       "durationRatio": 1,
       "durationRatioCategory": "same",
       "isDissonantVsBass": null
@@ -10213,50 +10430,6 @@
       "isDissonantVsBass": true
     },
     {
-      "file": "Delamont C 32 1b.htp",
-      "noteId": "7e16693a-6d76-49e5-a8ca-0706f3f5f426",
-      "type": "passing",
-      "patternKey": "medium_moderate_skip-up_step-down",
-      "detailedKey": "medium_moderate_skip-up_step-down_v1_unk_same",
-      "pitch": "C5",
-      "midi": 72,
-      "voice": 1,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 4,
-      "measureIndex": 1,
-      "beatStrength": "moderate",
-      "entryInterval": 3,
-      "exitInterval": -1,
-      "entryBucket": "skip-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 32 1c.htp",
-      "noteId": "d13b94fd-2283-4a6d-8e94-e63d71c5aadc",
-      "type": "passing",
-      "patternKey": "short_weak_leap-down_leap-up",
-      "detailedKey": "short_weak_leap-down_leap-up_v1_unk_same",
-      "pitch": "E4",
-      "midi": 64,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 3.5,
-      "measureIndex": 1,
-      "beatStrength": "weak",
-      "entryInterval": -8,
-      "exitInterval": 7,
-      "entryBucket": "leap-down",
-      "exitBucket": "leap-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
       "file": "Delamont C 42.htp",
       "noteId": "00a4c810-9370-47f8-a4f6-8a3f2e039f87",
       "type": "passing",
@@ -10386,842 +10559,6 @@
       "exitBucket": "step-down",
       "durationRatio": 0.5,
       "durationRatioCategory": "shorter",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C 44.htp",
-      "noteId": "87dbb3c8-4c4b-40b2-8622-9f259bc67ab5",
-      "type": "passing",
-      "patternKey": "very-short_weak_skip-up_skip-up",
-      "detailedKey": "very-short_weak_skip-up_skip-up_v4_unk_shorter",
-      "pitch": "D3",
-      "midi": 50,
-      "voice": 4,
-      "duration": "sixteenth",
-      "durationCategory": "very-short",
-      "beat": 2.5,
-      "measureIndex": 1,
-      "beatStrength": "weak",
-      "entryInterval": 3,
-      "exitInterval": 3,
-      "entryBucket": "skip-up",
-      "exitBucket": "skip-up",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 44.htp",
-      "noteId": "9f569e6f-4f0f-4a51-81e8-d1be6f906cbf",
-      "type": "passing",
-      "patternKey": "very-short_weak_skip-up_step-down",
-      "detailedKey": "very-short_weak_skip-up_step-down_v4_unk_same",
-      "pitch": "F3",
-      "midi": 53,
-      "voice": 4,
-      "duration": "sixteenth",
-      "durationCategory": "very-short",
-      "beat": 2.75,
-      "measureIndex": 1,
-      "beatStrength": "weak",
-      "entryInterval": 3,
-      "exitInterval": -2,
-      "entryBucket": "skip-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 44.htp",
-      "noteId": "1b03d146-3a76-43dd-97b7-18490477d63b",
-      "type": "escape",
-      "patternKey": "short_weak_skip-down_step-up",
-      "detailedKey": "short_weak_skip-down_step-up_v3_unk_same",
-      "pitch": "G3",
-      "midi": 55,
-      "voice": 3,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 3.5,
-      "measureIndex": 1,
-      "beatStrength": "weak",
-      "entryInterval": -3,
-      "exitInterval": 2,
-      "entryBucket": "skip-down",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 45.htp",
-      "noteId": "292e51e7-caea-417e-8f20-af293fbe4fc6",
-      "type": "escape",
-      "patternKey": "short_weak_leap-down_leap-up",
-      "detailedKey": "short_weak_leap-down_leap-up_v4_unk_much-shorter",
-      "pitch": "A2",
-      "midi": 45,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.5,
-      "measureIndex": 5,
-      "beatStrength": "weak",
-      "entryInterval": -6,
-      "exitInterval": 5,
-      "entryBucket": "leap-down",
-      "exitBucket": "leap-up",
-      "durationRatio": 0.333,
-      "durationRatioCategory": "much-shorter",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 45.htp",
-      "noteId": "a1446512-ace8-4202-8c06-7b40b53ed4d8",
-      "type": "passing",
-      "patternKey": "medium_moderate_step-down_step-down",
-      "detailedKey": "medium_moderate_step-down_step-down_v1_unk_same",
-      "pitch": "G4",
-      "midi": 67,
-      "voice": 1,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 4,
-      "measureIndex": 5,
-      "beatStrength": "moderate",
-      "entryInterval": -2,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 45.htp",
-      "noteId": "0c7dbb1c-132b-4a7f-9afe-664292b0688a",
-      "type": "anticipation",
-      "patternKey": "short_weak_unison_unison",
-      "detailedKey": "short_weak_unison_unison_v1_unk_much-shorter",
-      "pitch": "A4",
-      "midi": 69,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.5,
-      "measureIndex": 2,
-      "beatStrength": "weak",
-      "entryInterval": 0,
-      "exitInterval": 0,
-      "entryBucket": "unison",
-      "exitBucket": "unison",
-      "durationRatio": 0.333,
-      "durationRatioCategory": "much-shorter",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "486f009a-f03d-417e-aa0a-0d34129edfb4",
-      "type": "appoggiatura",
-      "patternKey": "short_strong_none_step-down",
-      "detailedKey": "short_strong_none_step-down_v1_diss_unknown",
-      "pitch": "F5",
-      "midi": 77,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 1,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": null,
-      "exitInterval": -2,
-      "entryBucket": "none",
-      "exitBucket": "step-down",
-      "durationRatio": null,
-      "durationRatioCategory": "unknown",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "80e6a577-4c93-4ee1-8731-c74ed34c0b48",
-      "type": "appoggiatura",
-      "patternKey": "short_strong_none_step-up",
-      "detailedKey": "short_strong_none_step-up_v2_cons_unknown",
-      "pitch": "F4",
-      "midi": 66,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 1,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": null,
-      "exitInterval": 1,
-      "entryBucket": "none",
-      "exitBucket": "step-up",
-      "durationRatio": null,
-      "durationRatioCategory": "unknown",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "6be0f258-1b4b-4d28-9211-cd1c52e429ab",
-      "type": "appoggiatura",
-      "patternKey": "short_strong_none_step-up",
-      "detailedKey": "short_strong_none_step-up_v3_diss_unknown",
-      "pitch": "A3",
-      "midi": 57,
-      "voice": 3,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 1,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": null,
-      "exitInterval": 1,
-      "entryBucket": "none",
-      "exitBucket": "step-up",
-      "durationRatio": null,
-      "durationRatioCategory": "unknown",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "3d3db0ff-ff1c-444f-8e66-637b2e8e596d",
-      "type": "appoggiatura",
-      "patternKey": "short_moderate_leap-down_step-up",
-      "detailedKey": "short_moderate_leap-down_step-up_v1_unk_same",
-      "pitch": "A4",
-      "midi": 69,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2,
-      "measureIndex": 0,
-      "beatStrength": "moderate",
-      "entryInterval": -6,
-      "exitInterval": 1,
-      "entryBucket": "leap-down",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "9a42ac88-07a7-4089-8319-b0af3d922d89",
-      "type": "appoggiatura",
-      "patternKey": "short_moderate_step-down_step-up",
-      "detailedKey": "short_moderate_step-down_step-up_v2_unk_same",
-      "pitch": "F4",
-      "midi": 66,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2,
-      "measureIndex": 0,
-      "beatStrength": "moderate",
-      "entryInterval": -1,
-      "exitInterval": 1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "276c8ebf-0ecc-4c1b-a42c-03c0b14e5b60",
-      "type": "appoggiatura",
-      "patternKey": "short_moderate_leap-up_step-down",
-      "detailedKey": "short_moderate_leap-up_step-down_v3_unk_same",
-      "pitch": "F4",
-      "midi": 65,
-      "voice": 3,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2,
-      "measureIndex": 0,
-      "beatStrength": "moderate",
-      "entryInterval": 7,
-      "exitInterval": -2,
-      "entryBucket": "leap-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "c00a636a-a264-4e63-87b4-912a0ac5f105",
-      "type": "appoggiatura",
-      "patternKey": "short_strong_skip-down_step-up",
-      "detailedKey": "short_strong_skip-down_step-up_v1_unk_same",
-      "pitch": "F4",
-      "midi": 66,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 3,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": -4,
-      "exitInterval": 1,
-      "entryBucket": "skip-down",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "5790008e-1019-4b20-b775-1872a1ecc215",
-      "type": "appoggiatura",
-      "patternKey": "short_strong_step-down_step-down",
-      "detailedKey": "short_strong_step-down_step-down_v2_unk_same",
-      "pitch": "F4",
-      "midi": 65,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 3,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": -2,
-      "exitInterval": -2,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "ea0ddfe5-b184-4ea7-9c4c-ed1b0459135d",
-      "type": "appoggiatura",
-      "patternKey": "short_strong_leap-down_step-up",
-      "detailedKey": "short_strong_leap-down_step-up_v3_unk_same",
-      "pitch": "A3",
-      "midi": 57,
-      "voice": 3,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 3,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": -6,
-      "exitInterval": 1,
-      "entryBucket": "leap-down",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "f58cbb98-ffe5-4248-8a6a-8f8e4acff6e5",
-      "type": "appoggiatura",
-      "patternKey": "short_moderate_leap-up_step-down",
-      "detailedKey": "short_moderate_leap-up_step-down_v1_unk_same",
-      "pitch": "C5",
-      "midi": 72,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4,
-      "measureIndex": 0,
-      "beatStrength": "moderate",
-      "entryInterval": 5,
-      "exitInterval": -2,
-      "entryBucket": "leap-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "3f4649ed-41fb-47c5-bdff-236d23236fde",
-      "type": "appoggiatura",
-      "patternKey": "short_moderate_skip-up_step-up",
-      "detailedKey": "short_moderate_skip-up_step-up_v2_unk_same",
-      "pitch": "F4",
-      "midi": 66,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4,
-      "measureIndex": 0,
-      "beatStrength": "moderate",
-      "entryInterval": 3,
-      "exitInterval": 1,
-      "entryBucket": "skip-up",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "aceb426a-f7a1-468e-a245-f4aa13a2160e",
-      "type": "appoggiatura",
-      "patternKey": "short_strong_skip-down_step-up",
-      "detailedKey": "short_strong_skip-down_step-up_v2_diss_same",
-      "pitch": "E4",
-      "midi": 64,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 1,
-      "measureIndex": 1,
-      "beatStrength": "strong",
-      "entryInterval": -3,
-      "exitInterval": 1,
-      "entryBucket": "skip-down",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "fd6296a5-eab1-4d0d-960c-c04d6e57c133",
-      "type": "appoggiatura",
-      "patternKey": "short_moderate_skip-down_step-up",
-      "detailedKey": "short_moderate_skip-down_step-up_v1_diss_shorter",
-      "pitch": "E4",
-      "midi": 64,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2,
-      "measureIndex": 1,
-      "beatStrength": "moderate",
-      "entryInterval": -4,
-      "exitInterval": 1,
-      "entryBucket": "skip-down",
-      "exitBucket": "step-up",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "58e3ec5e-c73b-4beb-90f1-6da834e44a17",
-      "type": "appoggiatura",
-      "patternKey": "short_moderate_leap-up_step-down",
-      "detailedKey": "short_moderate_leap-up_step-down_v4_unk_shorter",
-      "pitch": "B3",
-      "midi": 58,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2,
-      "measureIndex": 1,
-      "beatStrength": "moderate",
-      "entryInterval": 5,
-      "exitInterval": -2,
-      "entryBucket": "leap-up",
-      "exitBucket": "step-down",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "9dfb64a1-0455-4cf3-a5fb-866982db3db8",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_skip-down_step-up",
-      "detailedKey": "medium_strong_skip-down_step-up_v2_diss_same",
-      "pitch": "C4",
-      "midi": 60,
-      "voice": 2,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 3,
-      "measureIndex": 1,
-      "beatStrength": "strong",
-      "entryInterval": -3,
-      "exitInterval": 2,
-      "entryBucket": "skip-down",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "2b5ece93-2cf6-4ef7-9d19-4f1efb2fa1b9",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_step-up_step-down",
-      "detailedKey": "medium_strong_step-up_step-down_v1_cons_longer",
-      "pitch": "G4",
-      "midi": 66,
-      "voice": 1,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 3,
-      "measureIndex": 1,
-      "beatStrength": "strong",
-      "entryInterval": 1,
-      "exitInterval": -1,
-      "entryBucket": "step-up",
-      "exitBucket": "step-down",
-      "durationRatio": 2,
-      "durationRatioCategory": "longer",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "06f20726-63c1-45fa-a061-8028c8c6a2f7",
-      "type": "appoggiatura",
-      "patternKey": "medium_moderate_step-up_step-down",
-      "detailedKey": "medium_moderate_step-up_step-down_v2_unk_same",
-      "pitch": "C4",
-      "midi": 59,
-      "voice": 2,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 2,
-      "measureIndex": 2,
-      "beatStrength": "moderate",
-      "entryInterval": 1,
-      "exitInterval": -1,
-      "entryBucket": "step-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 55 1c.htp",
-      "noteId": "6a7adc6a-4b17-4bf7-b751-76625e5c27df",
-      "type": "appoggiatura",
-      "patternKey": "short_strong_step-down_step-up",
-      "detailedKey": "short_strong_step-down_step-up_v3_cons_same",
-      "pitch": "F3",
-      "midi": 54,
-      "voice": 3,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 1,
-      "measureIndex": 2,
-      "beatStrength": "strong",
-      "entryInterval": -2,
-      "exitInterval": 1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C 58 2d.htp",
-      "noteId": "c0190c7b-6ea0-493f-abc6-453a6a153aee",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_none_step-down",
-      "detailedKey": "medium_strong_none_step-down_v4_unk_unknown",
-      "pitch": "B3",
-      "midi": 59,
-      "voice": 4,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": null,
-      "exitInterval": -2,
-      "entryBucket": "none",
-      "exitBucket": "step-down",
-      "durationRatio": null,
-      "durationRatioCategory": "unknown",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 58 2d.htp",
-      "noteId": "8a577c4c-9aee-45a1-9786-1adaf2202347",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_step-up_step-up",
-      "detailedKey": "medium_strong_step-up_step-up_v2_diss_shorter",
-      "pitch": "F4",
-      "midi": 66,
-      "voice": 2,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 3,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": 2,
-      "exitInterval": 2,
-      "entryBucket": "step-up",
-      "exitBucket": "step-up",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 58 2d.htp",
-      "noteId": "9e1b4225-23da-4a6d-a3e1-d710b871901c",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_step-down_step-down",
-      "detailedKey": "medium_strong_step-down_step-down_v1_diss_shorter",
-      "pitch": "B4",
-      "midi": 71,
-      "voice": 1,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 1,
-      "beatStrength": "strong",
-      "entryInterval": -1,
-      "exitInterval": -2,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 58 2d.htp",
-      "noteId": "9e28c88f-363d-4344-a649-200d1058a170",
-      "type": "suspension",
-      "patternKey": "medium_strong_unison_step-down",
-      "detailedKey": "medium_strong_unison_step-down_v3_cons_shorter",
-      "pitch": "D4",
-      "midi": 62,
-      "voice": 3,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 1,
-      "beatStrength": "strong",
-      "entryInterval": 0,
-      "exitInterval": -2,
-      "entryBucket": "unison",
-      "exitBucket": "step-down",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C 58 2d.htp",
-      "noteId": "6223bc16-7e41-493a-9676-709b39308864",
-      "type": "appoggiatura",
-      "patternKey": "long_strong_leap-up_step-down",
-      "detailedKey": "long_strong_leap-up_step-down_v4_unk_same",
-      "pitch": "B3",
-      "midi": 59,
-      "voice": 4,
-      "duration": "half",
-      "durationCategory": "long",
-      "beat": 1,
-      "measureIndex": 2,
-      "beatStrength": "strong",
-      "entryInterval": 7,
-      "exitInterval": -2,
-      "entryBucket": "leap-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 60 1c.htp",
-      "noteId": "aa209157-bb23-4aa9-b8dd-f7235bd15cac",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v1_cons_same",
-      "pitch": "C5",
-      "midi": 72,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.333333333333333,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": -2,
-      "exitInterval": -2,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C 60 1c.htp",
-      "noteId": "419d2abb-ade4-47a3-ba33-f54542ad777d",
-      "type": "passing",
-      "patternKey": "short_weak_step-up_step-up",
-      "detailedKey": "short_weak_step-up_step-up_v4_unk_same",
-      "pitch": "E3",
-      "midi": 52,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.333333333333333,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": 2,
-      "exitInterval": 1,
-      "entryBucket": "step-up",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 60 1c.htp",
-      "noteId": "4a4e2690-b003-4fd8-a100-18df9e26905f",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v1_cons_same",
-      "pitch": "B4",
-      "midi": 70,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.666666666666667,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": -2,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C 60 1c.htp",
-      "noteId": "ffb08638-e5fb-4eec-a2f3-60ad39360225",
-      "type": "passing",
-      "patternKey": "short_weak_step-up_step-up",
-      "detailedKey": "short_weak_step-up_step-up_v4_unk_same",
-      "pitch": "F3",
-      "midi": 53,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.666666666666667,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": 1,
-      "exitInterval": 2,
-      "entryBucket": "step-up",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 60 1c.htp",
-      "noteId": "79554e09-ebdd-4c94-ae06-2a07aa1165a5",
-      "type": "passing",
-      "patternKey": "medium_moderate_step-down_step-down",
-      "detailedKey": "medium_moderate_step-down_step-down_v2_diss_same",
-      "pitch": "E4",
-      "midi": 64,
-      "voice": 2,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 2,
-      "measureIndex": 0,
-      "beatStrength": "moderate",
-      "entryInterval": -1,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 60 1c.htp",
-      "noteId": "8b69b289-0a91-4425-afd5-2cb132d22000",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v4_unk_same",
-      "pitch": "F3",
-      "midi": 53,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.333333333333334,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": -2,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 60 1c.htp",
-      "noteId": "39f93718-6aaa-4904-8222-4568a80df281",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v4_unk_same",
-      "pitch": "E3",
-      "midi": 52,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.666666666666666,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": -1,
-      "exitInterval": -2,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 60 1c.htp",
-      "noteId": "7a44e9bf-0478-457e-aea2-7187e4f2d18e",
-      "type": "passing",
-      "patternKey": "short_weak_step-up_step-up",
-      "detailedKey": "short_weak_step-up_step-up_v1_diss_same",
-      "pitch": "B4",
-      "midi": 71,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.333333333333334,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": 2,
-      "exitInterval": 2,
-      "entryBucket": "step-up",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 60 1c.htp",
-      "noteId": "478f4963-2070-4358-a1f7-922c0bed858e",
-      "type": "passing",
-      "patternKey": "short_weak_step-up_step-up",
-      "detailedKey": "short_weak_step-up_step-up_v1_cons_same",
-      "pitch": "C5",
-      "midi": 73,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.666666666666666,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": 2,
-      "exitInterval": 1,
-      "entryBucket": "step-up",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
       "isDissonantVsBass": false
     },
     {
@@ -11399,182 +10736,6 @@
       "durationRatio": 2,
       "durationRatioCategory": "longer",
       "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C 63 3c.htp",
-      "noteId": "731025eb-7d19-4a16-aea8-70404547fe57",
-      "type": "escape",
-      "patternKey": "short_weak_step-up_skip-down",
-      "detailedKey": "short_weak_step-up_skip-down_v4_unk_same",
-      "pitch": "G3",
-      "midi": 55,
-      "voice": 4,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 1.5,
-      "measureIndex": 1,
-      "beatStrength": "weak",
-      "entryInterval": 2,
-      "exitInterval": -3,
-      "entryBucket": "step-up",
-      "exitBucket": "skip-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 63 3c.htp",
-      "noteId": "754de886-22c7-4382-af77-bc68b93c8e15",
-      "type": "suspension",
-      "patternKey": "short_strong_unison_step-up",
-      "detailedKey": "short_strong_unison_step-up_v1_diss_much-shorter",
-      "pitch": "C5",
-      "midi": 72,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 3,
-      "measureIndex": 1,
-      "beatStrength": "strong",
-      "entryInterval": 0,
-      "exitInterval": 2,
-      "entryBucket": "unison",
-      "exitBucket": "step-up",
-      "durationRatio": 0.25,
-      "durationRatioCategory": "much-shorter",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C 63 3c.htp",
-      "noteId": "5a9660ed-069d-487a-8b3f-50cc616ffa76",
-      "type": "suspension",
-      "patternKey": "medium_strong_unison_skip-down",
-      "detailedKey": "medium_strong_unison_skip-down_v3_cons_shorter",
-      "pitch": "D4",
-      "midi": 62,
-      "voice": 3,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 2,
-      "beatStrength": "strong",
-      "entryInterval": 0,
-      "exitInterval": -3,
-      "entryBucket": "unison",
-      "exitBucket": "skip-down",
-      "durationRatio": 0.75,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C 63 3c.htp",
-      "noteId": "8f5134ad-b308-47e1-b584-bd320401b4a9",
-      "type": "escape",
-      "patternKey": "short_weak_step-up_skip-down",
-      "detailedKey": "short_weak_step-up_skip-down_v1_unk_much-shorter",
-      "pitch": "E5",
-      "midi": 76,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.5,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": 2,
-      "exitInterval": -4,
-      "entryBucket": "step-up",
-      "exitBucket": "skip-down",
-      "durationRatio": 0.333,
-      "durationRatioCategory": "much-shorter",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 63 3c.htp",
-      "noteId": "0585cd33-8f68-4140-9884-b4021c36398a",
-      "type": "anticipation",
-      "patternKey": "short_weak_step-up_unison",
-      "detailedKey": "short_weak_step-up_unison_v1_unk_same",
-      "pitch": "C5",
-      "midi": 72,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.5,
-      "measureIndex": 1,
-      "beatStrength": "weak",
-      "entryInterval": 1,
-      "exitInterval": 0,
-      "entryBucket": "step-up",
-      "exitBucket": "unison",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 67 2c.htp",
-      "noteId": "aabbd4ad-9a62-4e9f-8f30-d2e0c404b2d5",
-      "type": "cambiata",
-      "patternKey": "short_weak_step-up_step-up",
-      "detailedKey": "short_weak_step-up_step-up_v2_unk_much-shorter",
-      "pitch": "B4",
-      "midi": 70,
-      "voice": 2,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 2.5,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": 1,
-      "exitInterval": 2,
-      "entryBucket": "step-up",
-      "exitBucket": "step-up",
-      "durationRatio": 0.333,
-      "durationRatioCategory": "much-shorter",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 67 2c.htp",
-      "noteId": "37c7f24c-99d1-4c62-bd67-45b0e5fe8299",
-      "type": "cambiata",
-      "patternKey": "short_weak_skip-up_step-down",
-      "detailedKey": "short_weak_skip-up_step-down_v1_unk_same",
-      "pitch": "F5",
-      "midi": 77,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.333333333333334,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": 3,
-      "exitInterval": -2,
-      "entryBucket": "skip-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C 67 2c.htp",
-      "noteId": "78d03958-af27-4eab-b053-704551e9430f",
-      "type": "passing",
-      "patternKey": "short_weak_step-down_step-down",
-      "detailedKey": "short_weak_step-down_step-down_v1_unk_same",
-      "pitch": "E5",
-      "midi": 75,
-      "voice": 1,
-      "duration": "eighth",
-      "durationCategory": "short",
-      "beat": 4.666666666666666,
-      "measureIndex": 0,
-      "beatStrength": "weak",
-      "entryInterval": -2,
-      "exitInterval": -1,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
     },
     {
       "file": "Delamont C 80 2c.htp",
@@ -12919,248 +12080,6 @@
       "isDissonantVsBass": false
     },
     {
-      "file": "Delamont C55 1c.json",
-      "noteId": "4fb398ae-c3cd-4f65-8ad1-cea450faf176",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_skip-down_step-up",
-      "detailedKey": "medium_strong_skip-down_step-up_v2_diss_shorter",
-      "pitch": "E4",
-      "midi": 64,
-      "voice": 2,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 3,
-      "measureIndex": 2,
-      "beatStrength": "strong",
-      "entryInterval": -3,
-      "exitInterval": 2,
-      "entryBucket": "skip-down",
-      "exitBucket": "step-up",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C55 1c.json",
-      "noteId": "94643b25-5ea7-4dd6-b58d-6ebee623f7fe",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_step-up_step-down",
-      "detailedKey": "medium_strong_step-up_step-down_v3_cons_shorter",
-      "pitch": "B3",
-      "midi": 58,
-      "voice": 3,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 3,
-      "measureIndex": 2,
-      "beatStrength": "strong",
-      "entryInterval": 1,
-      "exitInterval": -1,
-      "entryBucket": "step-up",
-      "exitBucket": "step-down",
-      "durationRatio": 0.75,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C55 1c.json",
-      "noteId": "ae899532-4830-4171-825e-89c5e98f638f",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_skip-up_step-down",
-      "detailedKey": "medium_strong_skip-up_step-down_v2_cons_same",
-      "pitch": "A4",
-      "midi": 69,
-      "voice": 2,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 3,
-      "beatStrength": "strong",
-      "entryInterval": 3,
-      "exitInterval": -2,
-      "entryBucket": "skip-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C55 1c.json",
-      "noteId": "21aa90f0-e3fb-45b4-90c7-3d617163fad3",
-      "type": "suspension",
-      "patternKey": "medium_strong_unison_step-up",
-      "detailedKey": "medium_strong_unison_step-up_v4_unk_shorter",
-      "pitch": "E3",
-      "midi": 52,
-      "voice": 4,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 3,
-      "measureIndex": 3,
-      "beatStrength": "strong",
-      "entryInterval": 0,
-      "exitInterval": 2,
-      "entryBucket": "unison",
-      "exitBucket": "step-up",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C55 1c.json",
-      "noteId": "96415983-1ae2-49d6-9e65-c5dd55784502",
-      "type": "appoggiatura",
-      "patternKey": "long_strong_skip-down_step-up",
-      "detailedKey": "long_strong_skip-down_step-up_v3_diss_shorter",
-      "pitch": "A3",
-      "midi": 57,
-      "voice": 3,
-      "duration": "half",
-      "durationCategory": "long",
-      "beat": 1,
-      "measureIndex": 4,
-      "beatStrength": "strong",
-      "entryInterval": -3,
-      "exitInterval": 1,
-      "entryBucket": "skip-down",
-      "exitBucket": "step-up",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C55 1c.json",
-      "noteId": "47f6c352-f140-4b66-92bb-57b645b50ee2",
-      "type": "appoggiatura",
-      "patternKey": "long_strong_step-up_step-down",
-      "detailedKey": "long_strong_step-up_step-down_v3_cons_same",
-      "pitch": "C4",
-      "midi": 60,
-      "voice": 3,
-      "duration": "half",
-      "durationCategory": "long",
-      "beat": 1,
-      "measureIndex": 5,
-      "beatStrength": "strong",
-      "entryInterval": 2,
-      "exitInterval": -1,
-      "entryBucket": "step-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C55 1c.json",
-      "noteId": "57f6e393-2216-45cb-833c-37d6050b51fb",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_none_step-up",
-      "detailedKey": "medium_strong_none_step-up_v2_diss_unknown",
-      "pitch": "D4",
-      "midi": 62,
-      "voice": 2,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": null,
-      "exitInterval": 2,
-      "entryBucket": "none",
-      "exitBucket": "step-up",
-      "durationRatio": null,
-      "durationRatioCategory": "unknown",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C55 1c.json",
-      "noteId": "7cc3e0c5-1133-4991-a6e0-2ff2375d1e63",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_skip-up_step-down",
-      "detailedKey": "medium_strong_skip-up_step-down_v2_cons_same",
-      "pitch": "G4",
-      "midi": 67,
-      "voice": 2,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 3,
-      "measureIndex": 0,
-      "beatStrength": "strong",
-      "entryInterval": 3,
-      "exitInterval": -1,
-      "entryBucket": "skip-up",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": false
-    },
-    {
-      "file": "Delamont C55 1c.json",
-      "noteId": "d3a84d6e-153b-4827-87bf-590f901a97e3",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_leap-down_step-up",
-      "detailedKey": "medium_strong_leap-down_step-up_v2_diss_same",
-      "pitch": "C4",
-      "midi": 61,
-      "voice": 2,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 1,
-      "beatStrength": "strong",
-      "entryInterval": -5,
-      "exitInterval": 1,
-      "entryBucket": "leap-down",
-      "exitBucket": "step-up",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": true
-    },
-    {
-      "file": "Delamont C55 1c.json",
-      "noteId": "0155e631-a127-4c74-a030-5eba5e10bdf4",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_step-down_step-down",
-      "detailedKey": "medium_strong_step-down_step-down_v4_unk_shorter",
-      "pitch": "D3",
-      "midi": 50,
-      "voice": 4,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 2,
-      "beatStrength": "strong",
-      "entryInterval": -1,
-      "exitInterval": -2,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": null
-    },
-    {
-      "file": "Delamont C55 b.htp",
-      "noteId": "0155e631-a127-4c74-a030-5eba5e10bdf4",
-      "type": "appoggiatura",
-      "patternKey": "medium_strong_step-down_step-down",
-      "detailedKey": "medium_strong_step-down_step-down_v4_unk_shorter",
-      "pitch": "D3",
-      "midi": 50,
-      "voice": 4,
-      "duration": "quarter",
-      "durationCategory": "medium",
-      "beat": 1,
-      "measureIndex": 2,
-      "beatStrength": "strong",
-      "entryInterval": -1,
-      "exitInterval": -2,
-      "entryBucket": "step-down",
-      "exitBucket": "step-down",
-      "durationRatio": 0.5,
-      "durationRatioCategory": "shorter",
-      "isDissonantVsBass": null
-    },
-    {
       "file": "Delamont C55 b.htp",
       "noteId": "4fb398ae-c3cd-4f65-8ad1-cea450faf176",
       "type": "appoggiatura",
@@ -13357,6 +12276,28 @@
       "durationRatio": 1,
       "durationRatioCategory": "same",
       "isDissonantVsBass": true
+    },
+    {
+      "file": "Delamont C55 b.htp",
+      "noteId": "0155e631-a127-4c74-a030-5eba5e10bdf4",
+      "type": "appoggiatura",
+      "patternKey": "medium_strong_step-down_step-down",
+      "detailedKey": "medium_strong_step-down_step-down_v4_unk_shorter",
+      "pitch": "D3",
+      "midi": 50,
+      "voice": 4,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 1,
+      "measureIndex": 2,
+      "beatStrength": "strong",
+      "entryInterval": -1,
+      "exitInterval": -2,
+      "entryBucket": "step-down",
+      "exitBucket": "step-down",
+      "durationRatio": 0.5,
+      "durationRatioCategory": "shorter",
+      "isDissonantVsBass": null
     },
     {
       "file": "Delamont C56 2f.htp",
@@ -21895,6 +20836,28 @@
       "isDissonantVsBass": false
     },
     {
+      "file": "Demo video 2.htp",
+      "noteId": "6922eb18-22c3-40ba-a6f4-f5243cbff9c4",
+      "type": "passing",
+      "patternKey": "medium_moderate_skip-down_step-down",
+      "detailedKey": "medium_moderate_skip-down_step-down_v4_unk_longer",
+      "pitch": "B2",
+      "midi": 47,
+      "voice": 4,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 2,
+      "measureIndex": 2,
+      "beatStrength": "moderate",
+      "entryInterval": -3,
+      "exitInterval": -2,
+      "entryBucket": "skip-down",
+      "exitBucket": "step-down",
+      "durationRatio": 2,
+      "durationRatioCategory": "longer",
+      "isDissonantVsBass": null
+    },
+    {
       "file": "Dubois Note sfuggite p.214.htp",
       "noteId": "45e73366-f342-424e-b3a7-5c7003261678",
       "type": "escape",
@@ -22533,6 +21496,28 @@
       "isDissonantVsBass": null
     },
     {
+      "file": "Dubois n2 p81.htp",
+      "noteId": "856cad13-8318-4950-8ece-aeb80d8efde4",
+      "type": "suspension",
+      "patternKey": "short_strong_unison_step-up",
+      "detailedKey": "short_strong_unison_step-up_v1_diss_shorter",
+      "pitch": "G5",
+      "midi": 79,
+      "voice": 1,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 1,
+      "measureIndex": 4,
+      "beatStrength": "strong",
+      "entryInterval": 0,
+      "exitInterval": 1,
+      "entryBucket": "unison",
+      "exitBucket": "step-up",
+      "durationRatio": 0.5,
+      "durationRatioCategory": "shorter",
+      "isDissonantVsBass": true
+    },
+    {
       "file": "Dubois n3 p12.htp",
       "noteId": "51f40d76-b247-4543-a93c-29835856c56f",
       "type": "appoggiatura",
@@ -22905,6 +21890,28 @@
       "durationRatio": 1,
       "durationRatioCategory": "same",
       "isDissonantVsBass": true
+    },
+    {
+      "file": "Life on Mars.htp",
+      "noteId": "5ca738a6-529d-4679-9b41-73e8b8a65f09",
+      "type": "suspension",
+      "patternKey": "short_strong_unison_step-down",
+      "detailedKey": "short_strong_unison_step-down_v1_cons_same",
+      "pitch": "F5",
+      "midi": 77,
+      "voice": 1,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 1,
+      "measureIndex": 30,
+      "beatStrength": "strong",
+      "entryInterval": 0,
+      "exitInterval": -2,
+      "entryBucket": "unison",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": false
     },
     {
       "file": "Modulazione Ab - E.htp",
@@ -24183,28 +23190,6 @@
       "isDissonantVsBass": null
     },
     {
-      "file": "Ritrado fond dubuois.json",
-      "noteId": "b3bfd1a5-ad72-4ce3-8062-ed9454db3b5a",
-      "type": "suspension",
-      "patternKey": "long_strong_unison_step-down",
-      "detailedKey": "long_strong_unison_step-down_v4_unk_same",
-      "pitch": "D3",
-      "midi": 50,
-      "voice": 4,
-      "duration": "half",
-      "durationCategory": "long",
-      "beat": 1,
-      "measureIndex": 1,
-      "beatStrength": "strong",
-      "entryInterval": 0,
-      "exitInterval": -2,
-      "entryBucket": "unison",
-      "exitBucket": "step-down",
-      "durationRatio": 1,
-      "durationRatioCategory": "same",
-      "isDissonantVsBass": null
-    },
-    {
       "file": "Ritrado test.htp",
       "noteId": "51aa0d9a-5b65-4ce5-8825-ae39e6e0ab41",
       "type": "suspension",
@@ -25041,6 +24026,28 @@
       "isDissonantVsBass": null
     },
     {
+      "file": "cantata 4 Bach.htp",
+      "noteId": "midi-945-128160-54",
+      "type": "cambiata",
+      "patternKey": "very-short_weak_skip-down_step-up",
+      "detailedKey": "very-short_weak_skip-down_step-up_v3_cons_shorter",
+      "pitch": "F3",
+      "midi": 54,
+      "voice": 3,
+      "duration": "sixteenth",
+      "durationCategory": "very-short",
+      "beat": 2.5,
+      "measureIndex": 33,
+      "beatStrength": "weak",
+      "entryInterval": -3,
+      "exitInterval": 2,
+      "entryBucket": "skip-down",
+      "exitBucket": "step-up",
+      "durationRatio": 0.5,
+      "durationRatioCategory": "shorter",
+      "isDissonantVsBass": false
+    },
+    {
       "file": "ornamenti.json",
       "noteId": "ff32f908-b63a-4c38-9d68-2b1e7fdbda35",
       "type": "appoggiatura",
@@ -25193,6 +24200,72 @@
       "durationRatio": 1,
       "durationRatioCategory": "same",
       "isDissonantVsBass": null
+    },
+    {
+      "file": "project.htp",
+      "noteId": "257a059f-4a48-4a1d-aba8-52dd6307b28a",
+      "type": "appoggiatura",
+      "patternKey": "short_strong_skip-up_step-down",
+      "detailedKey": "short_strong_skip-up_step-down_v3_diss_same",
+      "pitch": "E4",
+      "midi": 64,
+      "voice": 3,
+      "duration": "eighth",
+      "durationCategory": "short",
+      "beat": 1,
+      "measureIndex": 9,
+      "beatStrength": "strong",
+      "entryInterval": 3,
+      "exitInterval": -2,
+      "entryBucket": "skip-up",
+      "exitBucket": "step-down",
+      "durationRatio": 1,
+      "durationRatioCategory": "same",
+      "isDissonantVsBass": true
+    },
+    {
+      "file": "project.htp",
+      "noteId": "278edabd-4591-49e9-a46c-7ad7b8799ea2",
+      "type": "appoggiatura",
+      "patternKey": "medium_strong_skip-up_step-down",
+      "detailedKey": "medium_strong_skip-up_step-down_v3_cons_longer",
+      "pitch": "D4",
+      "midi": 62,
+      "voice": 3,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 1,
+      "measureIndex": 4,
+      "beatStrength": "strong",
+      "entryInterval": 3,
+      "exitInterval": -1,
+      "entryBucket": "skip-up",
+      "exitBucket": "step-down",
+      "durationRatio": 2,
+      "durationRatioCategory": "longer",
+      "isDissonantVsBass": false
+    },
+    {
+      "file": "project.htp",
+      "noteId": "3ea1fdfd-3f60-4059-b7b7-67f058b9c7e3",
+      "type": "appoggiatura",
+      "patternKey": "medium_strong_leap-down_step-down",
+      "detailedKey": "medium_strong_leap-down_step-down_v1_diss_much-shorter",
+      "pitch": "B4",
+      "midi": 71,
+      "voice": 1,
+      "duration": "quarter",
+      "durationCategory": "medium",
+      "beat": 1,
+      "measureIndex": 4,
+      "beatStrength": "strong",
+      "entryInterval": -9,
+      "exitInterval": -2,
+      "entryBucket": "leap-down",
+      "exitBucket": "step-down",
+      "durationRatio": 0.25,
+      "durationRatioCategory": "much-shorter",
+      "isDissonantVsBass": true
     },
     {
       "file": "rit 5a 1° riv.json",
