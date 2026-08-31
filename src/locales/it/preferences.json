@@ -105,5 +105,7 @@
   "rule_sugg_empty": "Nessuna regola col nome cercato.",
   "rule_sugg_group_cad": "Cadenze",
   "rule_sugg_group_orn": "Ornamenti",
-  "rule_sugg_group_chrom": "Cromatismi"
+  "rule_sugg_group_chrom": "Cromatismi",
+  "pref_advanced_toggle": "Mostra le impostazioni avanzate",
+  "pref_advanced_hint": "Soglie, apprendimento e filtri del motore d'analisi. Quello che serve tutti i giorni è già qui sopra."
 }

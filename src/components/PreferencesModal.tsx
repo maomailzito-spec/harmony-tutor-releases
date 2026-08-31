@@ -198,6 +198,22 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const schedaValida = (t: PreferenceSectionId): PreferenceSectionId =>
     (TAB_LABEL[t] ? t : 'Editor');
   const [activeTab, setActiveTab] = useState<PreferenceSectionId>(schedaValida(initialTab));
+
+  /**
+   * LE AVANZATE. Divisione decisa dall'utente: restano a portata di mano il profilo
+   * d'analisi, il riconoscimento delle cadenze, i contesti dedotti e l'aiuto armonico
+   * dall'accompagnamento — cioè quello che si tocca davvero. Dietro l'interruttore vanno
+   * soglie, apprendimento e filtri del motore: cose che parlano della MACCHINA, non della
+   * musica, e che chi le cerca sa già come si chiamano.
+   *
+   * L'interruttore si ricorda: chi è esperto lo è anche domani.
+   */
+  const [mostraAvanzate, setMostraAvanzate] = useState<boolean>(() => {
+    try { return localStorage.getItem('harmony-tutor.preferences.advanced.v1') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('harmony-tutor.preferences.advanced.v1', mostraAvanzate ? '1' : '0'); } catch { /* ignore */ }
+  }, [mostraAvanzate]);
   const currentLanguage = i18n.language === 'en' ? 'en' : 'it';
   const handleLanguageChange = (lng: 'en' | 'it') => { i18n.changeLanguage(lng); };
 
@@ -599,7 +615,8 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   </div>
                 </label>
 
-                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                {mostraAvanzate && (<>
+<label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <input
                     type="checkbox"
                     className="mt-1"
@@ -662,7 +679,9 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     </div>
                   </label>
 
-                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                                </>)}
+
+<label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <input
                     type="checkbox"
                     className="mt-1"
@@ -677,7 +696,8 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   </div>
                 </label>
 
-                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                {mostraAvanzate && (<>
+<label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <input
                     type="checkbox"
                     className="mt-1"
@@ -691,6 +711,8 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     </div>
                   </div>
                 </label>
+
+                </>)}
 
                 <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <input
@@ -707,6 +729,19 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   </div>
                 </label>
 
+                <label className="flex items-center gap-2 mt-1 pt-2 border-t border-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={mostraAvanzate}
+                    onChange={(e) => setMostraAvanzate(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-xs font-semibold text-slate-200">{tp('pref_advanced_toggle', 'Mostra le impostazioni avanzate')}</div>
+                    <div className="text-[11px] text-slate-400">{tp('pref_advanced_hint', "Soglie, apprendimento e filtri del motore d'analisi. Quello che serve tutti i giorni è già qui sopra.")}</div>
+                  </div>
+                </label>
+
+                {mostraAvanzate && (<>
                 <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <div className="text-sm font-semibold text-slate-100">{tp('label_min_span_section_title', 'Filtro anti-rumore (etichette)')}</div>
                   <div className="text-xs text-slate-400 mt-1">
@@ -731,6 +766,8 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
                 {/* ─── Consigli personalizzati per regole ─── */}
                 <RuleSuggestionsEditor />
+                </>)}
+
 
               </div>
             )}

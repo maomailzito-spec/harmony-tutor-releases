@@ -105,5 +105,7 @@
   "rule_sugg_empty": "No rule matches that name.",
   "rule_sugg_group_cad": "Cadences",
   "rule_sugg_group_orn": "Ornaments",
-  "rule_sugg_group_chrom": "Chromatic"
+  "rule_sugg_group_chrom": "Chromatic",
+  "pref_advanced_toggle": "Show advanced settings",
+  "pref_advanced_hint": "Thresholds, learning and filters of the analysis engine. What you need every day is already above."
 }
