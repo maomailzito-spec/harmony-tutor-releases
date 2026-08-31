@@ -615,7 +615,57 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   </div>
                 </label>
 
-                {mostraAvanzate && (<>
+<label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!cadentialPatterns}
+                    onChange={(e) => setCadentialPatterns(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_cadential_patterns', 'Riconoscimento pattern cadenzali')}</div>
+                    <div className="text-xs text-slate-400">
+                      {tp('pref_analysis_cadential_patterns_hint', 'Rileva automaticamente cadenze (ii–V–I, IV–V–I, ecc.) e inietta tonicizzazioni temporanee verso la tonalità target.')}
+                    </div>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!accHint}
+                    onChange={(e) => setAccHint(!!e.target.checked)}
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_acc_hint', 'Hint armonica dall\'accompagnamento')}</div>
+                    <div className="text-xs text-slate-400">
+                      {tp('pref_analysis_acc_hint_description', 'Usa le note delle tracce ACC (non mutate) per disambiguare l\'identificazione degli accordi SATB. Il basso ACC è il segnale più forte. Senza tracce ACC, o se disabilitato, l\'analisi è identica a prima.')}
+                    </div>
+                  </div>
+                </label>
+
+
+                {/* LE AVANZATE, TUTTE INSIEME E SOTTO IL LORO INTERRUTTORE.
+                    Prima la casella stava in mezzo e i blocchi si aprivano sopra E sotto:
+                    sembrava che le avanzate fossero due. Ora è un contenitore solo, con la
+                    stessa forma dei gruppi della tavolozza — intestazione che apre, corpo
+                    riquadrato — così si vede dove comincia e dove finisce. */}
+                <button
+                  type="button"
+                  onClick={() => setMostraAvanzate(v => !v)}
+                  className={`w-full flex items-center justify-between px-3 py-2 mt-2 text-left transition-colors ${mostraAvanzate
+                    ? 'bg-amber-900/40 text-amber-100 border border-amber-700/60 border-b-0 rounded-t-lg'
+                    : 'bg-slate-800/70 text-slate-200 border border-slate-700 rounded-lg hover:bg-slate-800'}`}
+                >
+                  <div>
+                    <div className="text-xs font-semibold">{tp('pref_advanced_toggle', 'Impostazioni avanzate')}</div>
+                    <div className="text-[11px] text-slate-400">{tp('pref_advanced_hint', "Soglie, apprendimento e filtri del motore d'analisi. Quello che serve tutti i giorni è qui sopra.")}</div>
+                  </div>
+                  <span className="text-[11px] opacity-70">{mostraAvanzate ? '\u25be' : '\u25b8'}</span>
+                </button>
+                {mostraAvanzate && (
+                  <div className="space-y-2 px-3 pt-3 pb-3 bg-amber-950/20 border border-amber-700/60 border-t-0 rounded-b-lg">
 <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <input
                     type="checkbox"
@@ -679,25 +729,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                     </div>
                   </label>
 
-                                </>)}
-
-<label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={!!cadentialPatterns}
-                    onChange={(e) => setCadentialPatterns(!!e.target.checked)}
-                  />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_cadential_patterns', 'Riconoscimento pattern cadenzali')}</div>
-                    <div className="text-xs text-slate-400">
-                      {tp('pref_analysis_cadential_patterns_hint', 'Rileva automaticamente cadenze (ii–V–I, IV–V–I, ecc.) e inietta tonicizzazioni temporanee verso la tonalità target.')}
-                    </div>
-                  </div>
-                </label>
-
-                {mostraAvanzate && (<>
-<label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <input
                     type="checkbox"
                     className="mt-1"
@@ -712,36 +744,6 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   </div>
                 </label>
 
-                </>)}
-
-                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={!!accHint}
-                    onChange={(e) => setAccHint(!!e.target.checked)}
-                  />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_acc_hint', 'Hint armonica dall\'accompagnamento')}</div>
-                    <div className="text-xs text-slate-400">
-                      {tp('pref_analysis_acc_hint_description', 'Usa le note delle tracce ACC (non mutate) per disambiguare l\'identificazione degli accordi SATB. Il basso ACC è il segnale più forte. Senza tracce ACC, o se disabilitato, l\'analisi è identica a prima.')}
-                    </div>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-2 mt-1 pt-2 border-t border-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={mostraAvanzate}
-                    onChange={(e) => setMostraAvanzate(!!e.target.checked)}
-                  />
-                  <div>
-                    <div className="text-xs font-semibold text-slate-200">{tp('pref_advanced_toggle', 'Mostra le impostazioni avanzate')}</div>
-                    <div className="text-[11px] text-slate-400">{tp('pref_advanced_hint', "Soglie, apprendimento e filtri del motore d'analisi. Quello che serve tutti i giorni è già qui sopra.")}</div>
-                  </div>
-                </label>
-
-                {mostraAvanzate && (<>
                 <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <div className="text-sm font-semibold text-slate-100">{tp('label_min_span_section_title', 'Filtro anti-rumore (etichette)')}</div>
                   <div className="text-xs text-slate-400 mt-1">
@@ -766,8 +768,8 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
                 {/* ─── Consigli personalizzati per regole ─── */}
                 <RuleSuggestionsEditor />
-                </>)}
-
+                  </div>
+                )}
 
               </div>
             )}

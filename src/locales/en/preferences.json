@@ -106,6 +106,6 @@
   "rule_sugg_group_cad": "Cadences",
   "rule_sugg_group_orn": "Ornaments",
   "rule_sugg_group_chrom": "Chromatic",
-  "pref_advanced_toggle": "Show advanced settings",
-  "pref_advanced_hint": "Thresholds, learning and filters of the analysis engine. What you need every day is already above."
+  "pref_advanced_toggle": "Advanced settings",
+  "pref_advanced_hint": "Thresholds, learning and filters of the analysis engine. What you need every day is above."
 }
