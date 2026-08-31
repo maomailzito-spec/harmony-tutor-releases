@@ -253,7 +253,6 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const [statisticalBiasThreshold, setStatisticalBiasThreshold] = usePreference<number>('analysis.statisticalBiasThreshold');
   const [enableLearnedOrnaments, setEnableLearnedOrnaments] = usePreference<boolean>('analysis.enableLearnedOrnaments');
   const [strictPassingNotes, setStrictPassingNotes] = usePreference<boolean>('analysis.strictPassingNotes');
-  const [tonicizationCompact, setTonicizationCompact] = usePreference<boolean>('analysis.tonicizationCompact');
   const [chromaticModulation, setChromaticModulation] = usePreference<boolean>('analysis.chromaticModulation');
   const [cadentialPatterns, setCadentialPatterns] = usePreference<boolean>('analysis.cadentialPatterns');
   const [accHint, setAccHint] = usePreference<boolean>('analysis.accHint');
@@ -662,21 +661,6 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                       </div>
                     </div>
                   </label>
-
-                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={!!tonicizationCompact}
-                    onChange={(e) => setTonicizationCompact(!!e.target.checked)}
-                  />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_tonicization_compact', 'Tonicizzazioni compatte')}</div>
-                    <div className="text-xs text-slate-400">
-                      {tp('pref_analysis_tonicization_compact_hint', 'Mostra [in IV]: ii → V → I anziché ii/IV → V/IV → I/IV. Ideale per brani con valori veloci.')}
-                    </div>
-                  </div>
-                </label>
 
                 <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                   <input

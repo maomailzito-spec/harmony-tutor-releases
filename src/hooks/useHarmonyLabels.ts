@@ -158,6 +158,18 @@ export function useHarmonyLabels(params: UseHarmonyLabelsParams) {
         accompanimentTracks,
     } = params;
 
+    // La casella è stata tolta dal pannello: comandava un ramo che non si raggiunge più.
+    // MISURATO sui 295 brani del corpus: 603 tonicizzazioni, ma solo 29 lunghe almeno due
+    // accordi — e tutte `V/V → V/V`, cioè lo stesso accordo ribattuto, che le altre guardie
+    // del ramo scartano. L'utente ha provato a fabbricare il caso: nessuna differenza né
+    // con la modulazione dedotta accesa né spenta. Il posto di questa funzione l'ha preso
+    // il contesto dedotto: quando la tonalità è DICHIARATA, il grado si legge da lì e non
+    // c'è niente da compattare.
+    //
+    // Il ramo in `harmonyLabelsCore` RESTA: cancellare codice d'analisi è più rischioso che
+    // cancellare una casella, e se quelle etichette ridondanti riapparissero sapremmo che è
+    // raggiungibile e l'interruttore tornerebbe in un minuto. Il valore salvato continua a
+    // essere letto, così chi l'aveva acceso non si vede cambiare le etichette sotto il naso.
     const [compactTonicization] = usePreference<boolean>('analysis.tonicizationCompact');
     const [_chromaticModulationEnabled] = usePreference<boolean>('analysis.chromaticModulation');
     const [accHintEnabled] = usePreference<boolean>('analysis.accHint');
