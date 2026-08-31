@@ -105,10 +105,5 @@
   "rule_sugg_empty": "No rule matches that name.",
   "rule_sugg_group_cad": "Cadences",
   "rule_sugg_group_orn": "Ornaments",
-  "rule_sugg_group_chrom": "Chromatic",
-  "pref_moved_editor": "Measure numbers, voice colours, the toolbar and the command bar are switched on from the View menu; “select current voice only” from the Edit menu (⌥S).",
-  "pref_moved_analysis": "Roman numerals, chord symbols and figured bass are switched on from the View menu, under “Analysis shown”.",
-  "pref_moved_render": "The engraving mode is chosen from the View menu.",
-  "pref_moved_debug": "Harmony diagnostics is switched on from the View menu.",
-  "pref_moved_export": "“Include the title in print and export” is switched on from the View menu, under “What you see is what you export”."
+  "rule_sugg_group_chrom": "Chromatic"
 }

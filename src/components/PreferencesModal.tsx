@@ -162,13 +162,13 @@ function RuleSuggestionsEditor() {
   );
 }
 
-const TAB_LABEL: Record<PreferenceSectionId, string> = {
+/** LE SCHEDE MOSTRATE. Render, Export e Debug avevano una preferenza ciascuna, ed era una
+ *  di quelle passate ai menù: restavano vuote. MIDI resta anche con due sole voci, perché è
+ *  l'area dove è facile che ne arrivino altre — canale, latenza, dispositivo d'ingresso. */
+const TAB_LABEL: Partial<Record<PreferenceSectionId, string>> = {
   Editor: 'Editor',
   Analysis: 'Analisi',
-  Render: 'Render',
   MIDI: 'MIDI',
-  Export: 'Export',
-  Debug: 'Debug',
 };
 
 const TAB_TRANSLATION_KEY: Record<PreferenceSectionId, string> = {
@@ -193,7 +193,11 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   const tp = (key: string | undefined, fallback: string, opts?: Record<string, unknown>) =>
     key ? (t(`preferences:${key}`, { defaultValue: fallback, ...(opts || {}) }) as string) : fallback;
   const tabs = useMemo(() => (Object.keys(TAB_LABEL) as PreferenceSectionId[]), []);
-  const [activeTab, setActiveTab] = useState<PreferenceSectionId>(initialTab);
+  // Se qualcuno chiede una scheda che non c'è più (Render, Export, Debug), si apre
+  // sull'Editor invece che su una scheda vuota che non compare nemmeno nell'elenco.
+  const schedaValida = (t: PreferenceSectionId): PreferenceSectionId =>
+    (TAB_LABEL[t] ? t : 'Editor');
+  const [activeTab, setActiveTab] = useState<PreferenceSectionId>(schedaValida(initialTab));
   const currentLanguage = i18n.language === 'en' ? 'en' : 'it';
   const handleLanguageChange = (lng: 'en' | 'it') => { i18n.changeLanguage(lng); };
 
@@ -225,10 +229,6 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
     'analysis.showRomanAnalysis', 'analysis.showSymbolAnalysis', 'analysis.showFiguredBass',
     'render.engravingMode', 'debug.showHarmonyDebug', 'export.includeTitle',
   ]);
-  const RIGA_SPOSTATE: Partial<Record<PreferenceSectionId, string>> = {
-    Editor: 'pref_moved_editor', Analysis: 'pref_moved_analysis',
-    Render: 'pref_moved_render', Debug: 'pref_moved_debug', Export: 'pref_moved_export',
-  };
 
   const defsForTab = useMemo(() => {
     return PREFERENCE_DEFS
@@ -316,7 +316,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    setActiveTab(initialTab);
+    setActiveTab(schedaValida(initialTab));
     // Center on open (but keep last position while open).
     setPos(prev => {
       if (prev) return prev;
@@ -866,13 +866,8 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   </div>
                 )}
                 <div className="text-sm text-slate-300">{t('tab_settings_for', { tab: t(TAB_TRANSLATION_KEY[activeTab]) })}</div>
-                {RIGA_SPOSTATE[activeTab] && (
-                  <div className="text-[11px] text-slate-400 border-l-2 border-slate-600 pl-2 py-0.5">
-                    {t(RIGA_SPOSTATE[activeTab] as string)}
-                  </div>
-                )}
                 {defsForTab.length === 0 ? (
-                  <div className="text-xs text-slate-400">{RIGA_SPOSTATE[activeTab] ? '' : t('tab_no_preferences')}</div>
+                  <div className="text-xs text-slate-400">{t('tab_no_preferences')}</div>
                 ) : (
                   defsForTab.map((def) => (
                     <PreferenceRow key={def.id} def={def} />
