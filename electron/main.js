@@ -117,6 +117,8 @@ let accTracksState = [];
 let showQuickInsertBarEnabled = true;
 let toolbarHiddenEnabled = false;
 let exportIncludeTitleEnabled = true;
+let staffSystemModeValue = 'grandstaff';
+let orchestralGroupingEnabled = true;
 let engravingMode = 'enhanced';
 let currentLanguage = 'it';
 
@@ -649,6 +651,7 @@ function createMenu() {
       showSymbols: 'Sigle accordi', showFiguredBass: 'Cifratura del basso',
       staves: 'Righi da mostrare ed esportare', staffChoir: 'Coro (SATB)',
       exportFollowsView: 'Quel che si vede è quel che si esporta', exportTitle: 'Includi il titolo in stampa ed export',
+      staffLayout: 'Righi', layoutGrandStaff: 'Grand staff', layoutSatbAncient: 'SATB (chiavi antiche)', layoutTrebleOnly: 'Solo chiave di violino', orchGrouping: 'Raggruppa i righi per famiglia di strumenti',
       generateChorale: 'Genera corale da Roman Numerals…',
       shortcuts: 'Scorciatoie…', manual: 'Manuale utente (PDF)…', manualMissing: 'Manuale non trovato',
       noRecent: 'Nessun file recente',
@@ -679,6 +682,7 @@ function createMenu() {
       showSymbols: 'Chord symbols', showFiguredBass: 'Figured bass',
       staves: 'Staves shown and exported', staffChoir: 'Choir (SATB)',
       exportFollowsView: 'What you see is what you export', exportTitle: 'Include the title in print and export',
+      staffLayout: 'Staves', layoutGrandStaff: 'Grand staff', layoutSatbAncient: 'SATB (old clefs)', layoutTrebleOnly: 'Treble clef only', orchGrouping: 'Group staves by instrument family',
       generateChorale: 'Generate chorale from Roman Numerals…',
       shortcuts: 'Shortcuts…', manual: 'User manual (PDF)…', manualMissing: 'Manual not found',
       noRecent: 'No recent files',
@@ -1366,6 +1370,31 @@ function createMenu() {
           },
           { type: 'separator' },
           {
+            label: mt('staffLayout'),
+            submenu: [
+              ...[['grandstaff', 'layoutGrandStaff'], ['satb_ancient', 'layoutSatbAncient'], ['treble_only', 'layoutTrebleOnly']].map(([valore, etichetta]) => ({
+                label: mt(etichetta),
+                type: 'radio',
+                checked: staffSystemModeValue === valore,
+                click: () => {
+                  staffSystemModeValue = valore;
+                  sendAction(MENU_ACTIONS.SET_STAFF_SYSTEM_MODE, { mode: valore });
+                }
+              })),
+              { type: 'separator' },
+              {
+                label: mt('orchGrouping'),
+                type: 'checkbox',
+                checked: !!orchestralGroupingEnabled,
+                click: (menuItem) => {
+                  orchestralGroupingEnabled = !!menuItem.checked;
+                  sendAction(MENU_ACTIONS.SET_ORCHESTRAL_GROUPING, { enabled: orchestralGroupingEnabled });
+                }
+              },
+            ]
+          },
+          { type: 'separator' },
+          {
             label: mt('measureNumbers'),
             type: 'checkbox',
             checked: !!showMeasureNumbersEnabled,
@@ -1602,6 +1631,12 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
     }
     if (typeof state.exportIncludeTitleEnabled === 'boolean') {
       exportIncludeTitleEnabled = state.exportIncludeTitleEnabled;
+    }
+    if (typeof state.staffSystemModeValue === 'string') {
+      staffSystemModeValue = state.staffSystemModeValue;
+    }
+    if (typeof state.orchestralGroupingEnabled === 'boolean') {
+      orchestralGroupingEnabled = state.orchestralGroupingEnabled;
     }
     if (typeof state.showRomanEnabled === 'boolean') showRomanEnabled = state.showRomanEnabled;
     if (typeof state.showSymbolsEnabled === 'boolean') showSymbolsEnabled = state.showSymbolsEnabled;

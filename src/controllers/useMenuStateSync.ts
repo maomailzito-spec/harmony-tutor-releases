@@ -14,6 +14,8 @@ const keys: Key[] = [
   'showQuickInsertBarEnabled',
   'toolbarHiddenEnabled',
   'exportIncludeTitleEnabled',
+  'staffSystemModeValue',
+  'orchestralGroupingEnabled',
   'showRomanEnabled',
   'showSymbolsEnabled',
   'showFiguredBassEnabled',

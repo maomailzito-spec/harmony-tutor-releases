@@ -3592,7 +3592,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     useEffect(() => { voiceFromChordRef.current = voiceFromChord === true; }, [voiceFromChord]);
 
     // Parentesi di partitura (famiglie di strumenti + linea unica di sistema).
-    const [orchestralGrouping] = usePreference<boolean>('editor.orchestralGrouping');
+    const [orchestralGrouping, setOrchestralGrouping] = usePreference<boolean>('editor.orchestralGrouping');
     const [snapMagnetStrength] = usePreference<number>('editor.snapMagnetStrength');
     const snapMagnetStrengthRef = useRef<number>(0.5);
     useEffect(() => {
@@ -6054,6 +6054,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         showQuickInsertBarEnabled: showQuickInsertBar,
         toolbarHiddenEnabled: !!isToolbarHidden,
         exportIncludeTitleEnabled: !!exportIncludeTitle,
+        staffSystemModeValue: staffSystemMode,
+        orchestralGroupingEnabled: orchestralGrouping !== false,
         // …e lo stato dei tre strati e dei righi, perché le spunte del menù dicano il
         // vero: una spunta che mente è peggio di una voce mancante, soprattutto per chi
         // il menù lo ASCOLTA e non ha modo di verificare guardando la pagina.
@@ -7191,6 +7193,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setIsToolbarHidden(!!payload?.enabled);
         } else if (action === 'set-export-include-title') {
             setExportIncludeTitle(!!payload?.enabled);
+        } else if (action === 'set-orchestral-grouping') {
+            setOrchestralGrouping(!!payload?.enabled);
+        } else if (action === 'set-staff-system-mode') {
+            const m = String(payload?.mode || '').trim();
+            if (m === 'grandstaff' || m === 'satb_ancient' || m === 'treble_only') setStaffSystemMode(m);
         } else if (action === 'set-show-harmony-debug') {
             setShowHarmonyDebug(!!payload?.enabled);
         } else if (action === 'set-title-font-family') {
@@ -18858,6 +18865,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 isToolbarCustomizeOpen={isToolbarCustomizeOpen}
                 onCloseToolbarCustomize={() => setIsToolbarCustomizeOpen(false)}
                 isToolbarHidden={isToolbarHidden}
+                orchestralGrouping={orchestralGrouping}
+                onSetOrchestralGrouping={setOrchestralGrouping}
                 showQuickInsertBar={showQuickInsertBar}
                 showHarmonyDebug={showHarmonyDebug}
                 chordInsertMode={chordInsertMode}

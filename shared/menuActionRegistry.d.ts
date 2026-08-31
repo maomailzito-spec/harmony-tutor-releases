@@ -22,6 +22,8 @@ export const MENU_ACTIONS: Readonly<{
   SET_QUICK_INSERT_BAR: 'set-quick-insert-bar';
   SET_TOOLBAR_HIDDEN: 'set-toolbar-hidden';
   SET_EXPORT_INCLUDE_TITLE: 'set-export-include-title';
+  SET_STAFF_SYSTEM_MODE: 'set-staff-system-mode';
+  SET_ORCHESTRAL_GROUPING: 'set-orchestral-grouping';
   SET_SHOW_MEASURE_NUMBERS: 'set-show-measure-numbers';
   SET_SHOW_HARMONY_DEBUG: 'set-show-harmony-debug';
   SET_SHOW_VOICE_COLORS: 'set-show-voice-colors';
@@ -72,6 +74,8 @@ export type MenuActionPayloadMap = {
   'set-quick-insert-bar': { enabled: boolean };
   'set-toolbar-hidden': { enabled: boolean };
   'set-export-include-title': { enabled: boolean };
+  'set-orchestral-grouping': { enabled: boolean };
+  'set-staff-system-mode': { mode: string };
   'set-show-measure-numbers': { enabled: boolean };
   'set-show-harmony-debug': { enabled: boolean };
   'set-show-voice-colors': { enabled: boolean };

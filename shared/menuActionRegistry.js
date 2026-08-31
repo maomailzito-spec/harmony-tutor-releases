@@ -39,6 +39,8 @@ const MENU_ACTIONS = Object.freeze({
   // Il titolo nell'esportazione: sta accanto a «quel che si vede è quel che si esporta»,
   // perché è la stessa domanda — cosa finisce nel file.
   SET_EXPORT_INCLUDE_TITLE: 'set-export-include-title',
+  SET_STAFF_SYSTEM_MODE: 'set-staff-system-mode',
+  SET_ORCHESTRAL_GROUPING: 'set-orchestral-grouping',
   SET_SHOW_MEASURE_NUMBERS: 'set-show-measure-numbers',
   SET_SHOW_HARMONY_DEBUG: 'set-show-harmony-debug',
   SET_SHOW_VOICE_COLORS: 'set-show-voice-colors',
@@ -117,6 +119,7 @@ function normalizeMenuActionPayload(action, payload) {
       return { command };
     }
 
+    case MENU_ACTIONS.SET_ORCHESTRAL_GROUPING:
     case MENU_ACTIONS.SET_EXPORT_INCLUDE_TITLE:
     case MENU_ACTIONS.SET_TOOLBAR_HIDDEN:
     case MENU_ACTIONS.SET_QUICK_INSERT_BAR:
@@ -136,6 +139,12 @@ function normalizeMenuActionPayload(action, payload) {
       const trackId = normalizeString(payload && payload.trackId);
       if (!trackId) return null;
       return { trackId, enabled: toBoolean(payload && payload.enabled) };
+    }
+
+    case MENU_ACTIONS.SET_STAFF_SYSTEM_MODE: {
+      const mode = normalizeString(payload && payload.mode);
+      if (mode !== 'grandstaff' && mode !== 'satb_ancient' && mode !== 'treble_only') return null;
+      return { mode };
     }
 
     case MENU_ACTIONS.SET_ENGRAVING_MODE:

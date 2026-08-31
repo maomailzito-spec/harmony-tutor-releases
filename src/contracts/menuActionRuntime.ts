@@ -29,6 +29,8 @@ export const MENU_ACTIONS = {
   SET_QUICK_INSERT_BAR: 'set-quick-insert-bar',
   SET_TOOLBAR_HIDDEN: 'set-toolbar-hidden',
   SET_EXPORT_INCLUDE_TITLE: 'set-export-include-title',
+  SET_STAFF_SYSTEM_MODE: 'set-staff-system-mode',
+  SET_ORCHESTRAL_GROUPING: 'set-orchestral-grouping',
   SET_SHOW_MEASURE_NUMBERS: 'set-show-measure-numbers',
   SET_SHOW_HARMONY_DEBUG: 'set-show-harmony-debug',
   SET_SHOW_VOICE_COLORS: 'set-show-voice-colors',
@@ -99,6 +101,7 @@ export function normalizeMenuActionPayload<A extends MenuAction>(
       return { command } as MenuActionPayloadMap[A];
     }
 
+    case MENU_ACTIONS.SET_ORCHESTRAL_GROUPING:
     case MENU_ACTIONS.SET_EXPORT_INCLUDE_TITLE:
     case MENU_ACTIONS.SET_TOOLBAR_HIDDEN:
     case MENU_ACTIONS.SET_QUICK_INSERT_BAR:
@@ -126,6 +129,13 @@ export function normalizeMenuActionPayload<A extends MenuAction>(
       const p = payload as any;
       const subject = typeof p?.subject === 'string' ? p.subject : '';
       return (subject === 'acc' ? { subject: 'acc' } : { subject: 'satb' }) as MenuActionPayloadMap[A];
+    }
+
+    case MENU_ACTIONS.SET_STAFF_SYSTEM_MODE: {
+      const p = payload as any;
+      const mode = typeof p?.mode === 'string' ? p.mode : '';
+      if (mode !== 'grandstaff' && mode !== 'satb_ancient' && mode !== 'treble_only') return null;
+      return { mode } as MenuActionPayloadMap[A];
     }
 
     case MENU_ACTIONS.SET_ENGRAVING_MODE:

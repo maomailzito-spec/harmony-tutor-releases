@@ -11,6 +11,9 @@ export type MenuState = Partial<{
   toolbarHiddenEnabled: boolean;
   /** Il titolo finisce nell'esportazione. */
   exportIncludeTitleEnabled: boolean;
+  /** Layout dei righi e raggruppamento per famiglia: le spunte del menù devono dire il vero. */
+  staffSystemModeValue: string;
+  orchestralGroupingEnabled: boolean;
   showRomanEnabled: boolean;
   showSymbolsEnabled: boolean;
   showFiguredBassEnabled: boolean;

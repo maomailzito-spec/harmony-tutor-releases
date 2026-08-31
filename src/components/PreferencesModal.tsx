@@ -228,6 +228,7 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
     'editor.toolbarHidden', 'editor.selectOnlyCurrentVoice', 'editor.toolbarPrefs',
     'analysis.showRomanAnalysis', 'analysis.showSymbolAnalysis', 'analysis.showFiguredBass',
     'render.engravingMode', 'debug.showHarmonyDebug', 'export.includeTitle',
+    'editor.staffSystemMode', 'editor.orchestralGrouping',
   ]);
 
   const defsForTab = useMemo(() => {

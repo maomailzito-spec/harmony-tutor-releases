@@ -141,5 +141,7 @@
   "mix_reverb_send": "Mandata riverbero (tipo e livello globale dal master)",
   "mix_eq_channel": "EQ del canale — apri/chiudi",
   "mix_comp_channel": "Compressore del canale — apri/chiudi",
-  "voice_rightclick_suffix": " · ⇧+click: aggiungi la voce alla selezione · tasto destro: seleziona o copia"
+  "voice_rightclick_suffix": " · ⇧+click: aggiungi la voce alla selezione · tasto destro: seleziona o copia",
+  "more_orch_grouping_label": "Raggruppa per famiglia",
+  "more_orch_grouping_tooltip": "Chiude con una parentesi quadra i righi consecutivi della stessa famiglia di strumenti, e unisce coro e tracce in un sistema solo."
 }

@@ -264,6 +264,9 @@ type GrandStaffToolbarProps = {
     isMoreMenuOpen: boolean;
     setIsMoreMenuOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
     staffSystemMode: StaffSystemMode;
+    /** Raggruppamento per famiglia: viveva solo nelle preferenze, senza nessun comando. */
+    orchestralGrouping?: boolean;
+    onSetOrchestralGrouping?: (v: boolean) => void;
     setStaffSystemMode: (value: StaffSystemMode) => void;
     lastNonSatbModeRef: React.MutableRefObject<StaffSystemMode>;
     staffLayoutMode: StaffLayoutMode;
@@ -478,6 +481,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
         isMoreMenuOpen,
         setIsMoreMenuOpen,
         staffSystemMode,
+        orchestralGrouping,
+        onSetOrchestralGrouping,
         setStaffSystemMode,
         lastNonSatbModeRef,
         staffLayoutMode,
@@ -1512,6 +1517,16 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                             <span>{tT('more_close_voicing_label')}</span>
                             {staffLayoutMode === 'parti_strette' && staffSystemMode !== 'satb_ancient' && <span className="text-[11px]">✓</span>}
                         </button>
+                        {onSetOrchestralGrouping && (
+                            <button
+                                onClick={() => onSetOrchestralGrouping(orchestralGrouping === false)}
+                                className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
+                                title={tT('more_orch_grouping_tooltip')}
+                            >
+                                <span>{tT('more_orch_grouping_label')}</span>
+                                {orchestralGrouping !== false && <span className="text-[11px]">✓</span>}
+                            </button>
+                        )}
                         {setPartCount && (
                             <>
                                 <div className="my-2 h-px bg-slate-700" />
