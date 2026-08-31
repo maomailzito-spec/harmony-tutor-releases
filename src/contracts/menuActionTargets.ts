@@ -26,6 +26,7 @@ export const MENU_ACTION_TARGET: Record<MenuAction, MenuActionTarget> = {
 
   [MENU_ACTIONS.SET_QUICK_INSERT_BAR]: 'grandStaff',
   [MENU_ACTIONS.SET_TOOLBAR_HIDDEN]: 'grandStaff',
+  [MENU_ACTIONS.SET_EXPORT_INCLUDE_TITLE]: 'grandStaff',
   [MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS]: 'grandStaff',
   [MENU_ACTIONS.SET_SHOW_HARMONY_DEBUG]: 'grandStaff',
   [MENU_ACTIONS.SET_SHOW_VOICE_COLORS]: 'grandStaff',

@@ -58,6 +58,12 @@ function normalizeMenuState(state) {
     out.toolbarHiddenEnabled = toBoolean(s.toolbarHiddenEnabled);
   }
 
+  if (typeof s.exportIncludeTitleEnabled === 'boolean') {
+    out.exportIncludeTitleEnabled = s.exportIncludeTitleEnabled;
+  } else if (s.exportIncludeTitleEnabled != null) {
+    out.exportIncludeTitleEnabled = toBoolean(s.exportIncludeTitleEnabled);
+  }
+
   // I TRE STRATI D'ANALISI E I RIGHI: il menù mostra la spunta, quindi deve sapere
   // com'è messa la pagina. Senza, la spunta direbbe una cosa e lo schermo un'altra.
   for (const k of ['showRomanEnabled', 'showSymbolsEnabled', 'showFiguredBassEnabled', 'satbVisibleEnabled']) {

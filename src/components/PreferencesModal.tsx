@@ -223,11 +223,11 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
     'editor.showMeasureNumbers', 'editor.showVoiceColors', 'editor.showQuickInsertBar',
     'editor.toolbarHidden', 'editor.selectOnlyCurrentVoice', 'editor.toolbarPrefs',
     'analysis.showRomanAnalysis', 'analysis.showSymbolAnalysis', 'analysis.showFiguredBass',
-    'render.engravingMode', 'debug.showHarmonyDebug',
+    'render.engravingMode', 'debug.showHarmonyDebug', 'export.includeTitle',
   ]);
   const RIGA_SPOSTATE: Partial<Record<PreferenceSectionId, string>> = {
     Editor: 'pref_moved_editor', Analysis: 'pref_moved_analysis',
-    Render: 'pref_moved_render', Debug: 'pref_moved_debug',
+    Render: 'pref_moved_render', Debug: 'pref_moved_debug', Export: 'pref_moved_export',
   };
 
   const defsForTab = useMemo(() => {

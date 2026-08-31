@@ -116,6 +116,7 @@ let satbVisibleEnabled = true;
 let accTracksState = [];
 let showQuickInsertBarEnabled = true;
 let toolbarHiddenEnabled = false;
+let exportIncludeTitleEnabled = true;
 let engravingMode = 'enhanced';
 let currentLanguage = 'it';
 
@@ -647,7 +648,7 @@ function createMenu() {
       analysisLayers: 'Analisi mostrata', showRoman: 'Numeri romani',
       showSymbols: 'Sigle accordi', showFiguredBass: 'Cifratura del basso',
       staves: 'Righi da mostrare ed esportare', staffChoir: 'Coro (SATB)',
-      exportFollowsView: 'Quel che si vede è quel che si esporta',
+      exportFollowsView: 'Quel che si vede è quel che si esporta', exportTitle: 'Includi il titolo in stampa ed export',
       generateChorale: 'Genera corale da Roman Numerals…',
       shortcuts: 'Scorciatoie…', manual: 'Manuale utente (PDF)…', manualMissing: 'Manuale non trovato',
       noRecent: 'Nessun file recente',
@@ -677,7 +678,7 @@ function createMenu() {
       analysisLayers: 'Analysis shown', showRoman: 'Roman numerals',
       showSymbols: 'Chord symbols', showFiguredBass: 'Figured bass',
       staves: 'Staves shown and exported', staffChoir: 'Choir (SATB)',
-      exportFollowsView: 'What you see is what you export',
+      exportFollowsView: 'What you see is what you export', exportTitle: 'Include the title in print and export',
       generateChorale: 'Generate chorale from Roman Numerals…',
       shortcuts: 'Shortcuts…', manual: 'User manual (PDF)…', manualMissing: 'Manual not found',
       noRecent: 'No recent files',
@@ -1445,6 +1446,15 @@ function createMenu() {
           },
           { label: mt('exportFollowsView'), enabled: false },
           {
+            label: mt('exportTitle'),
+            type: 'checkbox',
+            checked: !!exportIncludeTitleEnabled,
+            click: (menuItem) => {
+              exportIncludeTitleEnabled = !!menuItem.checked;
+              sendAction(MENU_ACTIONS.SET_EXPORT_INCLUDE_TITLE, { enabled: exportIncludeTitleEnabled });
+            }
+          },
+          {
             label: mt('harmonyDebug'),
             type: 'checkbox',
             checked: !!showHarmonyDebugEnabled,
@@ -1589,6 +1599,9 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
     }
     if (typeof state.toolbarHiddenEnabled === 'boolean') {
       toolbarHiddenEnabled = state.toolbarHiddenEnabled;
+    }
+    if (typeof state.exportIncludeTitleEnabled === 'boolean') {
+      exportIncludeTitleEnabled = state.exportIncludeTitleEnabled;
     }
     if (typeof state.showRomanEnabled === 'boolean') showRomanEnabled = state.showRomanEnabled;
     if (typeof state.showSymbolsEnabled === 'boolean') showSymbolsEnabled = state.showSymbolsEnabled;

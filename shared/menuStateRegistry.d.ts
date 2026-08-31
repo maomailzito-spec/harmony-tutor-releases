@@ -9,6 +9,8 @@ export type MenuState = Partial<{
   showQuickInsertBarEnabled: boolean;
   /** La toolbar è nascosta: il menù mostra la spunta e deve saperlo. */
   toolbarHiddenEnabled: boolean;
+  /** Il titolo finisce nell'esportazione. */
+  exportIncludeTitleEnabled: boolean;
   showRomanEnabled: boolean;
   showSymbolsEnabled: boolean;
   showFiguredBassEnabled: boolean;

@@ -6042,7 +6042,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     const [marqueeSelectOnlyCurrentVoice, setMarqueeSelectOnlyCurrentVoice] = usePreference<boolean>('editor.selectOnlyCurrentVoice');
 
-    const [exportIncludeTitle] = usePreference<boolean>('export.includeTitle');
+    const [exportIncludeTitle, setExportIncludeTitle] = usePreference<boolean>('export.includeTitle');
 
     // Keep native Electron menu checkmarks in sync with renderer state.
     useMenuStateSync({
@@ -6053,6 +6053,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         concertPitchEnabled: concertPitch,
         showQuickInsertBarEnabled: showQuickInsertBar,
         toolbarHiddenEnabled: !!isToolbarHidden,
+        exportIncludeTitleEnabled: !!exportIncludeTitle,
         // …e lo stato dei tre strati e dei righi, perché le spunte del menù dicano il
         // vero: una spunta che mente è peggio di una voce mancante, soprattutto per chi
         // il menù lo ASCOLTA e non ha modo di verificare guardando la pagina.
@@ -7188,6 +7189,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setShowQuickInsertBar(!!payload?.enabled);
         } else if (action === 'set-toolbar-hidden') {
             setIsToolbarHidden(!!payload?.enabled);
+        } else if (action === 'set-export-include-title') {
+            setExportIncludeTitle(!!payload?.enabled);
         } else if (action === 'set-show-harmony-debug') {
             setShowHarmonyDebug(!!payload?.enabled);
         } else if (action === 'set-title-font-family') {

@@ -36,6 +36,9 @@ const MENU_ACTIONS = Object.freeze({
   // La toolbar si nascondeva solo con ⌥T: senza voce di menù, per chi esplora
   // l'applicazione dai menù quel comando non esisteva.
   SET_TOOLBAR_HIDDEN: 'set-toolbar-hidden',
+  // Il titolo nell'esportazione: sta accanto a «quel che si vede è quel che si esporta»,
+  // perché è la stessa domanda — cosa finisce nel file.
+  SET_EXPORT_INCLUDE_TITLE: 'set-export-include-title',
   SET_SHOW_MEASURE_NUMBERS: 'set-show-measure-numbers',
   SET_SHOW_HARMONY_DEBUG: 'set-show-harmony-debug',
   SET_SHOW_VOICE_COLORS: 'set-show-voice-colors',
@@ -114,6 +117,7 @@ function normalizeMenuActionPayload(action, payload) {
       return { command };
     }
 
+    case MENU_ACTIONS.SET_EXPORT_INCLUDE_TITLE:
     case MENU_ACTIONS.SET_TOOLBAR_HIDDEN:
     case MENU_ACTIONS.SET_QUICK_INSERT_BAR:
     case MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS:
