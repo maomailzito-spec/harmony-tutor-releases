@@ -205,9 +205,34 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
   //   prefs (ordine)» invita solo a romperla.
   const CON_RIQUADRO_PROPRIO = new Set<string>(['editor.staffLineWeight', 'editor.toolbarPrefs']);
 
+  /**
+   * FUORI DAL PANNELLO: si comandano dai MENÙ.
+   *
+   * Erano in tutti e due i posti. Il progetto stesso mette in guardia — «i controlli sono
+   * SPOSTATI, non duplicati: due posti che dicono la stessa cosa sono il prossimo
+   * disaccordo» — e una preferenza si configura una volta, mentre queste si accendono e si
+   * spengono guardando lo spartito: sono comandi, e i comandi stanno nei menù, dove hanno
+   * una scorciatoia e non costano due clic e una scheda.
+   *
+   * Non si perde niente: ognuna ha già la sua voce di menù, con la spunta tenuta in
+   * sincrono. Sotto, una riga per scheda dice quali se ne sono andate e dove — nominandole
+   * una per una, perché chi ne cercava una la ritrovi per nome e non debba indovinare in
+   * che categoria l'abbiamo messa.
+   */
+  const NEL_MENU = new Set<string>([
+    'editor.showMeasureNumbers', 'editor.showVoiceColors', 'editor.showQuickInsertBar',
+    'editor.toolbarHidden', 'editor.selectOnlyCurrentVoice', 'editor.toolbarPrefs',
+    'analysis.showRomanAnalysis', 'analysis.showSymbolAnalysis', 'analysis.showFiguredBass',
+    'render.engravingMode', 'debug.showHarmonyDebug',
+  ]);
+  const RIGA_SPOSTATE: Partial<Record<PreferenceSectionId, string>> = {
+    Editor: 'pref_moved_editor', Analysis: 'pref_moved_analysis',
+    Render: 'pref_moved_render', Debug: 'pref_moved_debug',
+  };
+
   const defsForTab = useMemo(() => {
     return PREFERENCE_DEFS
-      .filter((d) => d.section === activeTab && !CON_RIQUADRO_PROPRIO.has(d.id))
+      .filter((d) => d.section === activeTab && !CON_RIQUADRO_PROPRIO.has(d.id) && !NEL_MENU.has(d.id))
       .slice()
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [activeTab]);
@@ -563,36 +588,12 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   <input
                     type="checkbox"
                     className="mt-1"
-                    checked={!!showRomanAnalysis}
-                    onChange={(e) => setShowRomanAnalysis(!!e.target.checked)}
-                  />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_show_roman', 'Mostra numeri romani')}</div>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
                     checked={!!romanBassMode}
                     onChange={(e) => setRomanBassMode(!!e.target.checked)}
                   />
                   <div>
                     <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_roman_bass_mode', 'Numerazione scuola romana (grado del basso)')}</div>
                     <div className="text-[11px] text-slate-400">{tp('pref_analysis_roman_bass_mode_hint', 'Il numero romano indica il grado della nota reale al basso (sempre maiuscolo); l’accordo è espresso dalle cifre. Richiede “Mostra numeri romani” attivo.')}</div>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/60 p-3">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={!!showSymbolAnalysis}
-                    onChange={(e) => setShowSymbolAnalysis(!!e.target.checked)}
-                  />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-100">{tp('pref_analysis_show_symbols', 'Mostra sigle accordi')}</div>
                   </div>
                 </label>
 
@@ -865,8 +866,13 @@ const PreferencesModal: React.FC<PreferencesModalProps> = ({
                   </div>
                 )}
                 <div className="text-sm text-slate-300">{t('tab_settings_for', { tab: t(TAB_TRANSLATION_KEY[activeTab]) })}</div>
+                {RIGA_SPOSTATE[activeTab] && (
+                  <div className="text-[11px] text-slate-400 border-l-2 border-slate-600 pl-2 py-0.5">
+                    {t(RIGA_SPOSTATE[activeTab] as string)}
+                  </div>
+                )}
                 {defsForTab.length === 0 ? (
-                  <div className="text-xs text-slate-400">{t('tab_no_preferences')}</div>
+                  <div className="text-xs text-slate-400">{RIGA_SPOSTATE[activeTab] ? '' : t('tab_no_preferences')}</div>
                 ) : (
                   defsForTab.map((def) => (
                     <PreferenceRow key={def.id} def={def} />

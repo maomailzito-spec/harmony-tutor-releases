@@ -24,7 +24,7 @@
   "opt_engraving_legacy": "Legacy",
   "pref_analysis_show_roman": "Mostra numeri romani",
   "pref_analysis_roman_bass_mode": "Numerazione scuola romana (grado del basso)",
-  "pref_analysis_roman_bass_mode_hint": "Il numero romano indica il grado della nota reale al basso (sempre maiuscolo); l’accordo è espresso dalle cifre. Richiede “Mostra numeri romani” attivo.",
+  "pref_analysis_roman_bass_mode_hint": "Il numero romano indica il grado della nota reale al basso (sempre maiuscolo); l'accordo è espresso dalle cifre. Richiede i numeri romani accesi, dal menù Vista.",
   "pref_analysis_show_symbols": "Mostra sigle accordi",
   "pref_analysis_profile_base": "Profilo analisi (base)",
   "opt_profile_academic": "Accademico",
@@ -105,5 +105,9 @@
   "rule_sugg_empty": "Nessuna regola col nome cercato.",
   "rule_sugg_group_cad": "Cadenze",
   "rule_sugg_group_orn": "Ornamenti",
-  "rule_sugg_group_chrom": "Cromatismi"
+  "rule_sugg_group_chrom": "Cromatismi",
+  "pref_moved_editor": "Numeri di misura, colori delle voci, barra degli strumenti e barra comandi si accendono dal menù Vista; «seleziona solo voce corrente» dal menù Modifica (⌥S).",
+  "pref_moved_analysis": "Numeri romani, sigle accordi e basso cifrato si accendono dal menù Vista, sotto «Analisi mostrata».",
+  "pref_moved_render": "La modalità di incisione si sceglie dal menù Vista.",
+  "pref_moved_debug": "La diagnostica dell'armonia si accende dal menù Vista."
 }
