@@ -12,6 +12,7 @@ const keys: Key[] = [
   'showVoiceColorsEnabled',
   'concertPitchEnabled',
   'showQuickInsertBarEnabled',
+  'toolbarHiddenEnabled',
   'showRomanEnabled',
   'showSymbolsEnabled',
   'showFiguredBassEnabled',

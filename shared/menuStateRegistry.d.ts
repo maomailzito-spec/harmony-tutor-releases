@@ -7,6 +7,8 @@ export type MenuState = Partial<{
   showVoiceColorsEnabled: boolean;
   concertPitchEnabled: boolean;
   showQuickInsertBarEnabled: boolean;
+  /** La toolbar è nascosta: il menù mostra la spunta e deve saperlo. */
+  toolbarHiddenEnabled: boolean;
   showRomanEnabled: boolean;
   showSymbolsEnabled: boolean;
   showFiguredBassEnabled: boolean;

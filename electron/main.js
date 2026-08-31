@@ -115,6 +115,7 @@ let satbVisibleEnabled = true;
 /** [{ id, name, visible }] — le tracce di accompagnamento, per il sottomenu dei righi. */
 let accTracksState = [];
 let showQuickInsertBarEnabled = true;
+let toolbarHiddenEnabled = false;
 let engravingMode = 'enhanced';
 let currentLanguage = 'it';
 
@@ -639,7 +640,7 @@ function createMenu() {
       titleIncrease: 'Aumenta dimensione titolo', titleDecrease: 'Diminuisci dimensione titolo',
       scales: 'Scale', chords: 'Accordi', intervals: 'Intervalli', editor: 'Editor',
       grandStaff: 'Grand Staff', engravingMode: 'Modalità incisione',
-      reorderToolbar: 'Personalizza la barra…', transport: 'Barra comandi a toolbar nascosta (⌥T per nasconderla)',
+      reorderToolbar: 'Personalizza la barra…', transport: 'Barra comandi flottante', toolbarVisible: 'Barra degli strumenti',
       measureNumbers: 'Numeri misure', harmonyDebug: 'Debug harmony labels (pcs)',
       voiceColors: 'Colori voci (BTAS)',
       concertPitch: 'Suoni reali (partitura in Do)',
@@ -669,7 +670,7 @@ function createMenu() {
       titleIncrease: 'Increase title size', titleDecrease: 'Decrease title size',
       scales: 'Scales', chords: 'Chords', intervals: 'Intervals', editor: 'Editor',
       grandStaff: 'Grand Staff', engravingMode: 'Engraving mode',
-      reorderToolbar: 'Customize the toolbar…', transport: 'Command bar when the toolbar is hidden (⌥T to hide it)',
+      reorderToolbar: 'Customize the toolbar…', transport: 'Floating command bar', toolbarVisible: 'Toolbar',
       measureNumbers: 'Measure numbers', harmonyDebug: 'Debug harmony labels (pcs)',
       voiceColors: 'Voice colors (BTAS)',
       concertPitch: 'Concert pitch (score in C)',
@@ -1344,6 +1345,16 @@ function createMenu() {
         },
         ...(enableGrandStaff ? [
           {
+            label: mt('toolbarVisible'),
+            type: 'checkbox',
+            accelerator: 'Alt+T',
+            checked: !toolbarHiddenEnabled,
+            click: (menuItem) => {
+              toolbarHiddenEnabled = !menuItem.checked;
+              sendAction(MENU_ACTIONS.SET_TOOLBAR_HIDDEN, { enabled: toolbarHiddenEnabled });
+            }
+          },
+          {
             label: mt('transport'),
             type: 'checkbox',
             checked: !!showQuickInsertBarEnabled,
@@ -1575,6 +1586,9 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
     }
     if (typeof state.showQuickInsertBarEnabled === 'boolean') {
       showQuickInsertBarEnabled = state.showQuickInsertBarEnabled;
+    }
+    if (typeof state.toolbarHiddenEnabled === 'boolean') {
+      toolbarHiddenEnabled = state.toolbarHiddenEnabled;
     }
     if (typeof state.showRomanEnabled === 'boolean') showRomanEnabled = state.showRomanEnabled;
     if (typeof state.showSymbolsEnabled === 'boolean') showSymbolsEnabled = state.showSymbolsEnabled;

@@ -33,6 +33,9 @@ const MENU_ACTIONS = Object.freeze({
   TOGGLE_TOOLBAR_CUSTOMIZE: 'toggle-toolbar-customize',
 
   SET_QUICK_INSERT_BAR: 'set-quick-insert-bar',
+  // La toolbar si nascondeva solo con ⌥T: senza voce di menù, per chi esplora
+  // l'applicazione dai menù quel comando non esisteva.
+  SET_TOOLBAR_HIDDEN: 'set-toolbar-hidden',
   SET_SHOW_MEASURE_NUMBERS: 'set-show-measure-numbers',
   SET_SHOW_HARMONY_DEBUG: 'set-show-harmony-debug',
   SET_SHOW_VOICE_COLORS: 'set-show-voice-colors',
@@ -111,6 +114,7 @@ function normalizeMenuActionPayload(action, payload) {
       return { command };
     }
 
+    case MENU_ACTIONS.SET_TOOLBAR_HIDDEN:
     case MENU_ACTIONS.SET_QUICK_INSERT_BAR:
     case MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS:
     case MENU_ACTIONS.SET_SHOW_HARMONY_DEBUG:

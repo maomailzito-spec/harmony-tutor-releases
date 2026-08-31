@@ -1949,7 +1949,12 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 </div>
             )}
 
-            {!isToolbarVisible && showQuickInsertBar && (
+            {/* DUE COMANDI INDIPENDENTI. Il transport compariva solo a toolbar nascosta:
+                non era un comando ma una CONSEGUENZA, e per vederlo bisognava rinunciare
+                alla toolbar. Sono due strisce diverse — questa è flottante e si trascina
+                dove si sta scrivendo — e ora si accendono e si spengono ciascuna per conto
+                suo, dal menù Vista. */}
+            {showQuickInsertBar && (
                 <div
                     style={{ position: 'fixed', left: barraComandi.pos.x, top: barraComandi.pos.y, zIndex: 1000 }}
                     className="px-1 py-1 bg-slate-800/95 backdrop-blur border border-slate-700 rounded-lg shadow-2xl"
@@ -1975,15 +1980,14 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                 </div>
             )}
 
-            {/* La targhetta «Quick Insert: ON» compariva anche a TOOLBAR APERTA, dove il
-                transport non si disegna affatto: si accendeva l'interruttore, non appariva
-                nessuna barra e spuntava una scritta che sembrava un residuo di debug.
-                Si mostra solo dove la cosa ha un effetto, cioè a toolbar chiusa. */}
-            {((showQuickInsertBar && !isToolbarVisible) || showHarmonyDebug) && (
+            {/* Via la targhetta «Quick Insert: ON»: ora che la barra comandi compare sempre
+                quando è accesa, è LEI l'indicatore, e una scritta che ripete quello che si
+                vede è solo rumore. Resta quella della diagnostica, che invece non ha una
+                sua forma visibile. */}
+            {showHarmonyDebug && (
                 <div className="sticky top-0 z-40 mt-2 px-2">
                     <div className="inline-flex items-center gap-2 rounded-md bg-slate-800/90 border border-slate-700 px-2 py-1 text-[11px] text-slate-200">
-                        {showQuickInsertBar && !isToolbarVisible && <span className="px-1.5 py-0.5 rounded bg-slate-700">Quick Insert: ON</span>}
-                        {showHarmonyDebug && <span className="px-1.5 py-0.5 rounded bg-slate-700">Harmony Debug: ON</span>}
+                        <span className="px-1.5 py-0.5 rounded bg-slate-700">Harmony Debug: ON</span>
                     </div>
                 </div>
             )}

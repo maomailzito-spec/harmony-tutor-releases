@@ -3656,6 +3656,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // nel vuoto, e il processo principale partiva da «acceso» mentre il renderer partiva
     // da «spento» — cioè la spunta nel menù diceva il contrario dello schermo.
     const [showQuickInsertBar, setShowQuickInsertBar] = usePreference<boolean>('editor.showQuickInsertBar');
+    // `editor.toolbarHidden` era dichiarata nel registro e nelle chiavi di memoria e NON
+    // LETTA DA NESSUNO: lo stato viveva in uno `useState` che si dimenticava a ogni riavvio,
+    // e la casella nel pannello delle preferenze non comandava niente. Ora è la preferenza.
+    const [isToolbarHidden, setIsToolbarHidden] = usePreference<boolean>('editor.toolbarHidden');
     const [showHarmonyDebug, setShowHarmonyDebug] = useState(
         () => { try { return localStorage.getItem('harmony-tutor.showHarmonyDebug.v1') === '1'; } catch { return false; } }
     );
@@ -6048,6 +6052,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         showVoiceColorsEnabled: showVoiceColors,
         concertPitchEnabled: concertPitch,
         showQuickInsertBarEnabled: showQuickInsertBar,
+        toolbarHiddenEnabled: !!isToolbarHidden,
         // …e lo stato dei tre strati e dei righi, perché le spunte del menù dicano il
         // vero: una spunta che mente è peggio di una voce mancante, soprattutto per chi
         // il menù lo ASCOLTA e non ha modo di verificare guardando la pagina.
@@ -7181,6 +7186,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             if (m === 'legacy' || m === 'enhanced') runOverlapAudit(m);
         } else if (action === 'set-quick-insert-bar') {
             setShowQuickInsertBar(!!payload?.enabled);
+        } else if (action === 'set-toolbar-hidden') {
+            setIsToolbarHidden(!!payload?.enabled);
         } else if (action === 'set-show-harmony-debug') {
             setShowHarmonyDebug(!!payload?.enabled);
         } else if (action === 'set-title-font-family') {
@@ -18542,7 +18549,6 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // RENDER
     // =========================================================
 
-    const [isToolbarHidden, setIsToolbarHidden] = useState(false);
     const forceToolbarVisible = isToolbarCustomizeOpen || isMoreMenuOpen;
     const isToolbarVisible = forceToolbarVisible || !isToolbarHidden;
 

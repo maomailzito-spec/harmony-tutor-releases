@@ -27,6 +27,7 @@ export const MENU_ACTIONS = {
   TOGGLE_TOOLBAR_CUSTOMIZE: 'toggle-toolbar-customize',
 
   SET_QUICK_INSERT_BAR: 'set-quick-insert-bar',
+  SET_TOOLBAR_HIDDEN: 'set-toolbar-hidden',
   SET_SHOW_MEASURE_NUMBERS: 'set-show-measure-numbers',
   SET_SHOW_HARMONY_DEBUG: 'set-show-harmony-debug',
   SET_SHOW_VOICE_COLORS: 'set-show-voice-colors',
@@ -97,6 +98,7 @@ export function normalizeMenuActionPayload<A extends MenuAction>(
       return { command } as MenuActionPayloadMap[A];
     }
 
+    case MENU_ACTIONS.SET_TOOLBAR_HIDDEN:
     case MENU_ACTIONS.SET_QUICK_INSERT_BAR:
     case MENU_ACTIONS.SET_SHOW_MEASURE_NUMBERS:
     case MENU_ACTIONS.SET_SHOW_HARMONY_DEBUG:
