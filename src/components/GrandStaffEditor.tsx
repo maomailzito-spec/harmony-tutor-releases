@@ -3472,17 +3472,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         if (featuresLimitedRef.current) { notifyLimited(); return; } // analysis is a Pro feature in limited mode
         setIsAnalysisEnabled(v);
     }, [notifyLimited]);
-    const [isSequencesEnabled, setIsSequencesEnabled] = useState(() => {
-        try {
-            const raw = String(localStorage.getItem('harmony.analysis.sequencesEnabled.v1') || '').trim();
-            if (raw === '0') return false;
-            if (raw === '1') return true;
-        } catch { /* ignore */ }
-        return true;
-    });
-    useEffect(() => {
-        try { localStorage.setItem('harmony.analysis.sequencesEnabled.v1', isSequencesEnabled ? '1' : '0'); } catch { /* ignore */ }
-    }, [isSequencesEnabled]);
+    // Leggeva e scriveva a mano la STESSA chiave della preferenza `analysis.sequencesEnabled`,
+    // con due meccanismi diversi: cambiandola dal pannello, qui non se ne accorgeva nessuno
+    // fino al ricaricamento. Una sola strada, e ora il menù la comanda come le altre.
+    const [isSequencesEnabledPref, setIsSequencesEnabled] = usePreference<boolean>('analysis.sequencesEnabled');
+    const isSequencesEnabled = isSequencesEnabledPref !== false;
     // Rilevatore di trasformazioni MELODICHE (motivi: T/I/R/RI, dentro/cross-voce). Off di default.
     const [isMotifsEnabled, setIsMotifsEnabled] = useState(() => {
         try { return String(localStorage.getItem('harmony.analysis.motifsEnabled.v1') || '').trim() === '1'; } catch { return false; }
@@ -3558,7 +3552,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const noteCheSuonanoOraRef = useRef<string[]>([]);
     const [accStavesLayout, setAccStavesLayout] = useState<AccStaffLayout[]>([]);
     const [showRomanAnalysis, setShowRomanAnalysis] = usePreference<boolean>('analysis.showRomanAnalysis');
-    const [romanBassMode] = usePreference<boolean>('analysis.romanBassMode');
+    const [romanBassMode, setRomanBassMode] = usePreference<boolean>('analysis.romanBassMode');
     const [showSymbolAnalysis, setShowSymbolAnalysis] = usePreference<boolean>('analysis.showSymbolAnalysis');
     // La CIFRATURA ha ora un interruttore suo: prima si disegnava attaccata al romano e
     // spariva solo insieme a lui.
@@ -6056,6 +6050,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         exportIncludeTitleEnabled: !!exportIncludeTitle,
         staffSystemModeValue: staffSystemMode,
         orchestralGroupingEnabled: orchestralGrouping !== false,
+        romanBassModeEnabled: !!romanBassMode,
+        sequencesEnabled: isSequencesEnabled,
         // …e lo stato dei tre strati e dei righi, perché le spunte del menù dicano il
         // vero: una spunta che mente è peggio di una voce mancante, soprattutto per chi
         // il menù lo ASCOLTA e non ha modo di verificare guardando la pagina.
@@ -7195,6 +7191,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setExportIncludeTitle(!!payload?.enabled);
         } else if (action === 'set-orchestral-grouping') {
             setOrchestralGrouping(!!payload?.enabled);
+        } else if (action === 'set-roman-bass-mode') {
+            setRomanBassMode(!!payload?.enabled);
+        } else if (action === 'set-sequences-enabled') {
+            setIsSequencesEnabled(!!payload?.enabled);
         } else if (action === 'set-staff-system-mode') {
             const m = String(payload?.mode || '').trim();
             if (m === 'grandstaff' || m === 'satb_ancient' || m === 'treble_only') setStaffSystemMode(m);

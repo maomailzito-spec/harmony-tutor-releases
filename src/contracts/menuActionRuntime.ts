@@ -31,6 +31,8 @@ export const MENU_ACTIONS = {
   SET_EXPORT_INCLUDE_TITLE: 'set-export-include-title',
   SET_STAFF_SYSTEM_MODE: 'set-staff-system-mode',
   SET_ORCHESTRAL_GROUPING: 'set-orchestral-grouping',
+  SET_ROMAN_BASS_MODE: 'set-roman-bass-mode',
+  SET_SEQUENCES_ENABLED: 'set-sequences-enabled',
   SET_SHOW_MEASURE_NUMBERS: 'set-show-measure-numbers',
   SET_SHOW_HARMONY_DEBUG: 'set-show-harmony-debug',
   SET_SHOW_VOICE_COLORS: 'set-show-voice-colors',
@@ -101,6 +103,8 @@ export function normalizeMenuActionPayload<A extends MenuAction>(
       return { command } as MenuActionPayloadMap[A];
     }
 
+    case MENU_ACTIONS.SET_ROMAN_BASS_MODE:
+    case MENU_ACTIONS.SET_SEQUENCES_ENABLED:
     case MENU_ACTIONS.SET_ORCHESTRAL_GROUPING:
     case MENU_ACTIONS.SET_EXPORT_INCLUDE_TITLE:
     case MENU_ACTIONS.SET_TOOLBAR_HIDDEN:

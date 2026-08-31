@@ -119,6 +119,8 @@ let toolbarHiddenEnabled = false;
 let exportIncludeTitleEnabled = true;
 let staffSystemModeValue = 'grandstaff';
 let orchestralGroupingEnabled = true;
+let romanBassModeEnabled = false;
+let sequencesEnabledValue = true;
 let engravingMode = 'enhanced';
 let currentLanguage = 'it';
 
@@ -647,7 +649,7 @@ function createMenu() {
       measureNumbers: 'Numeri misure', harmonyDebug: 'Debug harmony labels (pcs)',
       voiceColors: 'Colori voci (BTAS)',
       concertPitch: 'Suoni reali (partitura in Do)',
-      analysisLayers: 'Analisi mostrata', showRoman: 'Numeri romani',
+      analysisLayers: 'Analisi mostrata', showRoman: 'Numeri romani', romanBassMode: 'Numerazione scuola romana (grado del basso)', sequences: 'Segna le sequenze',
       showSymbols: 'Sigle accordi', showFiguredBass: 'Cifratura del basso',
       staves: 'Righi da mostrare ed esportare', staffChoir: 'Coro (SATB)',
       exportFollowsView: 'Quel che si vede è quel che si esporta', exportTitle: 'Includi il titolo in stampa ed export',
@@ -678,7 +680,7 @@ function createMenu() {
       measureNumbers: 'Measure numbers', harmonyDebug: 'Debug harmony labels (pcs)',
       voiceColors: 'Voice colors (BTAS)',
       concertPitch: 'Concert pitch (score in C)',
-      analysisLayers: 'Analysis shown', showRoman: 'Roman numerals',
+      analysisLayers: 'Analysis shown', showRoman: 'Roman numerals', romanBassMode: 'Roman-school numbering (bass degree)', sequences: 'Mark sequences',
       showSymbols: 'Chord symbols', showFiguredBass: 'Figured bass',
       staves: 'Staves shown and exported', staffChoir: 'Choir (SATB)',
       exportFollowsView: 'What you see is what you export', exportTitle: 'Include the title in print and export',
@@ -1425,6 +1427,19 @@ function createMenu() {
                 }
               },
               {
+                // La scuola romana dice come si SCRIVE il numero romano: senza numeri
+                // romani accesi non ha niente su cui agire, e una spunta che non fa
+                // niente è peggio di una voce assente.
+                label: mt('romanBassMode'),
+                type: 'checkbox',
+                enabled: !!showRomanEnabled,
+                checked: !!romanBassModeEnabled,
+                click: (menuItem) => {
+                  romanBassModeEnabled = !!menuItem.checked;
+                  sendAction(MENU_ACTIONS.SET_ROMAN_BASS_MODE, { enabled: romanBassModeEnabled });
+                }
+              },
+              {
                 label: mt('showSymbols'),
                 type: 'checkbox',
                 accelerator: 'CmdOrCtrl+Alt+S',
@@ -1442,6 +1457,16 @@ function createMenu() {
                 click: (menuItem) => {
                   showFiguredBassEnabled = !!menuItem.checked;
                   sendAction(MENU_ACTIONS.SET_SHOW_FIGURED_BASS, { enabled: showFiguredBassEnabled });
+                }
+              },
+              { type: 'separator' },
+              {
+                label: mt('sequences'),
+                type: 'checkbox',
+                checked: !!sequencesEnabledValue,
+                click: (menuItem) => {
+                  sequencesEnabledValue = !!menuItem.checked;
+                  sendAction(MENU_ACTIONS.SET_SEQUENCES_ENABLED, { enabled: sequencesEnabledValue });
                 }
               },
             ]
@@ -1637,6 +1662,12 @@ ipcMain.on(IPC_CHANNELS.SET_MENU_STATE, (_event, state) => {
     }
     if (typeof state.orchestralGroupingEnabled === 'boolean') {
       orchestralGroupingEnabled = state.orchestralGroupingEnabled;
+    }
+    if (typeof state.romanBassModeEnabled === 'boolean') {
+      romanBassModeEnabled = state.romanBassModeEnabled;
+    }
+    if (typeof state.sequencesEnabled === 'boolean') {
+      sequencesEnabledValue = state.sequencesEnabled;
     }
     if (typeof state.showRomanEnabled === 'boolean') showRomanEnabled = state.showRomanEnabled;
     if (typeof state.showSymbolsEnabled === 'boolean') showSymbolsEnabled = state.showSymbolsEnabled;

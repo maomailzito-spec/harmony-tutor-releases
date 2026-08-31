@@ -14,6 +14,9 @@ export type MenuState = Partial<{
   /** Layout dei righi e raggruppamento per famiglia: le spunte del menù devono dire il vero. */
   staffSystemModeValue: string;
   orchestralGroupingEnabled: boolean;
+  /** Scuola romana e sequenze: due strati d'analisi come gli altri tre. */
+  romanBassModeEnabled: boolean;
+  sequencesEnabled: boolean;
   showRomanEnabled: boolean;
   showSymbolsEnabled: boolean;
   showFiguredBassEnabled: boolean;

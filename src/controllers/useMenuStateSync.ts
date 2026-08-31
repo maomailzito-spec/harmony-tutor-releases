@@ -16,6 +16,8 @@ const keys: Key[] = [
   'exportIncludeTitleEnabled',
   'staffSystemModeValue',
   'orchestralGroupingEnabled',
+  'romanBassModeEnabled',
+  'sequencesEnabled',
   'showRomanEnabled',
   'showSymbolsEnabled',
   'showFiguredBassEnabled',
