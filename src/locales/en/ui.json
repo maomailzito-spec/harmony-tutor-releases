@@ -540,5 +540,6 @@
   "sel_voce_aggiungi": "Add the {{voce}} voice to the selection",
   "menu_group_analysis": "Analysis",
   "menu_group_override": "Manual override",
-  "menu_group_layout": "Layout"
+  "menu_group_layout": "Layout",
+  "alt_menu_more": "More properties…"
 }

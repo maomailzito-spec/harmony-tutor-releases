@@ -515,5 +515,6 @@
   "sel_voce_aggiungi": "Aggiungi la voce {{voce}} alla selezione",
   "menu_group_analysis": "Analisi",
   "menu_group_override": "Sostituzione manuale",
-  "menu_group_layout": "Impaginazione"
+  "menu_group_layout": "Impaginazione",
+  "alt_menu_more": "Altre proprietà…"
 }

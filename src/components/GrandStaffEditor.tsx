@@ -100,6 +100,7 @@ import TempoCurveDialog from './TempoCurveDialog';
 import RomanProgressionEditor from './RomanProgressionEditor';
 import TimeSignatureControl from './TimeSignatureControl';
 import ModulationContextMenu from './ModulationContextMenu';
+import LettureAlternativeMenu, { type LetturaAlternativa } from './LettureAlternativeMenu';
 import NoteContextMenu, { type NoteMenuData } from './NoteContextMenu';
 import HarmonyOverrideContextMenu from './HarmonyOverrideContextMenu';
 import MixerPanel from './MixerPanel';
@@ -3465,6 +3466,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const [menuNota, setMenuNota] = useState<NoteMenuData | null>(null);
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; absBeat: number; measureIndex: number; beat: number; inferredTonicAtBeat?: { tonic: string; isMinor: boolean } | null } | null>(null);
+    /** Il menù compatto delle letture alternative, che si apre SULL'etichetta. */
+    const [menuLetture, setMenuLetture] = useState<{ x: number; y: number; absBeat: number; corrente?: string; letture: LetturaAlternativa[] } | null>(null);
     const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(true);
     // Limited mode: force harmonic analysis OFF and prevent re-enabling it (gated setter).
     useEffect(() => { if (featuresLimited) setIsAnalysisEnabled(false); }, [featuresLimited]);
@@ -13743,6 +13746,23 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             const tonica = attivo ? attivo.newTonic : keySignatureRoot;
             const minore = attivo ? !!attivo.newIsMinor : isMinorMode;
             const cambiata = tonica !== keySignatureRoot || minore !== isMinorMode;
+            // LE ALTERNATIVE PRIMA DI TUTTO. Sceglierne una è ciò che si fa più spesso su
+            // un'etichetta, e stava in fondo a un percorso: clic, pannello, cerca la
+            // sezione. Se ce ne sono, il clic apre il menù compatto e il pannello resta a
+            // un passo; se non ce ne sono non si mostra un elenco vuoto — si apre il
+            // pannello come prima.
+            let alternative: LetturaAlternativa[] = [];
+            let corrente: string | undefined;
+            try {
+                const tutte = (_harmonyLabelsRef.current || []).flat() as any[];
+                const qui = tutte.find(l => Math.abs(Number(l?.absBeat) - absBeat) < 1e-6);
+                alternative = ((qui?.alternatives ?? []) as LetturaAlternativa[]);
+                if (qui?.roman) corrente = `${qui.roman}${(qui.figures || []).length ? ' ' + (qui.figures || []).join('/') : ''}`;
+            } catch { /* nessuna alternativa: si va al pannello */ }
+            if (alternative.length > 0) {
+                setMenuLetture({ x, y, absBeat, corrente, letture: alternative });
+                return;
+            }
             setContextMenu({ x, y, absBeat, measureIndex, beat, inferredTonicAtBeat: cambiata ? { tonic: tonica, isMinor: minore } : null });
         } catch { /* nel dubbio non si apre niente */ }
     }, [getMeasureIndexAndBeatFromAbsBeat, effectiveAnalysisContexts, analysisContextAbsBeat, keySignatureRoot, isMinorMode]);
@@ -22590,6 +22610,36 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                 />
             )}
 
+            {menuLetture && (
+                <LettureAlternativeMenu
+                    x={menuLetture?.x ?? 0}
+                    y={menuLetture?.y ?? 0}
+                    corrente={menuLetture?.corrente}
+                    letture={menuLetture?.letture ?? []}
+                    onScegli={(alt) => {
+                        if (!menuLetture) return;
+                        const isHome = alt.impliedTonic === currentTonic && !!alt.isMinor === !!isMinorMode;
+                        if (isHome) handleApplyContext(menuLetture.absBeat, currentTonic, isMinorMode);
+                        else handleApplyTonicizationHint(menuLetture.absBeat, alt.impliedTonic, alt.isMinor);
+                    }}
+                    onApriPannello={() => {
+                        if (!menuLetture) return;
+                        const { measureIndex, beat } = getMeasureIndexAndBeatFromAbsBeat(menuLetture.absBeat);
+                        const ctxs = [...(effectiveAnalysisContexts || [])]
+                            .filter(c => analysisContextAbsBeat(c) <= menuLetture.absBeat + 1e-6)
+                            .sort((a, b) => analysisContextAbsBeat(b) - analysisContextAbsBeat(a));
+                        const attivo = ctxs[0];
+                        const tonica = attivo ? attivo.newTonic : keySignatureRoot;
+                        const minore = attivo ? !!attivo.newIsMinor : isMinorMode;
+                        const cambiata = tonica !== keySignatureRoot || minore !== isMinorMode;
+                        setContextMenu({
+                            x: menuLetture.x, y: menuLetture.y, absBeat: menuLetture.absBeat, measureIndex, beat,
+                            inferredTonicAtBeat: cambiata ? { tonic: tonica, isMinor: minore } : null,
+                        });
+                    }}
+                    onClose={() => setMenuLetture(null)}
+                />
+            )}
             {contextMenu && (
                 <ModulationContextMenu
                     /* Le letture alternative dell'etichetta che sta su questo movimento:
