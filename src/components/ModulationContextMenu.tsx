@@ -220,50 +220,15 @@ const ModulationContextMenu: React.FC<{
                     ✕
                 </button>
             </div>
-            <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">
-                {t('menu_modulation_title', { defaultValue: 'Modulazione / tonicizzazione' })}
+            {/* TRE GRUPPI DICHIARATI, e in cima quello che si usa davvero.
+                «Letture alternative» e «Perché questa lettura» sono quasi sempre il motivo
+                per cui questo pannello si apre, e stavano a metà, sotto due blocchi di
+                controlli che si toccano di rado: bisognava scorrere per arrivare alla cosa
+                che si cercava. Ora l'ordine segue l'uso, e i tre gruppi dicono dove
+                guardare invece di far leggere tutto. */}
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-600/60 pb-1">
+                {t('menu_group_analysis', { defaultValue: 'Analisi' })}
             </div>
-            <div className="flex items-center gap-2">
-                 <select value={tempKey} onChange={e => setTempKey(e.target.value)} className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-full">
-                    <optgroup label={t('menu_key_sharps_group')}>{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
-                    <optgroup label={t('menu_key_flats_group')}>{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
-                </select>
-                <div className="relative flex p-0.5 bg-gray-900/50 rounded-md flex-shrink-0">
-                    <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${tempIsMinor ? '100%' : '0%'}) ` }}></div>
-                    <button onClick={() => setTempIsMinor(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>{t('menu_major_abbr')}</button>
-                    <button onClick={() => setTempIsMinor(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>{t('menu_minor_abbr')}</button>
-                </div>
-            </div>
-            <div className="flex gap-2">
-                <button onClick={handleApplyClick} className="px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">{t('menu_apply_context')}</button>
-                <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">{t('menu_remove')}</button>
-            </div>
-            {/* Soppressione inferenza — rimuovi senza aggiungere nulla */}
-            {inferredTonicAtBeat && !hasSuppressedInference && onSuppressInference && (
-                <div className="border-t border-slate-600 pt-2 mt-1">
-                    <div className="text-[10px] text-slate-400 mb-1">
-                        Modulazione inferita attiva: <span className="text-orange-300 font-semibold">{inferredTonicAtBeat.tonic} {inferredTonicAtBeat.isMinor ? 'min' : 'Maj'}</span>
-                    </div>
-                    <button
-                        onClick={() => { onSuppressInference(menuData.absBeat); onClose(); }}
-                        className="px-2 py-1 text-[11px] rounded-md bg-orange-800 hover:bg-orange-700 font-semibold transition-colors"
-                        title={t('mod_suppress_tip')}
-                    >
-                        Rimuovi inferenza
-                    </button>
-                </div>
-            )}
-            {hasSuppressedInference && onUnsuppressInference && (
-                <div className="border-t border-slate-600 pt-2 mt-1">
-                    <div className="text-[10px] text-slate-400 mb-1">{t('mod_suppressed')}</div>
-                    <button
-                        onClick={() => { onUnsuppressInference(menuData.absBeat); onClose(); }}
-                        className="px-2 py-1 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors"
-                    >
-                        Ripristina inferenza automatica
-                    </button>
-                </div>
-            )}
             {/* LETTURE ALTERNATIVE, in cima. Quando il motore ha trovato un'altra lettura
                 plausibile è quasi sempre il motivo per cui si è aperto questo pannello:
                 applicarla è un override, quindi vive qui e non nella finestra che spiega. */}
@@ -309,12 +274,71 @@ const ModulationContextMenu: React.FC<{
                 </button>
             )}
 
-            {/* IL TESTO NON STA PIÙ QUI. Le scritte hanno una casa sola: la tavolozza,
-                da cui si posano, e il doppio clic sulla scritta per correggerle. Averlo
-                anche qui significava due strade per la stessa cosa, e questo pannello
-                si occupa di OVERRIDE — di ciò che corregge la lettura dell'analisi. */}
-            <div className="h-px bg-slate-600/60" />
+            <div className="text-[10px] font-semibold mb-1 text-gray-300 uppercase tracking-wide">
+                {t('menu_modulation_title', { defaultValue: 'Modulazione / tonicizzazione' })}
+            </div>
+            <div className="flex items-center gap-2">
+                 <select value={tempKey} onChange={e => setTempKey(e.target.value)} className="bg-gray-700 border border-gray-600 rounded-md p-1 text-xs w-full">
+                    <optgroup label={t('menu_key_sharps_group')}>{sharpKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
+                    <optgroup label={t('menu_key_flats_group')}>{flatKeyOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label.split('(')[0]}</option>)}</optgroup>
+                </select>
+                <div className="relative flex p-0.5 bg-gray-900/50 rounded-md flex-shrink-0">
+                    <div className="absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] bg-stone-200 rounded-sm transition-transform" style={{ transform: `translateX(${tempIsMinor ? '100%' : '0%'}) ` }}></div>
+                    <button onClick={() => setTempIsMinor(false)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${!tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>{t('menu_major_abbr')}</button>
+                    <button onClick={() => setTempIsMinor(true)} className={`relative w-12 rounded-sm py-0.5 text-xs font-bold transition-colors ${tempIsMinor ? 'text-gray-900' : 'text-gray-300'}`}>{t('menu_minor_abbr')}</button>
+                </div>
+            </div>
+            <div className="flex gap-2">
+                <button onClick={handleApplyClick} className="px-2 py-1 text-[11px] rounded-md bg-cyan-600 hover:bg-cyan-500 font-semibold transition-colors">{t('menu_apply_context')}</button>
+                <button onClick={() => onRemove(menuData.absBeat)} className="px-2 py-1 text-[11px] rounded-md bg-red-700 hover:bg-red-600 font-semibold transition-colors">{t('menu_remove')}</button>
+            </div>
+            {/* Soppressione inferenza — rimuovi senza aggiungere nulla */}
+            {inferredTonicAtBeat && !hasSuppressedInference && onSuppressInference && (
+                <div className="border-t border-slate-600 pt-2 mt-1">
+                    <div className="text-[10px] text-slate-400 mb-1">
+                        Modulazione inferita attiva: <span className="text-orange-300 font-semibold">{inferredTonicAtBeat.tonic} {inferredTonicAtBeat.isMinor ? 'min' : 'Maj'}</span>
+                    </div>
+                    <button
+                        onClick={() => { onSuppressInference(menuData.absBeat); onClose(); }}
+                        className="px-2 py-1 text-[11px] rounded-md bg-orange-800 hover:bg-orange-700 font-semibold transition-colors"
+                        title={t('mod_suppress_tip')}
+                    >
+                        Rimuovi inferenza
+                    </button>
+                </div>
+            )}
+            {hasSuppressedInference && onUnsuppressInference && (
+                <div className="border-t border-slate-600 pt-2 mt-1">
+                    <div className="text-[10px] text-slate-400 mb-1">{t('mod_suppressed')}</div>
+                    <button
+                        onClick={() => { onUnsuppressInference(menuData.absBeat); onClose(); }}
+                        className="px-2 py-1 text-[11px] rounded-md bg-slate-600 hover:bg-slate-500 font-semibold transition-colors"
+                    >
+                        Ripristina inferenza automatica
+                    </button>
+                </div>
+            )}
+            {/* ── Tonicization hint removal ── */}
+            {existingTonicizationHint && onRemoveTonicizationHint && (
+                <div className="border-t border-slate-600 pt-2 mt-1">
+                    <div className="text-[10px] text-slate-400 mb-1">{t('mod_tonicization_active')} <span className="text-blue-300 font-semibold">{existingTonicizationHint.tonic} {existingTonicizationHint.isMinor ? 'min' : 'Maj'}</span></div>
+                    <button
+                        onClick={() => { onRemoveTonicizationHint(menuData.absBeat); }}
+                        className="px-2 py-1 text-[11px] rounded-md bg-orange-700 hover:bg-orange-600 font-semibold transition-colors"
+                    >
+                        Rimuovi tonicizzazione
+                    </button>
+                </div>
+            )}
 
+
+            {/* IL TESTO NON STA QUI. Le scritte hanno una casa sola: la tavolozza, da cui
+                si posano, e il doppio clic sulla scritta per correggerle. Averlo anche qui
+                significava due strade per la stessa cosa — e questo gruppo si occupa di
+                OVERRIDE, cioè di ciò che corregge la lettura dell'analisi. */}
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-600/60 pb-1">
+                {t('menu_group_override', { defaultValue: 'Sostituzione manuale' })}
+            </div>
             <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
                     <label className="text-xs text-gray-300">{t('menu_harmony_override_label')}</label>
@@ -365,19 +389,6 @@ const ModulationContextMenu: React.FC<{
                 </div>
             </div>
 
-            {/* ── Tonicization hint removal ── */}
-            {existingTonicizationHint && onRemoveTonicizationHint && (
-                <div className="border-t border-slate-600 pt-2 mt-1">
-                    <div className="text-[10px] text-slate-400 mb-1">{t('mod_tonicization_active')} <span className="text-blue-300 font-semibold">{existingTonicizationHint.tonic} {existingTonicizationHint.isMinor ? 'min' : 'Maj'}</span></div>
-                    <button
-                        onClick={() => { onRemoveTonicizationHint(menuData.absBeat); }}
-                        className="px-2 py-1 text-[11px] rounded-md bg-orange-700 hover:bg-orange-600 font-semibold transition-colors"
-                    >
-                        Rimuovi tonicizzazione
-                    </button>
-                </div>
-            )}
-
             {/* ── Ornament override section ── */}
             {selectedNoteCount != null && selectedNoteCount > 0 && onApplyOrnamentOverride && (
                 <div className="border-t border-gray-600 pt-2 mt-2">
@@ -405,6 +416,10 @@ const ModulationContextMenu: React.FC<{
                 </div>
             )}
 
+
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-600/60 pb-1">
+                {t('menu_group_layout', { defaultValue: 'Impaginazione' })}
+            </div>
             {/* ── Staff override section ── */}
             {(onMoveToTreble || onMoveToBass) && (
                 <div className="border-t border-gray-600 pt-2 mt-2">

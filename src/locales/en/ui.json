@@ -537,5 +537,8 @@
   "chorale_who_none": "nobody — type some numerals or tick a voice already written",
   "chorale_text_wins": "The box TAKES PRECEDENCE: while it holds anything, the ticked voices are not read to choose the harmony (they still constrain the writing). Empty it to let them decide. Note: after every generation the box is filled with the result, so from the second time on it keeps regenerating that same progression.",
   "chorale_nothing_to_do": "Nothing to harmonise: type some numerals above, or tick a voice already written on the staff (melody, given bass or inner voice).",
-  "sel_voce_aggiungi": "Add the {{voce}} voice to the selection"
+  "sel_voce_aggiungi": "Add the {{voce}} voice to the selection",
+  "menu_group_analysis": "Analysis",
+  "menu_group_override": "Manual override",
+  "menu_group_layout": "Layout"
 }
