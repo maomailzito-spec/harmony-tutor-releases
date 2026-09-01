@@ -2795,7 +2795,16 @@ export function computeHarmonyLabelsBySystemCore(_in: HarmonyLabelsInput): any[]
                 if (!_isManualCtx) {
                     const _gR = getRomanAnalysis(analysisNotes as any, currentTonic, isMinorMode, { ornamentOverrides: ornOverrideRecord });
                     const _gRoman = String(_gR?.roman || '');
-                    if (/^(I|i)(6|64)?$/.test(_gRoman)) {
+                    // LA TRIADE DI TONICA HA IL MODO DELLA TONALITÀ. In minore la tonica è
+                    // `i`, minore: un `I` MAIUSCOLO non è l'accordo di tonica, è la terza
+                    // picarda — che sta solo in chiusura — oppure la dominante del quarto
+                    // grado. Proteggendo anche il maiuscolo, la guardia buttava via
+                    // tonicizzazioni giuste: sul «Corale Schinelli» in Mi minore, a misura 21,
+                    // un Mi maggiore in 6/4 fra due La minori (col basso che scende Do-Si-La,
+                    // cioè un 6/4 di passaggio da manuale) veniva etichettato `I6/4` invece
+                    // di `V6/4`, benché il contesto La minore fosse attivo e sopra soglia.
+                    const _tonicaDiCasa = isMinorMode ? /^i(6|64)?$/ : /^I(6|64)?$/;
+                    if (_tonicaDiCasa.test(_gRoman)) {
                         // Tonic chord — never reassign context
                         contextTonic = currentTonic;
                         contextIsMinor = isMinorMode;
