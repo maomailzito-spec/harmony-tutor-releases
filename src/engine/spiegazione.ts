@@ -231,7 +231,11 @@ export function relazioneFra(
   if (ia === 4 && ib === 5) return 'risoluzioneInganno';
   if (ia === 6 && ib === 0) return 'diminuitaRisolta';
   if ((ia === 1 || ia === 3) && ib === 4) return 'preparazioneDominante';
-  if (((ia - ib + 7) % 7) === 3) return 'quinteDiscendenti';
+  // IL VERSO. La quinta DISCENDENTE porta la fondamentale in giù di una quinta — `vi→ii`,
+  // `ii→V`, `V→I` — che in gradi è un salto di +3. Scritta al contrario, la regola marcava
+  // `I→V` (che è una quinta ASCENDENTE) come progressione discendente: sul «Dubois prova»
+  // compariva sei volte su undici battute, e sempre sull'accordo sbagliato.
+  if (((ib - ia + 7) % 7) === 3) return 'quinteDiscendenti';
   if (((ib - ia + 7) % 7) === 1) return 'gradoAscendente';
   return 'giustapposizione';
 }
