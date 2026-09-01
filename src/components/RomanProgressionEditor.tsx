@@ -343,6 +343,12 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
    * nel campo, che si vede ma non conta.
    */
   const [progressionText, setProgressionText] = useState('');
+  /** I gradi nel riquadro li ha scritti IL GENERATORE (dopo un'armonizzazione)
+   *  e non l'utente. Serve a non farglieli rileggere alla pressione dopo: erano
+   *  la RISPOSTA di prima, non una richiesta, e riusarli buttava via il ritmo
+   *  della melodia distendendo gli accordi su una griglia uniforme. I gradi
+   *  scritti a mano invece contano, anche insieme a una melodia data. */
+  const [gradiDelGeneratore, setGradiDelGeneratore] = useState(false);
   // `keySignatureRoot` è la fondamentale MAGGIORE relativa, non la tonica: su un brano in
   // Mi minore vale 'G'. Passandolo tale e quale, il pannello proponeva «Sol minore» e il
   // generatore armonizzava in una tonalità dove i Mi e i Si naturali del brano sono
@@ -564,11 +570,27 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
     };
   }, [progressionText, useMelody, sopranoFromScore, useBass, bassFromScore, useInner, innerVoice, innerFromScore, insertMeasure, localTonic, localMinor]);
 
+  /** C'e' una voce presa dallo spartito che detta l'armonia? Se si', gli accordi
+   *  li colloca la MUSICA — dove attaccano le note — e «Valore nota» non ha
+   *  niente da dire: le durate escono dalla distanza fra un accordo e il
+   *  successivo. */
+  const vociDalloSpartito = (useMelody && sopranoFromScore.length > 0)
+                         || (useBass && bassFromScore.length > 0)
+                         || (useInner && innerFromScore.length > 0);
+
   // Generate chorale
   const handleGenerate = useCallback(() => {
     try {
       setError(null);
-      let progression = parseProgressionString(progressionText, localTs, selectedDuration);
+      // UNA VOCE PRESA DALLO SPARTITO COMANDA sui gradi che il generatore stesso
+      // ha scritto nel riquadro. Senza questo, la seconda pressione di «Genera»
+      // rileggeva la propria risposta di prima e distendeva gli accordi su una
+      // griglia uniforme di «Valore nota»: la melodia perdeva il suo ritmo, e il
+      // soprano dato — che si cerca per `misura:movimento` esatti — su quella
+      // griglia spesso non si trovava piu', cosi' veniva riscritto anche lui.
+      // I gradi scritti A MANO restano validi, anche insieme a una melodia.
+      const testoDaLeggere = (gradiDelGeneratore && vociDalloSpartito) ? '' : progressionText;
+      let progression = parseProgressionString(testoDaLeggere, localTs, selectedDuration);
       // Auto-harmonize when melody mode is active and no progression text
       // La voce INTERNA data ha la precedenza sull'armonizzazione automatica: se c'è, è lei
       // a scegliere l'armonia, esattamente come farebbe il soprano.
@@ -612,6 +634,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               : undefined);
         }
         setProgressionText(progression.map(c => c.roman).join(' - '));
+        setGradiDelGeneratore(true);
       }
       if (progression.length === 0) {
         // Ora si arriva qui premendo Invio col riquadro vuoto, che dalla 29/08/2026 è lo
@@ -699,7 +722,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
       setGeneratedNotes(null);
       setViolations([]);
     }
-  }, [progressionText, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, vetoRegole, passoIndietro, ripasso, useInner, innerVoice, innerFromScore, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition, insertMeasure, existingNotes]);
+  }, [progressionText, gradiDelGeneratore, vociDalloSpartito, localTonic, localMinor, localTs, selectedDuration, allowParallel5ths, allowParallel8ves, allowCrossing, doubleRoot, autoSevenths, vetoRegole, passoIndietro, ripasso, useInner, innerVoice, innerFromScore, useMelody, sopranoFromScore, useBass, bassFromScore, harmonicRhythmBeats, initialDisposition, insertMeasure, existingNotes]);
 
   // Apply to editor
   const handleApply = useCallback(() => {
@@ -825,7 +848,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               ref={inputRef}
               type="text"
               value={progressionText}
-              onChange={e => { setProgressionText(e.target.value); setGeneratedNotes(null); setViolations([]); setError(null); }}
+              onChange={e => { setProgressionText(e.target.value); setGradiDelGeneratore(false); setGeneratedNotes(null); setViolations([]); setError(null); }}
               placeholder="I - IV - V7 - I"
               className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-sm text-white font-mono
                 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
@@ -1095,12 +1118,21 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-300 mb-1">{t('chorale_note_value_label')}</label>
-              <div className="flex gap-1">
+              <label className="block text-xs text-gray-300 mb-1">
+                {t('chorale_note_value_label')}
+                {/* Muto quando l'armonia la detta una voce dello spartito: li' gli
+                    accordi stanno dove attaccano le note. Un comando che sembra
+                    attivo e non fa niente e' peggio di un comando spento. */}
+                {vociDalloSpartito && (
+                  <span className="ml-1 text-[10px] text-gray-500">— {t('chorale_note_value_muted')}</span>
+                )}
+              </label>
+              <div className={`flex gap-1 ${vociDalloSpartito ? 'opacity-40' : ''}`}>
                 {DURATION_OPTIONS.map(d => (
                   <button
                     key={d.value}
-                    title={d.label}
+                    title={vociDalloSpartito ? t('chorale_note_value_muted') : d.label}
+                    disabled={vociDalloSpartito}
                     onClick={() => { setSelectedDuration(d.value); setGeneratedNotes(null); }}
                     className={`flex-1 flex items-center justify-center p-1.5 rounded border transition-colors ${
                       selectedDuration === d.value

@@ -541,5 +541,6 @@
   "menu_group_analysis": "Analysis",
   "menu_group_override": "Manual override",
   "menu_group_layout": "Layout",
-  "alt_menu_more": "More properties…"
+  "alt_menu_more": "More properties…",
+  "chorale_note_value_muted": "set by the harmonic rhythm"
 }
