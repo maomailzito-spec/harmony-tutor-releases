@@ -21580,10 +21580,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                         const romanBersW = romanBers ? measureTextWidth(romanBers, romanFont) : 0;
                                                                                         const romanX = baseX;
                                                                                         const figuresX = romanX + romanNumW + 3;
-                                                                                        const _figsW = (() => {
-                                                                                            const ft = (lbl.figures || []) as string[];
-                                                                                            return ft.length ? Math.max(...ft.map(t => measureTextWidth(String(t), '12px serif'))) : 0;
-                                                                                        })();
+                                                                                        // DUE LARGHEZZE, non una. La colonna delle cifre parte 8px SOPRA la
+                                                                                        // linea del romano e scende di 12 per riga: solo le prime due stanno
+                                                                                        // all'altezza del bersaglio, dalla terza in giù gli passano sotto.
+                                                                                        // Spingendo il bersaglio per la larghezza di TUTTE, una cifratura di
+                                                                                        // tre righe con un bemolle in fondo lo mandava lontanissimo — segnalato
+                                                                                        // dall'utente su `vii°6/5/♭3 /VI`, dove il ♭3 sta due righe più giù e
+                                                                                        // non incontra mai il bersaglio.
+                                                                                        const _figsTutte = (lbl.figures || []) as string[];
+                                                                                        const _largh = (righe: string[]) => righe.length
+                                                                                            ? Math.max(...righe.map(t => measureTextWidth(String(t), '12px serif'))) : 0;
+                                                                                        /** Quanto la colonna occupa ALL'ALTEZZA del romano: solo le prime due righe. */
+                                                                                        const _figsW = _largh(_figsTutte.slice(0, 2));
+                                                                                        /** Quanto occupa in tutto: serve alla linea di tenuta, che deve scavalcarle. */
+                                                                                        const _figsWTot = _largh(_figsTutte);
                                                                                         // QUANTO STA LONTANO IL BERSAGLIO. Senza cifre deve essere ATTACCATO:
                                                                                         // `V/IV` è una parola sola, e lo stacco di 6px pensato per la colonna
                                                                                         // delle cifre restava anche quando la colonna non c'era. Con le cifre
@@ -21592,7 +21602,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                         const bersaglioX = _figsW ? figuresX + _figsW + 1 : romanX + romanNumW;
                                                                                         // La larghezza complessiva serve alla linea di tenuta: deve
                                                                                         // comprendere anche il bersaglio, o la linea partirebbe da sotto.
-                                                                                        const romanW = romanNumW + (_figsW ? _figsW + 4 : 0) + romanBersW;
+                                                                                        const romanW = romanNumW + (_figsWTot ? _figsWTot + 4 : 0) + romanBersW;
 
                                                                                         const pcsDebug = (() => {
                                                                                             try {
