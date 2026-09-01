@@ -227,9 +227,17 @@ export function relazioneFra(
   if (rb.includes('/')) return 'giustapposizione';
   const ia = GRADI[ga], ib = GRADI[gb];
   if (ia == null || ib == null) return 'giustapposizione';
-  if (ia === 4 && ib === 0) return 'risoluzioneDominante';
-  if (ia === 4 && ib === 5) return 'risoluzioneInganno';
-  if (ia === 6 && ib === 0) return 'diminuitaRisolta';
+  // LA MAIUSCOLA CONTA. Le frasi della dominante parlano della SENSIBILE, e la sensibile
+  // c'è solo nella dominante MAGGIORE: in minore naturale il quinto grado è `v`, e non ne
+  // ha. Trattando `v` come `V` — che nella tabella dei gradi finiscono nello stesso indice —
+  // sul «Corale Schinelli» compariva «la sensibile sale comunque alla tonica» sotto un
+  // `Bm → C`, dove di sensibile non ce n'è nessuna. Affermare una nota che non esiste è
+  // il difetto peggiore che questo testo possa avere.
+  const dominanteVera = ga === 'V';
+  const diminuitaVera = ga.includes('°') || ga.includes('o');
+  if (dominanteVera && ib === 0) return 'risoluzioneDominante';
+  if (dominanteVera && ib === 5) return 'risoluzioneInganno';
+  if (ia === 6 && diminuitaVera && ib === 0) return 'diminuitaRisolta';
   if ((ia === 1 || ia === 3) && ib === 4) return 'preparazioneDominante';
   // IL VERSO. La quinta DISCENDENTE porta la fondamentale in giù di una quinta — `vi→ii`,
   // `ii→V`, `V→I` — che in gradi è un salto di +3. Scritta al contrario, la regola marcava
