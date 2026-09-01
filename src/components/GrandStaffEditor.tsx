@@ -21505,7 +21505,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                 ? romanShown
                                                                                 : romanShown;
                                                                             const romanW = measureTextWidth(romanBaseText, romanFont);
-                                                                            const figFont = '700 12px serif';
+                                                                            const figFont = '13px serif';
                                                                             const figures = (lbl.figures || []) as any[];
                                                                             const figuresW = figures.length
                                                                                 ? Math.max(...figures.map(f => measureTextWidth(String(f), figFont)))
@@ -21597,7 +21597,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                         const romanX = baseX;
                                                                                         const figuresX = romanX + romanNumW + 3;
                                                                                         // DUE LARGHEZZE, non una. La colonna delle cifre parte 8px SOPRA la
-                                                                                        // linea del romano e scende di 12 per riga: solo le prime due stanno
+                                                                                        // linea del romano e scende di 13 per riga: solo le prime due stanno
                                                                                         // all'altezza del bersaglio, dalla terza in giù gli passano sotto.
                                                                                         // Spingendo il bersaglio per la larghezza di TUTTE, una cifratura di
                                                                                         // tre righe con un bemolle in fondo lo mandava lontanissimo — segnalato
@@ -21605,7 +21605,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                         // non incontra mai il bersaglio.
                                                                                         const _figsTutte = (lbl.figures || []) as string[];
                                                                                         const _largh = (righe: string[]) => righe.length
-                                                                                            ? Math.max(...righe.map(t => measureTextWidth(String(t), '12px serif'))) : 0;
+                                                                                            ? Math.max(...righe.map(t => measureTextWidth(String(t), '13px serif'))) : 0;
                                                                                         /** Quanto la colonna occupa ALL'ALTEZZA del romano: solo le prime due righe. */
                                                                                         const _figsW = _largh(_figsTutte.slice(0, 2));
                                                                                         /** Quanto occupa in tutto: serve alla linea di tenuta, che deve scavalcarle. */
@@ -21692,7 +21692,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
                                                                                                 const figTexts = (lbl.figures || []) as string[];
                                                                                                 const maxFigW = figTexts.length
-                                                                                                    ? Math.max(...figTexts.map(t => measureTextWidth(String(t), '12px serif')))
+                                                                                                    ? Math.max(...figTexts.map(t => measureTextWidth(String(t), '13px serif')))
                                                                                                     : 0;
                                                                                                 const x1 = (figTexts.length ? (figuresX + maxFigW + 10) : (romanX + romanW + 10));
 
@@ -21781,9 +21781,9 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                             <text
                                                                                                                 key={`${lbl.id}-fig-${i}`}
                                                                                                                 x={figuresX}
-                                                                                                                y={figuresY0 + (i * 12)}
+                                                                                                                y={figuresY0 + (i * 13)}
                                                                                                                 textAnchor="start"
-                                                                                                                fontSize={12}
+                                                                                                                fontSize={13}
                                                                                                                 fontFamily="serif"
                                                                                                                 fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                             >
@@ -21821,7 +21821,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                         const hasSuspFigure = figTexts.some(ft => /^\d+-\d+/.test((ft||'').toString()));
                                                                                                         let figsW = 0;
                                                                                                         for (let i = 0; i < figTexts.length; i++) {
-                                                                                                            figsW += measureTextWidth(figTexts[i], '12px serif') + 6;
+                                                                                                            figsW += measureTextWidth(figTexts[i], '13px serif') + 6;
                                                                                                         }
                                                                                                         const figuresEnd = figuresX + Math.max(0, figsW);
 
