@@ -21579,15 +21579,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                         const romanNumW = measureTextWidth(romanNum, romanFont);
                                                                                         const romanBersW = romanBers ? measureTextWidth(romanBers, romanFont) : 0;
                                                                                         const romanX = baseX;
-                                                                                        const figuresX = romanX + romanNumW + 6;
+                                                                                        const figuresX = romanX + romanNumW + 3;
                                                                                         const _figsW = (() => {
                                                                                             const ft = (lbl.figures || []) as string[];
                                                                                             return ft.length ? Math.max(...ft.map(t => measureTextWidth(String(t), '12px serif'))) : 0;
                                                                                         })();
-                                                                                        const bersaglioX = figuresX + (_figsW ? _figsW + 2 : 0);
+                                                                                        // QUANTO STA LONTANO IL BERSAGLIO. Senza cifre deve essere ATTACCATO:
+                                                                                        // `V/IV` è una parola sola, e lo stacco di 6px pensato per la colonna
+                                                                                        // delle cifre restava anche quando la colonna non c'era. Con le cifre
+                                                                                        // basta un capello, o su una battuta fitta di gradi le etichette si
+                                                                                        // pestano i piedi.
+                                                                                        const bersaglioX = _figsW ? figuresX + _figsW + 1 : romanX + romanNumW;
                                                                                         // La larghezza complessiva serve alla linea di tenuta: deve
                                                                                         // comprendere anche il bersaglio, o la linea partirebbe da sotto.
-                                                                                        const romanW = romanNumW + (_figsW ? _figsW + 8 : 0) + romanBersW;
+                                                                                        const romanW = romanNumW + (_figsW ? _figsW + 4 : 0) + romanBersW;
 
                                                                                         const pcsDebug = (() => {
                                                                                             try {
