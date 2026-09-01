@@ -21456,6 +21456,19 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     const showSymbol = !lockHides.chordSymbols && showSymbolAnalysis && !!(lbl as any).symbol && !isHiddenMarker && ((lbl as any).isOverride || !hideLabelAbsBeats.has(lblAbsQ));
 
                                                                     // Keep a consistent left edge reference for both roman and symbols.
+                                                                    /**
+                                                                     * UN GRASSETTO PIÙ LEGGERO. Senza peso i romani sono più sobri ma
+                                                                     * perdono leggibilità agli zoom piccoli; col peso 700 pesano troppo.
+                                                                     * Fra i due non c'è niente: col `serif` di sistema i pesi disponibili
+                                                                     * sono di solito solo 400 e 700, e un 600 verrebbe arrotondato.
+                                                                     *
+                                                                     * Si ispessisce il TRATTO invece del peso: un contorno dello stesso
+                                                                     * colore, regolabile a frazioni di pixel. Il vantaggio decisivo è che
+                                                                     * NON cambia la larghezza del testo — quindi la misura resta quella
+                                                                     * del peso normale e la spaziatura di cifre, bersaglio e linea di
+                                                                     * tenuta non si muove.
+                                                                     */
+                                                                    const ROMAN_TRATTO = 0.4;
                                                                     // I ROMANI NON SONO IN GRASSETTO. La misura deve dichiarare lo stesso peso del disegno:
                                                                     // se divergono, le larghezze calcolate sbagliano e con loro la posizione delle
                                                                     // cifre, del bersaglio e della linea di tenuta.
@@ -21725,6 +21738,8 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                     textAnchor="start"
                                                                                                     fontSize={14}
                                                                                                     fontWeight={400}
+                                                                                                    stroke={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
+                                                                                                    strokeWidth={ROMAN_TRATTO}
 fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     style={{ cursor: 'pointer', pointerEvents: 'all' }}
                     /* Clic: gli override, dove si corregge. ⌥+clic: la spiegazione, per chi
@@ -21749,6 +21764,8 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         fontWeight="400"
                         fontFamily="serif"
                         fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
+                        stroke={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
+                        strokeWidth={ROMAN_TRATTO}
                         style={{ pointerEvents: 'none' }}
                     >
                         {romanBers}
