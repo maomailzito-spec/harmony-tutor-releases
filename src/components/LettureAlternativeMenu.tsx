@@ -10,7 +10,7 @@
  * Se alternative non ce ne sono, questo menù non si apre affatto: il clic porta al
  * pannello come prima. Non si mostra mai un elenco vuoto per dire che è vuoto.
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export type LetturaAlternativa = {
@@ -35,6 +35,21 @@ const LettureAlternativeMenu: React.FC<Props> = ({ x, y, corrente, letture, onSc
     const { t } = useTranslation('ui');
     const ref = useRef<HTMLDivElement>(null);
 
+    // CHE RIENTRI NELLO SCHERMO. Ancorato sotto l'etichetta, su un'etichetta in fondo alla
+    // pagina o all'ultimo sistema il menù finirebbe fuori: si misura dopo il montaggio e,
+    // se sborda, si sposta sopra l'etichetta o rientra da destra.
+    const [pos, setPos] = useState<{ top: number; left: number }>({ top: y, left: x });
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) { setPos({ top: y, left: x }); return; }
+        const r = el.getBoundingClientRect();
+        const margine = 8;
+        let top = y, left = x;
+        if (top + r.height > window.innerHeight - margine) top = Math.max(margine, y - r.height - 22);
+        if (left + r.width > window.innerWidth - margine) left = Math.max(margine, window.innerWidth - r.width - margine);
+        setPos({ top, left });
+    }, [x, y, letture.length]);
+
     useEffect(() => {
         const fuori = (e: MouseEvent) => {
             if (ref.current && !ref.current.contains(e.target as Node)) onClose();
@@ -54,7 +69,7 @@ const LettureAlternativeMenu: React.FC<Props> = ({ x, y, corrente, letture, onSc
     return (
         <div
             ref={ref}
-            style={{ position: 'fixed', top: y, left: x, zIndex: 60 }}
+            style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 60 }}
             className="min-w-[130px] rounded-lg border border-slate-500 bg-white shadow-xl py-1 text-slate-900"
             onClick={e => e.stopPropagation()}
         >

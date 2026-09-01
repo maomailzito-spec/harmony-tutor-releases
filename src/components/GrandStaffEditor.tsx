@@ -13726,7 +13726,12 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
      * Ora il clic porta dove si agisce, sul punto dell'etichetta. La spiegazione resta
      * raggiungibile da lì.
      */
-    const apriOverrideSuEtichetta = useCallback((absBeat: number) => {
+    /**
+     * @param ancora il rettangolo dell'ETICHETTA cliccata. Il menù compatto delle letture
+     *   si apre lì sotto, dove l'occhio sta già guardando; il pannello grande no, perché è
+     *   largo 360 e sotto l'etichetta finirebbe fuori dallo schermo o sopra la musica.
+     */
+    const apriOverrideSuEtichetta = useCallback((absBeat: number, ancora?: { left: number; bottom: number }) => {
         try {
             const container = staffContainerRef.current;
             const pos = playheadPositionRef.current;
@@ -13760,7 +13765,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 if (qui?.roman) corrente = `${qui.roman}${(qui.figures || []).length ? ' ' + (qui.figures || []).join('/') : ''}`;
             } catch { /* nessuna alternativa: si va al pannello */ }
             if (alternative.length > 0) {
-                setMenuLetture({ x, y, absBeat, corrente, letture: alternative });
+                setMenuLetture({
+                    x: ancora ? ancora.left : x,
+                    y: ancora ? ancora.bottom + 4 : y,
+                    absBeat, corrente, letture: alternative,
+                });
                 return;
             }
             setContextMenu({ x, y, absBeat, measureIndex, beat, inferredTonicAtBeat: cambiata ? { tonic: tonica, isMinor: minore } : null });
@@ -21518,7 +21527,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     onMouseDown={(e: any) => {
                                                                         e.stopPropagation();
                                                                         if (e.altKey) openExplain(lbl);
-                                                                        else apriOverrideSuEtichetta(Number((lbl as any).absBeat));
+                                                                        else {
+                                                                            const _r = (e.currentTarget as any)?.getBoundingClientRect?.();
+                                                                            apriOverrideSuEtichetta(Number((lbl as any).absBeat), _r ? { left: _r.left, bottom: _r.bottom } : undefined);
+                                                                        }
                                                                     }}
                                                                                 >
                                                                                     {(lbl as any).symbol}
@@ -21682,7 +21694,10 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                     onMouseDown={(e: any) => {
                                                                         e.stopPropagation();
                                                                         if (e.altKey) openExplain(lbl);
-                                                                        else apriOverrideSuEtichetta(Number((lbl as any).absBeat));
+                                                                        else {
+                                                                            const _r = (e.currentTarget as any)?.getBoundingClientRect?.();
+                                                                            apriOverrideSuEtichetta(Number((lbl as any).absBeat), _r ? { left: _r.left, bottom: _r.bottom } : undefined);
+                                                                        }
                                                                     }}
                 >
                     {romanBaseText}
@@ -21704,7 +21719,10 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                     onMouseDown={(e: any) => {
                                                                         e.stopPropagation();
                                                                         if (e.altKey) openExplain(lbl);
-                                                                        else apriOverrideSuEtichetta(Number((lbl as any).absBeat));
+                                                                        else {
+                                                                            const _r = (e.currentTarget as any)?.getBoundingClientRect?.();
+                                                                            apriOverrideSuEtichetta(Number((lbl as any).absBeat), _r ? { left: _r.left, bottom: _r.bottom } : undefined);
+                                                                        }
                                                                     }}
                     >≈</text>
                 ) : null}
