@@ -3545,9 +3545,39 @@ function scontoDellaQuartaSesta(forzaQui: number, gradoQui: number, gradoDopo: n
   return 0;
 }
 
+/** Quanto si spiega un'appoggiatura, cioe' un'estranea sull'ATTACCO dell'armonia.
+ *  Meno di 1 perche' e' figura piu' impegnativa di una nota di passaggio in
+ *  mezzo al tempo: ammessa, non gratuita. */
+const APPOGGIATURA_SI_SPIEGA = 0.6;
+
+/** Quanto costa una nota che l'accordo non regge e che non si spiega. Prima
+ *  costava solo il premio mancato (fino a 5/n); cosi' e' un addebito vero.
+ *
+ *  IL VALORE E' MISURATO, su sei corali di Bach a ritmo armonico di minima:
+ *
+ *      peso    errori   altalene   retrocessioni
+ *         0        86         50
+ *         4        46         38          12
+ *         8        32         30          18
+ *        16        30         26          21
+ *        30        28         27          26
+ *
+ *  Il ginocchio non sta nel conto degli errori — quello continua a scendere
+ *  piano fino in fondo — ma nelle RETROCESSIONI, che oltre 8 raddoppiano
+ *  mentre gli errori guadagnano due punti in croce. Il meccanismo si capisce:
+ *  piu' pesa il reggere le note, piu' il generatore sceglie l'accordo che le
+ *  contiene invece di quello che PROSEGUE, e la logica armonica cede. E' il
+ *  tranello scritto in testa a `banco-corali.ts`: meno errori non e' piu'
+ *  musica. */
+const NOTA_INSPIEGATA = 8;
+
 /** Un gruppo di melodia da armonizzare: le classi d'altezza che ci suonano sopra, e dove sta. */
 type GruppoMelodia = {
   pcs: number[]; measure: number; beat: number; sopranoMidi?: number;
+  /** Le note VERE del gruppo, in ordine e parallele a `pcs`. Per decidere se una
+   *  nota che l'accordo non contiene sia di passaggio o sbagliata non basta la
+   *  classe d'altezza: serve sapere da dove si arriva e dove si va. */
+  note?: { midi: number; measure: number; beat: number }[];
   /** La classe d'altezza del BASSO DATO su questo tempo, se c'è. Non è un'altra nota da
    *  coprire: è un vincolo duro, perché il basso dice anche il RIVOLTO. */
   bassoPc?: number;
@@ -3596,6 +3626,53 @@ function scegliProgressioneDellaFrase(args: {
 
   const bassoDi = (p: Posa) => 48 + schede[p.acc].pcs[p.inv % schede[p.acc].pcs.length];
   const chiusures = (i: number) => chiusure[i] ?? null;
+
+  // ── LA NOTA CHE L'ACCORDO NON REGGE: sbagliata, o di passaggio? ──────────
+  // Finora costava uguale in tutti e due i casi: il gruppo che copriva meno
+  // note perdeva premio, e basta. Ma una nota di passaggio non e' un difetto
+  // della scelta armonica — e' come si scrive la musica. Qui si distingue,
+  // coi criteri di sempre (grado congiunto, direzione, posizione metrica) e
+  // senza statistiche: nel corpus non c'e' NIENTE sul ritmo armonico.
+  //
+  // NB Sul percorso predefinito (un gruppo per nota) tutto questo non entra
+  // mai in gioco: li' il gruppo ha una nota sola, e il filtro delle pose
+  // pretende gia' che quella sia coperta. Morde solo quando il ritmo armonico
+  // e' stato scelto, cioe' quando piu' note stanno sotto un accordo solo.
+
+  /** Tutte le note di melodia in fila, coi punti in cui comincia ogni gruppo.
+   *  Serve perche' una nota di passaggio si riconosce da come ci si arriva e
+   *  da come se ne esce, e il confine fra due gruppi non e' un confine per
+   *  l'orecchio: il «prima» puo' stare nel gruppo precedente. */
+  const piatta: { midi: number; measure: number; beat: number }[] = [];
+  const inizioDiGruppo: number[] = [];
+  for (const g of gruppi) {
+    inizioDiGruppo.push(piatta.length);
+    for (const nt of (g.note || [])) piatta.push(nt);
+  }
+
+  /** Quanto una nota estranea si spiega da se': 1 = del tutto, 0 = per niente
+   *  (allora e' una nota sbagliata, e deve costare). */
+  const quantoSiSpiega = (k: number, apreIlGruppo: boolean): number => {
+    const qui = piatta[k];
+    const prima = piatta[k - 1], dopo = piatta[k + 1];
+    // Senza un prima e un dopo non si giudica: la prima e l'ultima nota di un
+    // brano non si possono spiegare come ornamento, vanno rette.
+    if (!qui || !prima || !dopo) return 0;
+    const entra = qui.midi - prima.midi;
+    const esce = dopo.midi - qui.midi;
+    const perGrado = Math.abs(entra) >= 1 && Math.abs(entra) <= 2
+                  && Math.abs(esce) >= 1 && Math.abs(esce) <= 2;
+    if (!perGrado) return 0;                  // ci si arriva o se ne esce per salto
+    const diPassaggio = (entra > 0) === (esce > 0);   // stessa direzione
+    const diVolta = dopo.midi === prima.midi;         // torna da dov'era venuta
+    if (apreIlGruppo) {
+      // Sull'ATTACCO dell'armonia l'unica estranea che regge e' l'appoggiatura:
+      // e' ammessa, ma e' una figura piu' impegnativa di una nota di passaggio
+      // in mezzo al tempo, e non deve costare come niente.
+      return APPOGGIATURA_SI_SPIEGA;
+    }
+    return (diPassaggio || diVolta) ? 1 : 0;
+  };
 
   // ── Le pose possibili per ciascuna nota ──
   const posePerGruppo: Posa[][] = [];
@@ -3646,8 +3723,27 @@ function scegliProgressioneDellaFrase(args: {
     let c = chiusura && sc.gradoDiatonico >= 0
       ? -(chiusura[sc.gradoDiatonico] ?? 1)
       : -(forze[i] >= 0.5 ? sc.pesoForte : sc.pesoDebole);
-    c -= (coperte / Math.max(1, pcs.length)) * 5;       // e quello che regge più note
+    // Le note che l'accordo non contiene ma che si spiegano da se'. Contano
+    // come rette, perche' lo sono davvero: sotto quell'armonia ci stanno.
+    let spiegate = 0;
+    if (pcs.length > 1) {
+      const noteDelGruppo = gruppi[i].note || [];
+      const base = inizioDiGruppo[i];
+      for (let j = 0; j < noteDelGruppo.length; j++) {
+        const pc = ((noteDelGruppo[j].midi % 12) + 12) % 12;
+        if (sc.pcs.includes(pc)) continue;
+        spiegate += quantoSiSpiega(base + j, j === 0);
+      }
+    }
+    const retto = coperte + spiegate;
+    c -= (retto / Math.max(1, pcs.length)) * 5;         // e quello che regge più note
+    // Il premio pieno resta alla copertura VERA: a parita' di tutto il resto un
+    // accordo che contiene le note e' meglio di uno che le fa passare.
     if (coperte === pcs.length) c -= 3;
+    else if (retto >= pcs.length - 1e-9) c -= 1;
+    // E cio' che resta senza spiegazione COSTA, invece di limitarsi a non
+    // essere premiato: e' la differenza fra «meno buono» e «sbagliato».
+    c += (pcs.length - retto) * NOTA_INSPIEGATA;
     c += COSTO_RIVOLTO[p.inv] ?? 4;
     // Una cadenza vuole il tempo forte: chiudere su un movimento debole non è una chiusura.
     if (i === n - 1) c += (1 - forze[i]) * 6;
@@ -4116,6 +4212,9 @@ export function autoHarmonize(
   // ── Group melody notes by harmonic rhythm slots ─────────────────────
   type MelodyGroup = {
     pcs: number[]; measure: number; beat: number; sopranoMidi?: number;
+    /** Le note vere del gruppo, parallele a `pcs`: le legge `quantoSiSpiega`
+     *  per capire se una nota scoperta sia di passaggio o sbagliata. */
+    note?: { midi: number; measure: number; beat: number }[];
     /** Il basso DATO su questo tempo, se c'è: vincolo duro, non nota da coprire. */
     bassoPc?: number;
   };
@@ -4134,10 +4233,11 @@ export function autoHarmonize(
         const slotAbsBeat = slotIndex * harmonicRhythmBeats;
         const slotMeasure = Math.floor(slotAbsBeat / beatsPerMeasure);
         const slotBeat = (slotAbsBeat % beatsPerMeasure) + 1;
-        groupMap.set(slotIndex, { pcs: [], measure: slotMeasure, beat: slotBeat });
+        groupMap.set(slotIndex, { pcs: [], measure: slotMeasure, beat: slotBeat, note: [] });
       }
       const gr = groupMap.get(slotIndex)!;
       gr.pcs.push(((m.midi % 12) + 12) % 12);
+      gr.note!.push({ midi: m.midi, measure: m.measure, beat: m.beat });
       if (gr.sopranoMidi == null) gr.sopranoMidi = m.midi;
     }
     groups = [...groupMap.values()];
@@ -4150,6 +4250,7 @@ export function autoHarmonize(
       // La nota VERA del soprano, non solo la sua classe: al moto fra le voci estreme serve
       // sapere se sale o scende, e una classe d'altezza non lo dice.
       sopranoMidi: m.midi,
+      note: [{ midi: m.midi, measure: m.measure, beat: m.beat }],
     }));
   }
 

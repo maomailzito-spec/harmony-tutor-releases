@@ -108,7 +108,11 @@ for (const f of process.argv.slice(2)) {
   }));
 
   // SENZA_CORPUS=1 torna ai pesi scritti a mano nella scelta dei gradi.
-  const progressione = autoHarmonize(vincoli, tonica, minore, 0, bpm, { corpus: !process.env.SENZA_CORPUS, condotta: !process.env.SENZA_CONDOTTA, frase: !process.env.SENZA_FRASE });
+  // RITMO=<movimenti> per armonizzare a ritmo armonico scelto invece che una
+  // nota = un accordo. Serve a misurare la scrittura elastica: col valore 0 il
+  // generatore deve reggere OGNI nota, e le note di passaggio non esistono.
+  const ritmo = Number(process.env.RITMO || 0) || 0;
+  const progressione = autoHarmonize(vincoli, tonica, minore, ritmo, bpm, { corpus: !process.env.SENZA_CORPUS, condotta: !process.env.SENZA_CONDOTTA, frase: !process.env.SENZA_FRASE });
   const config: ChoralConfig = {
     tonic: tonica, isMinor: minore, timeSignature: ts,
     rules: { allowParallel5ths: false, allowParallel8ves: false, allowCrossing: false, allowOverlap: false, doubleRoot: true },
