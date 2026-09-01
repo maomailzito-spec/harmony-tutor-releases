@@ -21456,7 +21456,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                     const showSymbol = !lockHides.chordSymbols && showSymbolAnalysis && !!(lbl as any).symbol && !isHiddenMarker && ((lbl as any).isOverride || !hideLabelAbsBeats.has(lblAbsQ));
 
                                                                     // Keep a consistent left edge reference for both roman and symbols.
-                                                                    const romanFont = '700 14px serif';
+                                                                    // I ROMANI NON SONO IN GRASSETTO. La misura deve dichiarare lo stesso peso del disegno:
+                                                                    // se divergono, le larghezze calcolate sbagliano e con loro la posizione delle
+                                                                    // cifre, del bersaglio e della linea di tenuta.
+                                                                    const romanFont = '14px serif';
                                                                     const refW = measureTextWidth('V', romanFont);
 
                                                                     // Clamp the analysis label within the current measure.
@@ -21721,7 +21724,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                     y={romanBelowY}
                                                                                                     textAnchor="start"
                                                                                                     fontSize={14}
-                                                                                                    fontWeight={700}
+                                                                                                    fontWeight={400}
 fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     style={{ cursor: 'pointer', pointerEvents: 'all' }}
                     /* Clic: gli override, dove si corregge. ⌥+clic: la spiegazione, per chi
@@ -21743,7 +21746,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         x={bersaglioX}
                         y={romanBelowY}
                         fontSize="14"
-                        fontWeight="700"
+                        fontWeight="400"
                         fontFamily="serif"
                         fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                         style={{ pointerEvents: 'none' }}
@@ -22472,7 +22475,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                             }
                                                                                             if (best && bestDist <= 60) {
                                                                                                 const RB_SHIFT_X = 25;
-                                                                                                const romanFont = '700 14px serif';
+                                                                                                const romanFont = '14px serif';
                                                                                                 const refW = measureTextWidth('V', romanFont);
                                                                                                 const paddingAfterRoman = 8;
                                                                                                 const romanText = (best as any).roman || '';
