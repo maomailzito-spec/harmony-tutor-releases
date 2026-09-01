@@ -2070,7 +2070,10 @@ export function voicingToStaffNotes(
   tones: ScaleDegreeNote[],
   inversion: number,
   keySignature: KeySignature,
-  beatsPerMeasure: number = 4
+  beatsPerMeasure: number = 4,
+  /** Il PUNTO. In coda e opzionale: nessuna chiamata esistente cambia, e chi non
+   *  lo passa scrive note non puntate come ha sempre fatto. */
+  puntata: boolean = false
 ): StaffNote[] {
   const voiceMap: { midi: number; voice: Voice; clef: 'treble' | 'bass'; tonePick: ScaleDegreeNote }[] = [
     { midi: voicing.soprano, voice: 1, clef: 'treble', tonePick: findToneForMidi(voicing.soprano, tones) },
@@ -2114,7 +2117,8 @@ export function voicingToStaffNotes(
 
     // Compute tick position
     const beatsPerQuarter = 1; // quarter-note base
-    const durationBeats = DURATION_VALUES[duration as keyof typeof DURATION_VALUES] ?? 1;
+    const durationBeats = (DURATION_VALUES[duration as keyof typeof DURATION_VALUES] ?? 1)
+                        * (puntata ? 1.5 : 1);
     const startTick = ((measure * beatsPerMeasure) + (beat - 1)) * TICKS_PER_QUARTER;
     const durationTicks = durationBeats * TICKS_PER_QUARTER;
 
@@ -2137,7 +2141,7 @@ export function voicingToStaffNotes(
       isRest: false,
       isTriplet: false,
       isDuplet: false,
-      isDotted: false,
+      isDotted: puntata,
       measureIndex: measure,
       beat,
       voice: v.voice,
@@ -2346,6 +2350,9 @@ type Passo = {
   inv: number;
   tones: ScaleDegreeNote[];
   durationName: string;
+  /** Il punto va conservato con la durata: il RIPASSO riemette le note da qui,
+   *  e senza si perderebbe proprio dove serve (3/4, 6/8). */
+  puntata?: boolean;
   fixedSoprano?: number;
   fixedBass?: number;
   fixedAlto?: number;
@@ -2552,6 +2559,7 @@ export function realizeChorale(
     // Determine duration: explicit > fill to next chord > end of measure
     const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
     let durationName: string;
+    let puntata = false;
     if (chord.duration) {
       durationName = chord.duration;
     } else {
@@ -2564,6 +2572,7 @@ export function realizeChorale(
         durationBeats = beatsPerMeasure - chord.beat + 1;
       }
       durationName = beatsToDuration(durationBeats);
+      puntata = durataPuntata(durationBeats);
     }
 
     // Soprano constraint for this chord position
@@ -3268,7 +3277,7 @@ export function realizeChorale(
 
     // Generate StaffNotes
     const noteStartIdx = allNotes.length; // track where this chord's notes begin
-    const notes = voicingToStaffNotes(voicing, chord.measure, chord.beat, durationName, tones, inv, displayKeySignature, beatsPerMeasure);
+    const notes = voicingToStaffNotes(voicing, chord.measure, chord.beat, durationName, tones, inv, displayKeySignature, beatsPerMeasure, puntata);
     allNotes.push(...notes);
 
     // Il passo precedente può essere stato RISCRITTO dai due backtracking di sopra: quello
@@ -3278,7 +3287,7 @@ export function realizeChorale(
       passi[passi.length - 1].inv = prevInvUsed;
     }
     passi.push({
-      chord, voicing, inv, tones, durationName, fixedSoprano, fixedBass, fixedAlto, fixedTenor, isLast,
+      chord, voicing, inv, tones, durationName, puntata, fixedSoprano, fixedBass, fixedAlto, fixedTenor, isLast,
       degree: parsed.degree, noteStart: noteStartIdx,
     });
 
@@ -3438,7 +3447,7 @@ export function realizeChorale(
       for (let i = passi.length - 1; i >= 0; i--) {
         const p = passi[i];
         const fine = i + 1 < passi.length ? passi[i + 1].noteStart : allNotes.length;
-        const nuove = voicingToStaffNotes(p.voicing, p.chord.measure, p.chord.beat, p.durationName, p.tones, p.inv, displayKeySignature, battutePerMisura);
+        const nuove = voicingToStaffNotes(p.voicing, p.chord.measure, p.chord.beat, p.durationName, p.tones, p.inv, displayKeySignature, battutePerMisura, p.puntata);
         allNotes.splice(p.noteStart, fine - p.noteStart, ...nuove);
       }
       // E le violazioni si rifanno da capo sui voicing definitivi — anche le VERTICALI,
@@ -4221,26 +4230,61 @@ export function autoHarmonize(
   let groups: MelodyGroup[];
 
   if (harmonicRhythmBeats > 0) {
-    // Convert each melody point to an absolute beat position
-    const absBeat = (m: SopranoConstraint) => m.measure * beatsPerMeasure + (m.beat - 1);
+    // LA GRIGLIA RIPARTE A OGNI STANGHETTA, e l'accordo si posa su una nota VERA.
+    //
+    // Prima la griglia era aritmetica e assoluta — `floor(movimentoAssoluto /
+    // passo)` — con due conseguenze che si vedevano sullo spartito:
+    //
+    //  · in 3/4 (e in 6/8) uno slot di due movimenti sta A CAVALLO della
+    //    stanghetta, e una durata a cavallo non si scrive con una nota sola:
+    //    usciva accorciata, e la misura non tornava.
+    //  · l'accordo prendeva misura e movimento dal CONFINE dello slot, non
+    //    dalla musica: con una melodia che non comincia sul primo movimento,
+    //    l'accompagnamento entrava dove la melodia non attacca niente — e il
+    //    soprano dato non veniva nemmeno trovato, perche' lo si cerca per
+    //    `misura:movimento` esatti.
+    //
+    // Un'armonia non scavalca la stanghetta: la griglia si conta DENTRO la
+    // misura, cosi' ogni accordo dura al piu' fino alla battuta successiva.
+    const slotPerMisura = Math.max(1, Math.ceil(beatsPerMeasure / harmonicRhythmBeats));
 
-    // Build groups: each covers `harmonicRhythmBeats` beats
+    // L'ANCORA RESTA IL CONFINE, e non la prima nota che capita.
+    // Ancorare alla nota vera sembra piu' onesto ed e' stato provato: peggiora,
+    // e si capisce perche'. Se il primo attacco di uno slot cade a meta' tempo,
+    // l'accordo PRECEDENTE viene a durare due movimenti e mezzo — una durata che
+    // una nota sola non sa scrivere (ci vorrebbe una legatura), e che finisce
+    // troncata. Misurato su sei corali a ritmo di minima: 32 errori col confine,
+    // 40 con la nota vera.
+    // L'unica eccezione e' il PRIMO accordo, portato sulla prima nota della
+    // melodia: li' il vuoto si vede davvero, perche' l'accompagnamento
+    // entrerebbe prima che la melodia cominci.
+    //
+    // RESTA (misurato, non nascosto): se dentro uno slot la prima nota attacca
+    // a meta' tempo — 3/4 a ritmo di semiminima con una nota a b2,5 — l'accordo
+    // entra una croma prima di lei. Curarlo vuol dire scrivere durate come due
+    // movimenti e mezzo, che si notano solo con una LEGATURA: un accordo oggi
+    // e' una nota per voce. E' il pezzo (B), il confine libero.
     const groupMap = new Map<number, MelodyGroup>();
+    let primo = true;
     for (const m of melody) {
-      const ab = absBeat(m);
-      const slotIndex = Math.floor(ab / harmonicRhythmBeats);
+      const kSlot = Math.floor((m.beat - 1) / harmonicRhythmBeats);
+      const slotIndex = m.measure * slotPerMisura + kSlot;
       if (!groupMap.has(slotIndex)) {
-        const slotAbsBeat = slotIndex * harmonicRhythmBeats;
-        const slotMeasure = Math.floor(slotAbsBeat / beatsPerMeasure);
-        const slotBeat = (slotAbsBeat % beatsPerMeasure) + 1;
-        groupMap.set(slotIndex, { pcs: [], measure: slotMeasure, beat: slotBeat, note: [] });
+        const confineBeat = 1 + kSlot * harmonicRhythmBeats;
+        groupMap.set(slotIndex, {
+          pcs: [], measure: m.measure,
+          beat: primo ? m.beat : confineBeat,
+          note: [],
+        });
+        primo = false;
       }
       const gr = groupMap.get(slotIndex)!;
       gr.pcs.push(((m.midi % 12) + 12) % 12);
       gr.note!.push({ midi: m.midi, measure: m.measure, beat: m.beat });
       if (gr.sopranoMidi == null) gr.sopranoMidi = m.midi;
     }
-    groups = [...groupMap.values()];
+    groups = [...groupMap.values()]
+      .sort((a, b) => (a.measure - b.measure) || (a.beat - b.beat));
   } else {
     // One group per melody note (original behavior)
     groups = melody.map(m => ({
@@ -4638,12 +4682,23 @@ export function autoHarmonizeFromBass(
 
 /** Convert beat duration to a NoteDuration name. */
 function beatsToDuration(beats: number): string {
+  // I VALORI PUNTATI ESISTONO. Senza, una durata di tre movimenti veniva
+  // arrotondata PER DIFETTO a minima e un movimento spariva — in 3/4 su ogni
+  // battuta. Il puntato si dichiara col nome della nota piu' `isDotted`.
   if (beats >= 4) return 'whole';
+  if (beats >= 3) return 'half';         // puntata
   if (beats >= 2) return 'half';
+  if (beats >= 1.5) return 'quarter';    // puntata
   if (beats >= 1) return 'quarter';
+  if (beats >= 0.75) return 'eighth';    // puntata
   if (beats >= 0.5) return 'eighth';
   if (beats >= 0.25) return 'sixteenth';
   return 'quarter';
+}
+
+/** Se quella durata, per valere `beats`, ha bisogno del punto. */
+function durataPuntata(beats: number): boolean {
+  return beats === 3 || beats === 1.5 || beats === 0.75;
 }
 
 /** Build a KeySignature from tonic + mode (mirrors getKeySignature from musicTheory). */
