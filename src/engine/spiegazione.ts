@@ -57,6 +57,16 @@ export type SpiegazioneAccordo = {
 /** I motivi che NON si dicono: sono veri, ma non insegnano niente. */
 const MOTIVI_MUTI = new Set(['accordo piu\' comune']);
 
+/**
+ * Quali note NON fanno parte dell'accordo. La lista è la stessa di `structuralNotes`, che è
+ * la funzione con cui il resto del programma decide la stessa cosa: riscriverla qui aveva
+ * già prodotto una divergenza.
+ *
+ * IL RITARDO NON C'È, ed è la correzione: un ritardo non è una nota da togliere, è una nota
+ * che RITARDA una nota dell'accordo. Togliendolo l'accordo resta monco — sulla «Cantata
+ * 147», a misura 10, il Re di ritardo veniva scartato e da La+Fa# soli il motore leggeva
+ * `F#m` invece del `Re maggiore` che c'è scritto.
+ */
 const categoriaOrnamento = (n: any): string | null => {
   if (n?.ornamentOverride && n.ornamentOverride !== 'structural') return String(n.ornamentOverride);
   if (n?.isPassing) return 'passing';
@@ -65,7 +75,6 @@ const categoriaOrnamento = (n: any): string | null => {
   if (n?.isAnticipation) return 'anticipation';
   if (n?.isEscape) return 'escape';
   if (n?.isCambiata) return 'cambiata';
-  if (n?.isSuspension) return 'suspension';
   return null;
 };
 
@@ -103,7 +112,9 @@ export function spiegaAccordo(
     if (cat) estranee.push({ nota: n, categoria: cat });
     else dellAccordo.push(n);
   }
-  const perIdentificare = dellAccordo.length >= 2 ? dellAccordo : vive;
+  // Con meno di TRE note l'identificazione è un indovinello: due note non fanno un accordo,
+  // e il motore risponderebbe comunque qualcosa. Meglio identificare su tutto ciò che suona.
+  const perIdentificare = dellAccordo.length >= 3 ? dellAccordo : vive;
 
   let candidati: any[] = [];
   try { candidati = (identifyChordCandidates(perIdentificare as any) as any[]) || []; } catch { /* ignora */ }
