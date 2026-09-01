@@ -2013,20 +2013,27 @@ function identifyChordLegacy(notes: StaffNote[]): { root: StaffNote; type: strin
 
     for (const candidate of allCandidates) {
         let score = 0;
+        // PERCHÉ QUESTA LETTURA HA VINTO. Il punteggio è una somma di termini con una
+        // ragione musicale ciascuno — sta scritta nei commenti qui sotto — ma finora la
+        // ragione si perdeva e restava solo il numero. Registrandola si può DIRLA: «ho letto
+        // ii7 e non IV6 perché il Do si comporta da settima» è didattica; «0,82 contro 0,79»
+        // è telemetria.
+        const motivi: { nome: string; delta: number }[] = [];
+        const punto = (nome: string, delta: number) => { score += delta; if (delta) motivi.push({ nome, delta }); };
         
         if (candidate.matchType === 'exact') {
-            score += 20; 
+            punto('corrispondenza esatta', 20);
         } else if (candidate.matchType === 'no_fifth') {
-            score += 10;
+            punto('manca la quinta', 10);
         } else if (candidate.matchType === 'no_third') {
-            score += 9;
+            punto('manca la terza', 9);
         }
 
-        score += (CHORD_CHECK_ORDER.length - candidate.priority);
+        punto('accordo piu\' comune', CHORD_CHECK_ORDER.length - candidate.priority);
 
         // Prefer exact tertian 7th chords (especially ø7/°7) even when inverted.
         if (candidate.matchType === 'exact' && (candidate.type === BuiltInChords.Minor7b5 || candidate.type === BuiltInChords.Diminished7)) {
-            score += 30;
+            punto('settima diminuita o semidiminuita completa', 30);
         }
 
         // Spelling-first guardrail:
@@ -2045,9 +2052,9 @@ function identifyChordLegacy(notes: StaffNote[]): { root: StaffNote; type: strin
                     ? dim7SpellingRootBonus(candidate.root, uniqueNotes)
                     : null;
                 if (sp != null && sp >= 14) {
-                    score += 35;
+                    punto('la grafia scritta conferma la lettura diminuita', 35);
                 } else {
-                    score -= 40;
+                    punto('per leggerlo cosi\' si dovrebbe sottintendere un\'alterazione non scritta', -40);
                 }
             }
         } catch { /* ignore */ }
@@ -2058,7 +2065,7 @@ function identifyChordLegacy(notes: StaffNote[]): { root: StaffNote; type: strin
         try {
             if (typeof candidate.type === 'string' && candidate.type.startsWith('Dominant')) {
                 const hasDom7th = candidate.intervals?.has(10);
-                if (!hasDom7th) score -= 1000;
+                if (!hasDom7th) punto('manca la settima di dominante', -1000);
             }
         } catch { /* ignore */ }
         
@@ -2070,17 +2077,17 @@ function identifyChordLegacy(notes: StaffNote[]): { root: StaffNote; type: strin
         // Important: if an exact 7th-chord interpretation exists (e.g. Dm7/F),
         // do not let an added-sixth chord (e.g. F6) win just because its root equals the bass.
         const allowBassRootBonus = !hasExactSeventhCandidate || !isSixthChord(candidate.type) || isSeventhLike(candidate.type);
-        if (!isSymmetricDim7 && allowBassRootBonus && bassPc != null && candidate.root.noteIndex === bassPc) score += 5;
+        if (!isSymmetricDim7 && allowBassRootBonus && bassPc != null && candidate.root.noteIndex === bassPc) punto('la fondamentale e\' al basso', 5);
 
         // For fully diminished 7ths, prefer a spelling-consistent root (chain of thirds)
         // when the user provided explicit spelling; otherwise fall back to a deterministic root.
         if (isSymmetricDim7) {
             const bonus = dim7SpellingRootBonus(candidate.root, uniqueNotes);
             if (bonus != null) {
-                score += bonus;
+                punto('grafia coerente per la settima diminuita', bonus);
             } else {
                 const minPc = Math.min(...uniquePitches);
-                if (candidate.root.noteIndex === minPc) score += 3;
+                if (candidate.root.noteIndex === minPc) punto('fondamentale scelta sulla nota piu\' grave', 3);
             }
         }
 
@@ -2095,6 +2102,7 @@ function identifyChordLegacy(notes: StaffNote[]): { root: StaffNote; type: strin
         // The spelling bonus IS applied in `identifyChordCandidates` (used
         // for chord-symbol display only).
         candidate.score = score;
+        (candidate as any).motivi = motivi;
     }
 
     // ── Spelling-first filter: penalise candidates with enharmonic mismatches ──
@@ -2252,12 +2260,16 @@ function identifyChordCandidatesLegacy(notes: StaffNote[], ornamentOverrides?: R
 
     for (const candidate of allCandidates) {
         let score = 0;
-        if (candidate.matchType === 'exact') score += 20;
-        else if (candidate.matchType === 'no_fifth') score += 10;
-        else if (candidate.matchType === 'no_third') score += 9;
-        score += (CHORD_CHECK_ORDER.length - candidate.priority);
+        // Stessi motivi dell'altra copia del punteggio: qui però i candidati escono in
+        // LISTA, ed è da questa che si può dire perché la prima ha battuto la seconda.
+        const motivi: { nome: string; delta: number }[] = [];
+        const punto = (nome: string, delta: number) => { score += delta; if (delta) motivi.push({ nome, delta }); };
+        if (candidate.matchType === 'exact') punto('corrispondenza esatta', 20);
+        else if (candidate.matchType === 'no_fifth') punto('manca la quinta', 10);
+        else if (candidate.matchType === 'no_third') punto('manca la terza', 9);
+        punto('accordo piu\' comune', CHORD_CHECK_ORDER.length - candidate.priority);
         if (candidate.matchType === 'exact' && (candidate.type === BuiltInChords.Minor7b5 || candidate.type === BuiltInChords.Diminished7)) {
-            score += 30;
+            punto('settima diminuita o semidiminuita completa', 30);
         }
 
         // Spelling-first guardrail (see identifyChord): avoid diminished-family guesses when 5th is missing.
@@ -2273,22 +2285,22 @@ function identifyChordCandidatesLegacy(notes: StaffNote[], ornamentOverrides?: R
                     ? dim7SpellingRootBonus(candidate.root, uniqueNotes)
                     : null;
                 if (sp != null && sp >= 14) {
-                    score += 35;
+                    punto('la grafia scritta conferma la lettura diminuita', 35);
                 } else {
-                    score -= 40;
+                    punto('per leggerlo cosi\' si dovrebbe sottintendere un\'alterazione non scritta', -40);
                 }
             }
         } catch { /* ignore */ }
         const isSymmetricDim7 = candidate.type === BuiltInChords.Diminished7;
         const allowBassRootBonus = !hasExactSeventhCandidate || !isSixthChord(candidate.type) || isSeventhLike(candidate.type);
-        if (!isSymmetricDim7 && allowBassRootBonus && bassPc != null && candidate.root.noteIndex === bassPc) score += 5;
+        if (!isSymmetricDim7 && allowBassRootBonus && bassPc != null && candidate.root.noteIndex === bassPc) punto('la fondamentale e\' al basso', 5);
         if (isSymmetricDim7) {
             const bonus = dim7SpellingRootBonus(candidate.root, uniqueNotes);
             if (bonus != null) {
-                score += bonus;
+                punto('grafia coerente per la settima diminuita', bonus);
             } else {
                 const minPc = Math.min(...uniquePitches);
-                if (candidate.root.noteIndex === minPc) score += 3;
+                if (candidate.root.noteIndex === minPc) punto('fondamentale scelta sulla nota piu\' grave', 3);
             }
         }
         // Symmetric augmented-triad spelling preference (mirror of °7).
@@ -2297,6 +2309,7 @@ function identifyChordCandidatesLegacy(notes: StaffNote[], ornamentOverrides?: R
             if (bonus != null) score += bonus;
         }
         candidate.score = score;
+        (candidate as any).motivi = motivi;
     }
 
     allCandidates.sort((a, b) => b.score - a.score);
