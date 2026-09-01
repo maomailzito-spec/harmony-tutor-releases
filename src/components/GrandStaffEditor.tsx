@@ -21564,9 +21564,26 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                         const romanBaseText = (romanBassMode && (lbl as any).romanBass)
                                                                                             ? String((lbl as any).romanBass)
                                                                                             : String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? '');
-                                                                                        const romanW = measureTextWidth(romanBaseText, romanFont);
+                                                                                        // LA CIFRATURA APPARTIENE AL GRADO CHE CIFRA, non al bersaglio.
+                                                                                        // Su una dominante secondaria in rivolto usciva «V/IV» con le cifre
+                                                                                        // impilate DOPO — cioè accanto al IV, che quelle cifre non le ha.
+                                                                                        // Il romano si spezza in numeratore e bersaglio, la colonna delle
+                                                                                        // cifre va in mezzo, e si legge «V 6/4 /IV».
+                                                                                        const _tagliaBersaglio = romanBaseText.indexOf('/');
+                                                                                        const romanNum = _tagliaBersaglio >= 0 ? romanBaseText.slice(0, _tagliaBersaglio) : romanBaseText;
+                                                                                        const romanBers = _tagliaBersaglio >= 0 ? romanBaseText.slice(_tagliaBersaglio) : '';
+                                                                                        const romanNumW = measureTextWidth(romanNum, romanFont);
+                                                                                        const romanBersW = romanBers ? measureTextWidth(romanBers, romanFont) : 0;
                                                                                         const romanX = baseX;
-                                                                                        const figuresX = romanX + romanW + 6;
+                                                                                        const figuresX = romanX + romanNumW + 6;
+                                                                                        const _figsW = (() => {
+                                                                                            const ft = (lbl.figures || []) as string[];
+                                                                                            return ft.length ? Math.max(...ft.map(t => measureTextWidth(String(t), '12px serif'))) : 0;
+                                                                                        })();
+                                                                                        const bersaglioX = figuresX + (_figsW ? _figsW + 2 : 0);
+                                                                                        // La larghezza complessiva serve alla linea di tenuta: deve
+                                                                                        // comprendere anche il bersaglio, o la linea partirebbe da sotto.
+                                                                                        const romanW = romanNumW + (_figsW ? _figsW + 8 : 0) + romanBersW;
 
                                                                                         const pcsDebug = (() => {
                                                                                             try {
@@ -21700,8 +21717,21 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                         }
                                                                     }}
                 >
-                    {romanBaseText}
+                    {romanNum}
                 </text>
+                {romanBers ? (
+                    <text
+                        x={bersaglioX}
+                        y={romanBelowY}
+                        fontSize="14"
+                        fontWeight="700"
+                        fontFamily="serif"
+                        fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
+                        style={{ pointerEvents: 'none' }}
+                    >
+                        {romanBers}
+                    </text>
+                ) : null}
 
                 {/* Indicatore ambiguità ≈ — visibile quando ci sono letture alternative */}
                 {!lockHides.alternatives && (lbl as any).alternatives?.length ? (
