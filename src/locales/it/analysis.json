@@ -37,5 +37,15 @@
   "violation_chromatic": "Cromatico",
   "violation_suggestion_label": "Consiglio:",
   "violation_at_measure": "misura {{m}}",
-  "violation_at_measure_beat": "misura {{m}}, movimento {{b}}"
+  "violation_at_measure_beat": "misura {{m}}, movimento {{b}}",
+  "rel_stessoAccordoAltroRivolto": "Stesso accordo, altro rivolto: si muove il basso, l'armonia resta ferma.",
+  "rel_accordoRibattuto": "Stesso accordo ribattuto.",
+  "rel_risoluzioneDominante": "La dominante risolve sulla tonica: la sensibile sale, e la settima — se c’è — scende di grado.",
+  "rel_risoluzioneInganno": "Risoluzione d’inganno: la sensibile sale comunque alla tonica, ma il basso va al sesto grado invece che al primo.",
+  "rel_diminuitaRisolta": "L’accordo diminuito risolve sulla tonica: la sensibile sale, la quinta diminuita si chiude per grado.",
+  "rel_tonicizzazioneRisolta": "La dominante secondaria risolve sul grado che aveva promesso.",
+  "rel_tonicizzazioneNonRisolta": "La dominante secondaria non risolve sul grado promesso: la tonicizzazione resta sospesa.",
+  "rel_preparazioneDominante": "La dominante arriva preparata dall’accordo precedente.",
+  "rel_quinteDiscendenti": "Si procede per quinte discendenti.",
+  "rel_gradoAscendente": "Le fondamentali sono salite di un grado."
 }

@@ -143,3 +143,96 @@ export function spiegaAccordo(
 
   return { roman, figure, scelta, seconda, evidenza, noteAccordo: dellAccordo, noteEstranee: estranee, basso };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LE RELAZIONI
+//
+// La funzione di un accordo non è una proprietà dell'accordo: dipende da dove va. Lo stesso
+// `V7` è «in attesa» finché non si scrive l'accordo dopo, e diventa «risolve d'inganno sul
+// vi» appena lo si scrive. Per questo non si scrive una descrizione per accordo ma una
+// frase per RELAZIONE, e le famiglie di relazione sono poche.
+//
+// Che cosa NON entra qui, per decisione dell'utente:
+//
+//   * le funzioni (tonica, sottodominante, dominante) non compaiono nel testo. Sono già
+//     leggibili dal numero romano, e dirle violerebbe la regola di taglio: servono al
+//     motore per riconoscere la relazione, non al lettore;
+//   * le CADENZE non sono relazioni. `V→I` a metà frase è una risoluzione; diventa cadenza
+//     solo in posizione conclusiva. Sono uno strato a parte, e richiedono un criterio di
+//     posizione che questo repertorio non scrive (zero corone su 84 brani di scuola).
+//
+// LE FRASI SONO SCRITTE DAL PUNTO DI VISTA DELL'ARRIVO, cioè di dove sta il cursore quando
+// si chiede «cosa sto facendo qui». La prima stesura le scriveva dalla partenza, e sotto un
+// `V` compariva «prepara la dominante» — che parlava del `ii` precedente e sembrava dire una
+// sciocchezza sul `V` stesso.
+//
+// E le frasi dicono l'OBBLIGO, non il fatto: «la sensibile sale alla tonica» è ciò che deve
+// accadere. Se non accade lo dice il checker, che quella verifica la fa già — e dirlo qui
+// senza controllare vorrebbe dire affermare cose non verificate.
+
+export type Famiglia =
+  | 'stessoAccordoAltroRivolto' | 'accordoRibattuto'
+  | 'risoluzioneDominante' | 'risoluzioneInganno' | 'diminuitaRisolta'
+  | 'tonicizzazioneRisolta' | 'tonicizzazioneNonRisolta'
+  | 'preparazioneDominante' | 'quinteDiscendenti' | 'gradoAscendente'
+  | 'giustapposizione';
+
+const GRADI: Record<string, number> = {
+  I: 0, i: 0, II: 1, ii: 1, 'ii°': 1, iio: 1, III: 2, iii: 2, IV: 3, iv: 3,
+  V: 4, v: 4, VI: 5, vi: 5, VII: 6, vii: 6, 'vii°': 6, viio: 6,
+};
+
+/** Il grado, spogliato di cifre e bersaglio: `V7/ii` → `V`. */
+export function gradoDi(roman: string): string {
+  return String(roman || '').split('/')[0].replace(/[0-9]+$/, '').replace(/6\/4|6\/5|4\/3|4\/2/g, '').trim();
+}
+
+/**
+ * La relazione fra due accordi consecutivi. `null` per il primo accordo, che un «prima»
+ * non ce l'ha — e non si parla di ciò che non c'è.
+ */
+export function relazioneFra(
+  precedente: { roman: string | null; bassoPc: number | null } | null,
+  corrente: { roman: string | null; bassoPc: number | null },
+): Famiglia | null {
+  if (!precedente?.roman || !corrente.roman) return null;
+  const ra = precedente.roman, rb = corrente.roman;
+  const ga = gradoDi(ra), gb = gradoDi(rb);
+  if (!ga || !gb) return null;
+
+  // Prima di tutto: è ancora lo stesso accordo? È il caso più frequente del repertorio —
+  // quasi una coppia su cinque — e non è una relazione armonica. Riconoscerlo per primo
+  // evita che finisca dentro un'altra famiglia a produrre una frase falsa.
+  if (ga === gb && !ra.includes('/') && !rb.includes('/')) {
+    return precedente.bassoPc !== corrente.bassoPc ? 'stessoAccordoAltroRivolto' : 'accordoRibattuto';
+  }
+  if (ra.includes('/')) {
+    return gradoDi(ra.split('/')[1]) === gb ? 'tonicizzazioneRisolta' : 'tonicizzazioneNonRisolta';
+  }
+  // Un accordo che PROMETTE un altro grado (`V/vi`) non è la dominante di casa: leggerlo
+  // come tale faceva comparire «la dominante arriva preparata» sotto un `V/vi`, che parla
+  // di tutt'altra dominante. `gradoDi` toglie il bersaglio, quindi il controllo va fatto
+  // sulla sigla intera.
+  if (rb.includes('/')) return 'giustapposizione';
+  const ia = GRADI[ga], ib = GRADI[gb];
+  if (ia == null || ib == null) return 'giustapposizione';
+  if (ia === 4 && ib === 0) return 'risoluzioneDominante';
+  if (ia === 4 && ib === 5) return 'risoluzioneInganno';
+  if (ia === 6 && ib === 0) return 'diminuitaRisolta';
+  if ((ia === 1 || ia === 3) && ib === 4) return 'preparazioneDominante';
+  if (((ia - ib + 7) % 7) === 3) return 'quinteDiscendenti';
+  if (((ib - ia + 7) % 7) === 1) return 'gradoAscendente';
+  return 'giustapposizione';
+}
+
+/** La chiave di traduzione della frase, o `null` se quella famiglia non merita parole. */
+export function fraseDiRelazione(f: Famiglia | null): string | null {
+  if (!f) return null;
+  // MISURATO guardando il testo su un corale: «stesso accordo ribattuto» compariva tre
+  // volte su quattordici accordi e non aggiungeva niente — vedere due volte di fila la
+  // stessa sigla lo mostra già. Il cambio di RIVOLTO invece informa: dice che si è mosso il
+  // basso e non l'armonia, che dalla sigla non si legge. La famiglia si è divisa in due
+  // provandola, non decidendola a tavolino.
+  if (f === 'giustapposizione' || f === 'accordoRibattuto') return null;
+  return `rel_${f}`;
+}

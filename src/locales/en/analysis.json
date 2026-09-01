@@ -37,5 +37,15 @@
   "violation_chromatic": "Chromatic",
   "violation_suggestion_label": "Suggestion:",
   "violation_at_measure": "bar {{m}}",
-  "violation_at_measure_beat": "bar {{m}}, beat {{b}}"
+  "violation_at_measure_beat": "bar {{m}}, beat {{b}}",
+  "rel_stessoAccordoAltroRivolto": "Same chord, different inversion: the bass moves, the harmony does not.",
+  "rel_accordoRibattuto": "The same chord again.",
+  "rel_risoluzioneDominante": "The dominant resolves to the tonic: the leading tone rises, and the seventh — if present — falls by step.",
+  "rel_risoluzioneInganno": "Deceptive resolution: the leading tone still rises to the tonic, but the bass goes to the sixth degree instead of the first.",
+  "rel_diminuitaRisolta": "The diminished chord resolves to the tonic: the leading tone rises, the diminished fifth closes by step.",
+  "rel_tonicizzazioneRisolta": "The secondary dominant resolves to the degree it promised.",
+  "rel_tonicizzazioneNonRisolta": "The secondary dominant does not resolve to the promised degree: the tonicisation is left hanging.",
+  "rel_preparazioneDominante": "The dominant arrives prepared by the previous chord.",
+  "rel_quinteDiscendenti": "The progression moves by descending fifths.",
+  "rel_gradoAscendente": "The roots have risen by step."
 }
