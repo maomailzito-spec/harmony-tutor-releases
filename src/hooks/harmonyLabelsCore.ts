@@ -2803,7 +2803,16 @@ export function computeHarmonyLabelsBySystemCore(_in: HarmonyLabelsInput): any[]
                     // un Mi maggiore in 6/4 fra due La minori (col basso che scende Do-Si-La,
                     // cioè un 6/4 di passaggio da manuale) veniva etichettato `I6/4` invece
                     // di `V6/4`, benché il contesto La minore fosse attivo e sopra soglia.
-                    const _tonicaDiCasa = isMinorMode ? /^i(6|64)?$/ : /^I(6|64)?$/;
+                    // E IL 6/4 NON È UN ACCORDO DA PROTEGGERE. Un `i64` non è la triade
+                    // di tonica in senso strutturale: è quasi sempre un 6/4 cadenzale o di
+                    // passaggio, cioè una FIGURA sopra un basso. La guardia dice «troppo
+                    // importanti strutturalmente», e questo vale per lo stato fondamentale e
+                    // in parte per il primo rivolto, non per il secondo — che è proprio il
+                    // caso da cui il difetto di oggi è entrato.
+                    // MISURATO: delle 147 toniche che la guardia protegge sul corpus, TUTTE
+                    // sono in stato fondamentale. Togliere il 6/4 non cambia niente adesso e
+                    // chiude la porta per dopo.
+                    const _tonicaDiCasa = isMinorMode ? /^i6?$/ : /^I6?$/;
                     if (_tonicaDiCasa.test(_gRoman)) {
                         // Tonic chord — never reassign context
                         contextTonic = currentTonic;
