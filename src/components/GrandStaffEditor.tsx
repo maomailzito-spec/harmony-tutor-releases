@@ -21737,6 +21737,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                                                                                                     y={romanBelowY}
                                                                                                     textAnchor="start"
                                                                                                     fontSize={14}
+                                                                                                    fontFamily="serif"
                                                                                                     fontWeight={400}
                                                                                                     stroke={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                     strokeWidth={ROMAN_TRATTO}
@@ -21783,6 +21784,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                                 y={figuresY0 + (i * 12)}
                                                                                                                 textAnchor="start"
                                                                                                                 fontSize={12}
+                                                                                                                fontFamily="serif"
                                                                                                                 fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                                                             >
                                                                                                                 {f}
