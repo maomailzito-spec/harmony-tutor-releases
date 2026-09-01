@@ -7739,7 +7739,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     // accanto all'altra: la sigla dell'accordo COM'È SCRITTO e quella di ciò che il condotto
     // tiene, dicendo quali note ha scartato e con che motivo.
     const datiEtichettaRef = useRef<any>(null);
-    datiEtichettaRef.current = { analyzedNotes, keySignatureRoot, isMinorMode, harmonyOverrides };
+    datiEtichettaRef.current = { analyzedNotes, keySignatureRoot, isMinorMode, harmonyOverrides, contesti: effectiveAnalysisContexts, timeSignature };
     useEffect(() => {
         (window as any).__htEtichetta = (battuta: number, movimento: number = 1) => {
             try {
@@ -7806,6 +7806,37 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                           `Se quel giudizio è sbagliato, l'etichetta lo è di conseguenza: si corregge dal menù\n` +
                           `contestuale sulla nota, marcandola come reale.`)
                 );
+                // ── E IN CHE TONALITÀ LO STA LEGGENDO ──
+                // La sonda leggeva sempre nella tonalità DI CASA, e su un brano che modula
+                // rispondeva sempre la stessa cosa. Ma l'etichetta a schermo si calcola nel
+                // contesto ATTIVO in quel punto: se i due divergono, l'accordo è giusto e
+                // sbagliata è la tonalità in cui viene letto — che è un difetto diverso, e
+                // non si distingue senza vederli affiancati.
+                const bpmProbe = (d.timeSignature?.numerator ?? 4) * (4 / (d.timeSignature?.denominator ?? 4));
+                const absQui = mi * bpmProbe + (bt - 1);
+                const attivo = (d.contesti || [])
+                    .filter((c: any) => Number(c?.absBeat ?? 0) <= absQui + 1e-6)
+                    .sort((a: any, b: any) => (Number(b.absBeat) - Number(a.absBeat)) || ((b.score ?? 0) - (a.score ?? 0)))[0];
+                if (attivo) {
+                    let nelContesto = '?';
+                    try {
+                        const rr = getRomanAnalysis(tenute as any, String(attivo.newTonic), !!attivo.newIsMinor);
+                        nelContesto = rr?.roman ? `${rr.roman}${(rr.figures || []).length ? ' ' + rr.figures.join(' ') : ''}` : '?';
+                    } catch { /* ignore */ }
+                    // eslint-disable-next-line no-console
+                    console.log(
+                        `\ncontesto attivo qui: ${attivo.newTonic} ${attivo.newIsMinor ? 'minore' : 'maggiore'}` +
+                        ` (da b${Math.floor(Number(attivo.absBeat) / bpmProbe) + 1}, ${attivo.source === 'inferred' ? `inferito, punteggio ${attivo.score ?? '—'}` : 'dichiarato'})\n` +
+                        `letto in quel contesto:  ${nelContesto}\n` +
+                        `letto nella tonalità di casa: ${comeLetto}` +
+                        (nelContesto !== '?' && nelContesto !== comeLetto
+                            ? `\n\nL'ETICHETTA A SCHERMO DOVREBBE SEGUIRE IL CONTESTO. Se mostra la lettura di casa,\n` +
+                              `il contesto è attivo ma non viene applicato: è un difetto del condotto, non dell'accordo.`
+                            : ''));
+                } else {
+                    // eslint-disable-next-line no-console
+                    console.log('\nnessun contesto attivo qui: si legge nella tonalità del brano.');
+                }
                 return { comeScritto, comeLetto };
             } catch (e) {
                 // eslint-disable-next-line no-console
