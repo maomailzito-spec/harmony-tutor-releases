@@ -25,7 +25,7 @@ const OPTION_LABELS: { key: keyof AnalysisLockOptions; label: string }[] = [
   { key: 'hideRomanLabels',  label: 'Etichette Roman numerals' },
   { key: 'hideChordSymbols', label: 'Sigle accordo (chord symbols)' },
   { key: 'hideOrnaments',    label: 'Ornamenti riconosciuti (P, V, A, R…)' },
-  { key: 'hideAlternatives', label: 'Letture alternative (indicatore ≈)' },
+  { key: 'hideAlternatives', label: 'Letture alternative (menù sull\'etichetta)' },
   { key: 'disableExport',    label: 'Disabilita export e copia note (MIDI, MusicXML, PDF, PNG, copia/incolla)' },
 ];
 

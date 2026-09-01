@@ -13764,7 +13764,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 alternative = ((qui?.alternatives ?? []) as LetturaAlternativa[]);
                 if (qui?.roman) corrente = `${qui.roman}${(qui.figures || []).length ? ' ' + (qui.figures || []).join('/') : ''}`;
             } catch { /* nessuna alternativa: si va al pannello */ }
-            if (alternative.length > 0) {
+            // IL BLOCCO D'ANALISI VALE ANCHE QUI. L'opzione «nascondi letture alternative»
+            // spegneva l'ondina ≈; tolta quella, senza questo controllo non comanderebbe
+            // più niente — e un'opzione che non fa niente è peggio di un'opzione assente.
+            // Con il blocco attivo il clic porta al pannello, dove la sezione è già filtrata.
+            if (alternative.length > 0 && !lockHidesRef.current.alternatives) {
                 setMenuLetture({
                     x: ancora ? ancora.left : x,
                     y: ancora ? ancora.bottom + 4 : y,
@@ -21733,29 +21737,6 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     </text>
                 ) : null}
 
-                {/* Indicatore ambiguità ≈ — visibile quando ci sono letture alternative */}
-                {!lockHides.alternatives && (lbl as any).alternatives?.length ? (
-                    <text
-                        x={romanX + measureTextWidth(String((lbl as any).romanDisplay ?? (lbl as any).sequenceRomanFunctional ?? (lbl as any).sequenceRoman ?? lbl.roman ?? ''), '700 14px serif') + 2}
-                        y={romanBelowY - 6}
-                        textAnchor="start"
-                        fontSize={9}
-                        fontWeight={700}
-                        fill="#60a5fa"
-                        style={{ cursor: 'pointer', pointerEvents: 'all' }}
-                        /* Clic: gli override, dove si corregge. ⌥+clic: la spiegazione, per chi
-                                                                       vuole sapere PERCHÉ prima di intervenire — resta
-                                                                       raggiungibile, ma non è più l'unica porta. */
-                                                                    onMouseDown={(e: any) => {
-                                                                        e.stopPropagation();
-                                                                        if (e.altKey) openExplain(lbl);
-                                                                        else {
-                                                                            const _r = (e.currentTarget as any)?.getBoundingClientRect?.();
-                                                                            apriOverrideSuEtichetta(Number((lbl as any).absBeat), _r ? { left: _r.left, bottom: _r.bottom } : undefined);
-                                                                        }
-                                                                    }}
-                    >≈</text>
-                ) : null}
 
                 {/* Figured bass numbers */}
                 {(lbl as any).figures?.length ? (
