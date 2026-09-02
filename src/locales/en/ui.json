@@ -541,10 +541,10 @@
   "menu_group_layout": "Layout",
   "alt_menu_more": "More properties…",
   "chorale_harmony_duration_label": "Harmony duration",
-  "chorale_harmony_duration_hint_degrees": "each chord lasts this",
-  "chorale_harmony_duration_hint_melody": "the harmony changes every",
   "chorale_inline_duration_title": "duration of this chord (click again to remove)",
-  "chorale_this_chord": "this chord:",
-  "chorale_harmony_duration_all": "all",
-  "chorale_inline_duration_needs_chord": "enter a chord first"
+  "chorale_inline_duration_needs_chord": "enter a chord first",
+  "chorale_duration_scope": "duration:",
+  "chorale_duration_scope_all": "all",
+  "chorale_duration_scope_one": "this chord",
+  "chorale_duration_scope_locked": "when harmonising a voice from the score the duration applies to all"
 }

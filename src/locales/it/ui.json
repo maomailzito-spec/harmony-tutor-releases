@@ -516,10 +516,10 @@
   "menu_group_layout": "Impaginazione",
   "alt_menu_more": "Altre proprietà…",
   "chorale_harmony_duration_label": "Durata dell'armonia",
-  "chorale_harmony_duration_hint_degrees": "ogni accordo dura questo",
-  "chorale_harmony_duration_hint_melody": "l'armonia cambia ogni",
   "chorale_inline_duration_title": "durata di questo accordo (di nuovo per toglierla)",
-  "chorale_this_chord": "questo accordo:",
-  "chorale_harmony_duration_all": "tutti",
-  "chorale_inline_duration_needs_chord": "scrivi prima un accordo"
+  "chorale_inline_duration_needs_chord": "scrivi prima un accordo",
+  "chorale_duration_scope": "durata:",
+  "chorale_duration_scope_all": "tutti",
+  "chorale_duration_scope_one": "questo accordo",
+  "chorale_duration_scope_locked": "armonizzando una voce dello spartito la durata vale per tutti"
 }

@@ -401,6 +401,10 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
    *  gradi scritti da' lo stesso risultato della semiminima di prima, salvo
    *  l'ultimo accordo, che riempie la misura invece di restare corto. */
   const [durataArmonia, setDurataArmonia] = useState('auto');
+  /** A cosa si applica la fila delle figure: a TUTTI gli accordi (la regola) o
+   *  solo all'ULTIMO scritto (la deroga). Erano due file separate e identiche;
+   *  la differenza fra loro non era mai stata nelle icone, ma nell'ambito. */
+  const [ambitoDurata, setAmbitoDurata] = useState<'tutti' | 'accordo'>('tutti');
   /** I due nomi di prima, ora ricavati: un solo comando, due letture. */
   const selectedDuration = durataArmonia;
   const harmonicRhythmBeats = DURATA_IN_MOVIMENTI[durataArmonia] ?? 0;
@@ -1032,25 +1036,55 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                       title={`Rivolto 7ª: ${inv}`}>{inv}</button>
                   ))}
                   <div className={sepCls} />
-                  {/* LA DEROGA SU UN ACCORDO. Le icone sono le stesse del comando
-                      generale — e questo, senza una scritta, le rendeva
-                      indistinguibili: due file di note uguali, e non si capisce
-                      quale valga per tutti e quale per l'ultimo. La differenza
-                      la fanno le parole, non l'aspetto. */}
-                  <span className={`text-[10px] whitespace-nowrap ml-0.5 ${derogaPossibile ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {t('chorale_this_chord')}
+                  {/* UNA FILA SOLA, e un interruttore che dice a COSA si applica.
+                      Erano due file di note identiche in due punti del pannello —
+                      una per tutti gli accordi, una per l'ultimo — e a vedersi non
+                      si distinguevano. La differenza fra loro non e' mai stata
+                      nelle icone: e' l'AMBITO, e ora l'ambito e' scritto. */}
+                  <span className="text-[10px] text-gray-400 whitespace-nowrap ml-0.5">
+                    {t('chorale_duration_scope')}
                   </span>
-                  {DURATION_OPTIONS.filter(d => d.value !== 'auto' && d.value !== 'sixteenth').map(d => {
+                  <div className="inline-flex rounded overflow-hidden border border-slate-600">
+                    {(['tutti', 'accordo'] as const).map(a => {
+                      // Con una voce presa dallo spartito il riquadro dei gradi non
+                      // e' in gioco: la deroga non avrebbe su cosa agire, e
+                      // l'ambito resta fermo su «tutti».
+                      const bloccato = vociDalloSpartito && a === 'accordo';
+                      return (
+                        <button key={a} onClick={() => setAmbitoDurata(a)}
+                          disabled={bloccato}
+                          title={bloccato ? t('chorale_duration_scope_locked') : undefined}
+                          className={`px-1.5 py-0.5 text-[10px] transition-colors ${bloccato
+                            ? 'bg-slate-800 text-gray-600 cursor-not-allowed'
+                            : ambitoDurata === a
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-700 text-gray-300 hover:bg-slate-600'}`}>
+                          {a === 'tutti' ? t('chorale_duration_scope_all') : t('chorale_duration_scope_one')}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {DURATION_OPTIONS.map(d => {
+                    const perAccordo = ambitoDurata === 'accordo' && !vociDalloSpartito;
                     const suff = SUFFISSO_DI_DURATA[d.value];
-                    if (!suff) return null;
-                    const acceso = durataDellUltimo === suff;
+                    const spento = perAccordo && !derogaPossibile;
+                    // «A» sull'ambito del singolo accordo vuol dire TOGLI la deroga:
+                    // quell'accordo torna alla durata generale.
+                    const acceso = perAccordo
+                      ? (d.value === 'auto' ? !durataDellUltimo : durataDellUltimo === suff)
+                      : durataArmonia === d.value;
+                    const agisci = () => {
+                      if (!perAccordo) { setDurataArmonia(d.value); setGeneratedNotes(null); return; }
+                      if (d.value === 'auto') { if (durataDellUltimo) applicaDurata(durataDellUltimo); return; }
+                      if (suff) applicaDurata(suff);
+                    };
                     return (
-                      <button key={`dur-${d.value}`} onClick={() => applicaDurata(suff)}
-                        disabled={!derogaPossibile}
-                        title={derogaPossibile
-                          ? `${d.label} — ${t('chorale_inline_duration_title')}`
-                          : t('chorale_inline_duration_needs_chord')}
-                        className={`px-1 py-0.5 rounded transition-colors ${!derogaPossibile
+                      <button key={`dur-${d.value}`} onClick={agisci}
+                        disabled={spento}
+                        title={spento
+                          ? t('chorale_inline_duration_needs_chord')
+                          : `${d.label} — ${perAccordo ? t('chorale_inline_duration_title') : t('chorale_harmony_duration_label')}`}
+                        className={`px-1 py-0.5 rounded transition-colors ${spento
                           ? 'bg-slate-800 text-gray-600 cursor-not-allowed'
                           : acceso
                             ? 'bg-blue-600 text-white'
@@ -1241,33 +1275,6 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 >
                   {[2, 4, 8].map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-300 mb-1">
-                {t('chorale_harmony_duration_label')}
-                <span className="ml-1 text-[10px] text-gray-500">
-                  — {vociDalloSpartito
-                       ? t('chorale_harmony_duration_hint_melody')
-                       : t('chorale_harmony_duration_hint_degrees')}
-                  {' '}({t('chorale_harmony_duration_all')})
-                </span>
-              </label>
-              <div className="flex gap-1">
-                {DURATION_OPTIONS.map(d => (
-                  <button
-                    key={d.value}
-                    title={d.label}
-                    onClick={() => { setDurataArmonia(d.value); setGeneratedNotes(null); }}
-                    className={`flex-1 flex items-center justify-center p-1.5 rounded border transition-colors ${
-                      durataArmonia === d.value
-                        ? 'bg-blue-600 border-blue-400 text-white'
-                        : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    <FiguraDurata base={d.base} punto={d.punto} className="h-5 w-5 shrink-0" />
-                  </button>
-                ))}
               </div>
             </div>
             <div>
