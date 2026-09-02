@@ -542,5 +542,6 @@
   "alt_menu_more": "More properties…",
   "chorale_harmony_duration_label": "Harmony duration",
   "chorale_harmony_duration_hint_degrees": "each chord lasts this",
-  "chorale_harmony_duration_hint_melody": "the harmony changes every"
+  "chorale_harmony_duration_hint_melody": "the harmony changes every",
+  "chorale_inline_duration_title": "duration of this chord (click again to remove)"
 }

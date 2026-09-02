@@ -517,5 +517,6 @@
   "alt_menu_more": "Altre proprietà…",
   "chorale_harmony_duration_label": "Durata dell'armonia",
   "chorale_harmony_duration_hint_degrees": "ogni accordo dura questo",
-  "chorale_harmony_duration_hint_melody": "l'armonia cambia ogni"
+  "chorale_harmony_duration_hint_melody": "l'armonia cambia ogni",
+  "chorale_inline_duration_title": "durata di questo accordo (di nuovo per toglierla)"
 }

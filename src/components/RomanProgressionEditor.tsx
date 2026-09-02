@@ -160,6 +160,11 @@ const INLINE_DURATION_SUFFIXES: Record<string, string> = {
   ':s': 'sixteenth',
 };
 
+/** Dal nome della durata al suffisso che si scrive nel testo (`V7:h`): serve a
+ *  far dire ai PULSANTI esattamente cio' che si scriverebbe a mano. */
+const SUFFISSO_DI_DURATA: Record<string, string> =
+  Object.fromEntries(Object.entries(INLINE_DURATION_SUFFIXES).map(([s, d]) => [d, s]));
+
 const DURATION_BEATS: Record<string, number> = {
   'whole': 4, 'dotted-half': 3, 'half': 2, 'dotted-quarter': 1.5, 'quarter': 1, 'eighth': 0.5, 'sixteenth': 0.25,
 };
@@ -928,6 +933,46 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 setGeneratedNotes(null); setViolations([]); setError(null);
               };
 
+              /**
+               * LA DURATA DI UN SINGOLO ACCORDO, a pulsante.
+               *
+               * L'eccezione si e' sempre potuta scrivere a mano (`V7:h`), ma
+               * bisognava sapere le lettere. Ora si fa come i rivolti, che in
+               * questa tavolozza si attaccano gia' all'ULTIMO accordo con un
+               * clic — ed e' la semantica giusta: «Durata dell'armonia» e' la
+               * regola, questa e' la deroga su QUELL'accordo.
+               *
+               * Cliccare due volte lo stesso valore lo TOGLIE: l'accordo torna
+               * alla durata generale, e non serve un pulsante apposta.
+               */
+              const applicaDurata = (suffisso: string) => {
+                setProgressionText(prev => {
+                  const t = prev.trim();
+                  if (!t) return t;
+                  const parts = t.split(/\s*[-,]\s*/);
+                  let last = parts[parts.length - 1];
+                  // Non su un segno di modulazione (`→G`) ne' su una dominante
+                  // secondaria a meta' (`V/`): li' non c'e' ancora un accordo a
+                  // cui dare una durata, e uscirebbe `→G:h`.
+                  if (/^[→>]/.test(last) || last.endsWith('/')) return prev;
+                  let vecchio = '';
+                  for (const s of Object.keys(INLINE_DURATION_SUFFIXES)) {
+                    if (last.endsWith(s)) { vecchio = s; last = last.slice(0, -s.length); break; }
+                  }
+                  parts[parts.length - 1] = (vecchio === suffisso) ? last : last + suffisso;
+                  return parts.join(' - ');
+                });
+                setGeneratedNotes(null); setViolations([]); setError(null);
+              };
+
+              /** Il valore gia' appeso all'ultimo accordo, per accendere il pulsante. */
+              const durataDellUltimo = (() => {
+                const parts = progressionText.trim().split(/\s*[-,]\s*/).filter(Boolean);
+                const last = parts[parts.length - 1] || '';
+                for (const s of Object.keys(INLINE_DURATION_SUFFIXES)) if (last.endsWith(s)) return s;
+                return '';
+              })();
+
               const removeLast = () => {
                 setProgressionText(prev => {
                   const parts = prev.trim().split(/\s*[-,]\s*/).filter(Boolean);
@@ -963,6 +1008,26 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                     <button key={inv} onClick={() => appendSuffix(inv)} className={btnCls}
                       title={`Rivolto 7ª: ${inv}`}>{inv}</button>
                   ))}
+                  <div className={sepCls} />
+                  {/* La durata di QUESTO accordo: le stesse icone del comando
+                      generale, cosi' la deroga si vede uguale alla regola. */}
+                  {DURATION_OPTIONS.filter(d => d.value !== 'auto' && d.value !== 'sixteenth').map(d => {
+                    const suff = SUFFISSO_DI_DURATA[d.value];
+                    if (!suff) return null;
+                    const acceso = durataDellUltimo === suff;
+                    return (
+                      <button key={`dur-${d.value}`} onClick={() => applicaDurata(suff)}
+                        title={`${d.label} — ${t('chorale_inline_duration_title')}`}
+                        className={`px-1 py-0.5 rounded transition-colors ${acceso
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600 hover:text-white'}`}>
+                        <svg width="11" height="20" viewBox="0 0 20 36" className="shrink-0">
+                          {NOTE_ICON_PATHS[d.base]}
+                          {d.punto && <circle cx="17.5" cy="20" r="1.6" fill="currentColor" />}
+                        </svg>
+                      </button>
+                    );
+                  })}
                   <div className={sepCls} />
                   <button onClick={() => {
                     setProgressionText(prev => {
