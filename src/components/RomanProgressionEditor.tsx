@@ -33,6 +33,9 @@ import {
   type StyleProfile,
 } from '../engine/choralStyleProfile';
 import defaultStyleProfileData from '../engine/defaultStyleProfile.json';
+import {
+  WholeNoteIcon, HalfNoteIcon, QuarterNoteIcon, EighthNoteIcon, SixteenthNoteIcon, DotIcon,
+} from './icons/NoteValueIcons';
 import { tonicaReale } from '../utils/relativeMinors';
 
 // ─── Props ─────────────────────────────────────────────────────────────────
@@ -83,38 +86,47 @@ const PRESETS: { labelKey: string; chords: string; minor?: boolean }[] = [
 
 // ─── Note-value SVG icons (viewBox 0 0 20 36) ─────────────────────────────
 
-const NOTE_ICON_PATHS: Record<string, React.ReactNode> = {
-  whole: (
-    <ellipse cx="10" cy="20" rx="7" ry="4.5" fill="none" stroke="currentColor" strokeWidth="1.8"
-      transform="rotate(-15 10 20)" />
-  ),
-  half: (<>
-    <ellipse cx="9" cy="23" rx="6" ry="4" fill="none" stroke="currentColor" strokeWidth="1.8"
-      transform="rotate(-20 9 23)" />
-    <line x1="15" y1="23" x2="15" y2="4" stroke="currentColor" strokeWidth="1.5" />
-  </>),
-  quarter: (<>
-    <ellipse cx="9" cy="23" rx="6" ry="4" fill="currentColor"
-      transform="rotate(-20 9 23)" />
-    <line x1="15" y1="23" x2="15" y2="4" stroke="currentColor" strokeWidth="1.5" />
-  </>),
-  eighth: (<>
-    <ellipse cx="9" cy="23" rx="6" ry="4" fill="currentColor"
-      transform="rotate(-20 9 23)" />
-    <line x1="15" y1="23" x2="15" y2="4" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M15 4 Q19 8 17 14" stroke="currentColor" strokeWidth="1.5" fill="none" />
-  </>),
-  sixteenth: (<>
-    <ellipse cx="9" cy="23" rx="6" ry="4" fill="currentColor"
-      transform="rotate(-20 9 23)" />
-    <line x1="15" y1="23" x2="15" y2="4" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M15 4 Q19 8 17 14" stroke="currentColor" strokeWidth="1.5" fill="none" />
-    <path d="M15 9 Q19 13 17 19" stroke="currentColor" strokeWidth="1.5" fill="none" />
-  </>),
-  auto: (
-    <text x="10" y="24" textAnchor="middle" fill="currentColor" fontSize="16" fontWeight="bold">A</text>
-  ),
+/**
+ * LE FIGURE, DALLA STESSA FONTE DEL RESTO DELL'APP.
+ *
+ * Qui c'era un secondo insieme di icone disegnato a mano (viewBox 20×36) mentre
+ * `icons/NoteValueIcons` esiste da sempre ed e' quello che usano la toolbar e
+ * la tavolozza delle dinamiche. Due disegni della stessa semibreve divergono
+ * appena uno dei due si ritocca — e chi guarda il pannello si chiede perche'
+ * le note del generatore non siano le note dell'editor.
+ *
+ * Il PUNTO e' la `DotIcon` condivisa, non un cerchietto scritto a mano. Nella
+ * toolbar il punto e' un pulsante a parte, perche' li' si costruisce una nota;
+ * qui e' fuso nella voce dell'elenco, perche' si sceglie una durata da una
+ * lista, e «minima puntata» e' una voce sola.
+ */
+const ICONA_DI_DURATA: Record<string, React.FC<{ className?: string }>> = {
+  whole: WholeNoteIcon,
+  half: HalfNoteIcon,
+  quarter: QuarterNoteIcon,
+  eighth: EighthNoteIcon,
+  sixteenth: SixteenthNoteIcon,
 };
+
+/** Una figura, col punto se le serve. `auto` non e' una durata: e' «a ogni
+ *  evento», e non ha una figura che la rappresenti. */
+const FiguraDurata: React.FC<{ base: string; punto?: boolean; className?: string }> =
+  ({ base, punto, className }) => {
+    if (base === 'auto') {
+      return <span className={`inline-flex items-center justify-center font-bold ${className ?? ''}`}>A</span>;
+    }
+    const Icona = ICONA_DI_DURATA[base];
+    if (!Icona) return null;
+    // Allineati in BASSO, non al centro: la testa della nota sta nella parte
+    // inferiore del riquadro (cy 24 su 32) mentre il punto della `DotIcon` sta
+    // in mezzo (cy 16). Centrandoli, il punto galleggerebbe sopra la testa.
+    return (
+      <span className="inline-flex items-end">
+        <Icona className={className} />
+        {punto && <DotIcon className="h-3 w-3 -ml-1 shrink-0" />}
+      </span>
+    );
+  };
 
 // ─── Duration mapping ──────────────────────────────────────────────────────
 
@@ -1043,10 +1055,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                           : acceso
                             ? 'bg-blue-600 text-white'
                             : 'bg-slate-700 text-gray-300 hover:bg-slate-600 hover:text-white'}`}>
-                        <svg width="13" height="22" viewBox="0 0 20 36" className="shrink-0">
-                          {NOTE_ICON_PATHS[d.base]}
-                          {d.punto && <circle cx="17.5" cy="20" r="1.6" fill="currentColor" />}
-                        </svg>
+                        <FiguraDurata base={d.base} punto={d.punto} className="h-4 w-4 shrink-0" />
                       </button>
                     );
                   })}
@@ -1256,12 +1265,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                         : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
                     }`}
                   >
-                    <svg width="16" height="28" viewBox="0 0 20 36" className="shrink-0">
-                      {NOTE_ICON_PATHS[d.base]}
-                      {/* Il punto: disegnato accanto alla testa, invece di sei
-                          icone nuove per due valori in piu'. */}
-                      {d.punto && <circle cx="17.5" cy="20" r="1.6" fill="currentColor" />}
-                    </svg>
+                    <FiguraDurata base={d.base} punto={d.punto} className="h-5 w-5 shrink-0" />
                   </button>
                 ))}
               </div>
