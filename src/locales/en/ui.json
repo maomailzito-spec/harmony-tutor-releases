@@ -148,7 +148,6 @@
   "chorale_mode_major": "Major",
   "chorale_mode_minor": "Minor",
   "chorale_meter_label": "Meter",
-  "chorale_note_value_label": "Note value",
   "chorale_voicing_label": "1st chord voicing",
   "chorale_voice_rules_label": "Voice rules",
   "chorale_double_root": "Double root",
@@ -469,7 +468,6 @@
   "rp_pick_progression": "Choose a progression…",
   "rp_save_fav": "Save the current progression to favourites",
   "rp_del_fav": "Remove this progression from favourites",
-  "rp_per_note": "Per note",
   "rp_clear_profile": "Clear the saved style profile",
   "rp_load_profile": "Load the style profile pre-computed from 46 repertoire pieces (Bach, Dubois, etc.)",
   "ts_write_tip": "Type it, or use the wheel or the ↑↓ arrows",
@@ -542,5 +540,7 @@
   "menu_group_override": "Manual override",
   "menu_group_layout": "Layout",
   "alt_menu_more": "More properties…",
-  "chorale_note_value_muted": "set by the harmonic rhythm"
+  "chorale_harmony_duration_label": "Harmony duration",
+  "chorale_harmony_duration_hint_degrees": "each chord lasts this",
+  "chorale_harmony_duration_hint_melody": "the harmony changes every"
 }

@@ -123,7 +123,6 @@
   "chorale_mode_major": "Maggiore",
   "chorale_mode_minor": "Minore",
   "chorale_meter_label": "Metro",
-  "chorale_note_value_label": "Valore nota",
   "chorale_voicing_label": "Disposiz. 1° acc.",
   "chorale_voice_rules_label": "Regole di voce",
   "chorale_double_root": "Raddoppia fondamentale",
@@ -444,7 +443,6 @@
   "rp_pick_progression": "Seleziona progressione…",
   "rp_save_fav": "Salva la progressione corrente nei preferiti",
   "rp_del_fav": "Elimina questa progressione dai preferiti",
-  "rp_per_note": "Per nota",
   "rp_clear_profile": "Cancella il profilo stilistico salvato",
   "rp_load_profile": "Carica il profilo stilistico pre-calcolato da 46 brani di repertorio (Bach, Dubois, ecc.)",
   "ts_write_tip": "Scrivi, oppure usa la rotella o le frecce ↑↓",
@@ -517,5 +515,7 @@
   "menu_group_override": "Sostituzione manuale",
   "menu_group_layout": "Impaginazione",
   "alt_menu_more": "Altre proprietà…",
-  "chorale_note_value_muted": "lo decide il ritmo armonico"
+  "chorale_harmony_duration_label": "Durata dell'armonia",
+  "chorale_harmony_duration_hint_degrees": "ogni accordo dura questo",
+  "chorale_harmony_duration_hint_melody": "l'armonia cambia ogni"
 }

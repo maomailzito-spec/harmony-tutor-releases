@@ -118,14 +118,37 @@ const NOTE_ICON_PATHS: Record<string, React.ReactNode> = {
 
 // ─── Duration mapping ──────────────────────────────────────────────────────
 
+/**
+ * QUANTO DURA UN'ARMONIA — un comando solo.
+ *
+ * Erano tre modi di dire la stessa cosa: «Valore nota» per i gradi scritti,
+ * «Ritmo armonico» per la melodia, e i suffissi inline nel testo. E i valori
+ * coincidevano gia': 0,5 · 1 · 2 · 4 movimenti SONO croma, semiminima, minima,
+ * semibreve. Ora la scelta e' una e vale per tutti e due i casi —
+ *
+ *   coi gradi scritti :  ogni accordo dura quel valore
+ *   con una melodia   :  l'armonia cambia ogni quel valore
+ *
+ * — e «ad ogni nota» e' lo stesso principio all'estremo: l'armonia cambia a
+ * ogni evento (ogni nota della melodia; ogni grado che si scrive).
+ *
+ * I suffissi inline restano, e non sono ridondanti: quelli sono l'ECCEZIONE su
+ * un singolo accordo, questo e' la regola. Ora parlano la stessa lingua.
+ */
 const DURATION_OPTIONS = [
-  { value: 'whole',     label: '𝅝 Semibreve',    beats: 4    },
-  { value: 'half',      label: '𝅗𝅥 Minima',       beats: 2    },
-  { value: 'quarter',   label: '♩ Semiminima',   beats: 1    },
-  { value: 'eighth',    label: '♪ Croma',        beats: 0.5  },
-  { value: 'sixteenth', label: '𝅘𝅥𝅯 Semicroma',   beats: 0.25 },
-  { value: 'auto',      label: '⏐ Auto (riempi misura)', beats: 0 },
+  { value: 'whole',          label: '𝅝 Semibreve',            beats: 4,    base: 'whole',   punto: false },
+  { value: 'dotted-half',    label: '𝅗𝅥. Minima puntata',      beats: 3,    base: 'half',    punto: true  },
+  { value: 'half',           label: '𝅗𝅥 Minima',               beats: 2,    base: 'half',    punto: false },
+  { value: 'dotted-quarter', label: '♩. Semiminima puntata',  beats: 1.5,  base: 'quarter', punto: true  },
+  { value: 'quarter',        label: '♩ Semiminima',           beats: 1,    base: 'quarter', punto: false },
+  { value: 'eighth',         label: '♪ Croma',                beats: 0.5,  base: 'eighth',  punto: false },
+  { value: 'sixteenth',      label: '𝅘𝅥𝅯 Semicroma',            beats: 0.25, base: 'sixteenth', punto: false },
+  { value: 'auto',           label: '⏐ Ad ogni nota',         beats: 0,    base: 'auto',    punto: false },
 ] as const;
+
+/** I movimenti che vale ciascuna scelta, per il ritmo armonico. */
+const DURATA_IN_MOVIMENTI: Record<string, number> =
+  Object.fromEntries(DURATION_OPTIONS.map(d => [d.value, d.beats]));
 
 const INLINE_DURATION_SUFFIXES: Record<string, string> = {
   ':w': 'whole',
@@ -356,7 +379,14 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   const [localTonic, setLocalTonic] = useState(() => tonicaReale(keySignatureRoot, isMinorMode));
   const [localMinor, setLocalMinor] = useState(isMinorMode);
   const [localTs, setLocalTs] = useState<TimeSignature>(timeSignature);
-  const [selectedDuration, setSelectedDuration] = useState('quarter');
+  /** LA DURATA DELL'ARMONIA, unica. Il valore predefinito e' «ad ogni nota»:
+   *  e' quello che il ritmo armonico aveva gia' (una nota, un accordo), e coi
+   *  gradi scritti da' lo stesso risultato della semiminima di prima, salvo
+   *  l'ultimo accordo, che riempie la misura invece di restare corto. */
+  const [durataArmonia, setDurataArmonia] = useState('auto');
+  /** I due nomi di prima, ora ricavati: un solo comando, due letture. */
+  const selectedDuration = durataArmonia;
+  const harmonicRhythmBeats = DURATA_IN_MOVIMENTI[durataArmonia] ?? 0;
   const [initialDisposition, setInitialDisposition] = useState<string>('auto');
 
   // Rules
@@ -379,7 +409,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
   // Melody constraint mode
   const [useMelody, setUseMelody] = useState(false);
   /** Harmonic rhythm: 0 = per note, 1 = per quarter, 2 = per half, 4 = per whole */
-  const [harmonicRhythmBeats, setHarmonicRhythmBeats] = useState(0);
+
 
   // Extract soprano notes (voice 1) from existing notes
   const sopranoFromScore = useMemo(() => {
@@ -1119,29 +1149,30 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             </div>
             <div>
               <label className="block text-xs text-gray-300 mb-1">
-                {t('chorale_note_value_label')}
-                {/* Muto quando l'armonia la detta una voce dello spartito: li' gli
-                    accordi stanno dove attaccano le note. Un comando che sembra
-                    attivo e non fa niente e' peggio di un comando spento. */}
-                {vociDalloSpartito && (
-                  <span className="ml-1 text-[10px] text-gray-500">— {t('chorale_note_value_muted')}</span>
-                )}
+                {t('chorale_harmony_duration_label')}
+                <span className="ml-1 text-[10px] text-gray-500">
+                  — {vociDalloSpartito
+                       ? t('chorale_harmony_duration_hint_melody')
+                       : t('chorale_harmony_duration_hint_degrees')}
+                </span>
               </label>
-              <div className={`flex gap-1 ${vociDalloSpartito ? 'opacity-40' : ''}`}>
+              <div className="flex gap-1">
                 {DURATION_OPTIONS.map(d => (
                   <button
                     key={d.value}
-                    title={vociDalloSpartito ? t('chorale_note_value_muted') : d.label}
-                    disabled={vociDalloSpartito}
-                    onClick={() => { setSelectedDuration(d.value); setGeneratedNotes(null); }}
+                    title={d.label}
+                    onClick={() => { setDurataArmonia(d.value); setGeneratedNotes(null); }}
                     className={`flex-1 flex items-center justify-center p-1.5 rounded border transition-colors ${
-                      selectedDuration === d.value
+                      durataArmonia === d.value
                         ? 'bg-blue-600 border-blue-400 text-white'
                         : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'
                     }`}
                   >
                     <svg width="16" height="28" viewBox="0 0 20 36" className="shrink-0">
-                      {NOTE_ICON_PATHS[d.value]}
+                      {NOTE_ICON_PATHS[d.base]}
+                      {/* Il punto: disegnato accanto alla testa, invece di sei
+                          icone nuove per due valori in piu'. */}
+                      {d.punto && <circle cx="17.5" cy="20" r="1.6" fill="currentColor" />}
                     </svg>
                   </button>
                 ))}
@@ -1234,18 +1265,16 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                     {' — '}il motore genererà solo Alto, Tenore e Basso.
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <label className="text-[10px] text-gray-400 whitespace-nowrap">Ritmo arm.:</label>
-                    <select
-                      value={harmonicRhythmBeats}
-                      onChange={e => { setHarmonicRhythmBeats(Number(e.target.value)); setGeneratedNotes(null); }}
-                      className="bg-gray-700 border border-gray-600 rounded px-1.5 py-0.5 text-[10px] text-white"
-                    >
-                      <option value={0}>{t('rp_per_note')}</option>
-                      <option value={0.5}>♪ Croma</option>
-                      <option value={1}>♩ Semiminima</option>
-                      <option value={2}>𝅗𝅥 Minima</option>
-                      <option value={4}>𝅝 Semibreve</option>
-                    </select>
+                    {/* Il ritmo armonico NON e' piu' un comando a parte: lo dice
+                        «Durata dell'armonia», che e' la stessa cosa detta una volta
+                        sola. Qui resta il promemoria di cosa e' scelto, dove serve
+                        leggerlo senza risalire il pannello. */}
+                    <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                      {t('chorale_harmony_duration_label')}:{' '}
+                      <span className="text-gray-200">
+                        {DURATION_OPTIONS.find(d => d.value === durataArmonia)?.label ?? ''}
+                      </span>
+                    </span>
                     <button
                       onClick={handleAutoHarmonize}
                       className="px-2 py-1 text-[10px] rounded bg-amber-600 hover:bg-amber-500 text-white font-semibold whitespace-nowrap"
