@@ -965,6 +965,17 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                 setGeneratedNotes(null); setViolations([]); setError(null);
               };
 
+              /** C'e' un accordo a cui la deroga possa applicarsi? Senza, il clic
+               *  sarebbe MUTO — ed e' il difetto peggiore: chi clicca non capisce
+               *  se ha sbagliato pulsante o se il pulsante e' rotto. Meglio
+               *  spento e visibile. */
+              const derogaPossibile = (() => {
+                const parts = progressionText.trim().split(/\s*[-,]\s*/).filter(Boolean);
+                const last = parts[parts.length - 1] || '';
+                if (!last) return false;
+                return !/^[→>]/.test(last) && !last.endsWith('/');
+              })();
+
               /** Il valore gia' appeso all'ultimo accordo, per accendere il pulsante. */
               const durataDellUltimo = (() => {
                 const parts = progressionText.trim().split(/\s*[-,]\s*/).filter(Boolean);
@@ -1009,19 +1020,30 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                       title={`Rivolto 7ª: ${inv}`}>{inv}</button>
                   ))}
                   <div className={sepCls} />
-                  {/* La durata di QUESTO accordo: le stesse icone del comando
-                      generale, cosi' la deroga si vede uguale alla regola. */}
+                  {/* LA DEROGA SU UN ACCORDO. Le icone sono le stesse del comando
+                      generale — e questo, senza una scritta, le rendeva
+                      indistinguibili: due file di note uguali, e non si capisce
+                      quale valga per tutti e quale per l'ultimo. La differenza
+                      la fanno le parole, non l'aspetto. */}
+                  <span className={`text-[10px] whitespace-nowrap ml-0.5 ${derogaPossibile ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {t('chorale_this_chord')}
+                  </span>
                   {DURATION_OPTIONS.filter(d => d.value !== 'auto' && d.value !== 'sixteenth').map(d => {
                     const suff = SUFFISSO_DI_DURATA[d.value];
                     if (!suff) return null;
                     const acceso = durataDellUltimo === suff;
                     return (
                       <button key={`dur-${d.value}`} onClick={() => applicaDurata(suff)}
-                        title={`${d.label} — ${t('chorale_inline_duration_title')}`}
-                        className={`px-1 py-0.5 rounded transition-colors ${acceso
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600 hover:text-white'}`}>
-                        <svg width="11" height="20" viewBox="0 0 20 36" className="shrink-0">
+                        disabled={!derogaPossibile}
+                        title={derogaPossibile
+                          ? `${d.label} — ${t('chorale_inline_duration_title')}`
+                          : t('chorale_inline_duration_needs_chord')}
+                        className={`px-1 py-0.5 rounded transition-colors ${!derogaPossibile
+                          ? 'bg-slate-800 text-gray-600 cursor-not-allowed'
+                          : acceso
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-700 text-gray-300 hover:bg-slate-600 hover:text-white'}`}>
+                        <svg width="13" height="22" viewBox="0 0 20 36" className="shrink-0">
                           {NOTE_ICON_PATHS[d.base]}
                           {d.punto && <circle cx="17.5" cy="20" r="1.6" fill="currentColor" />}
                         </svg>
@@ -1219,6 +1241,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
                   — {vociDalloSpartito
                        ? t('chorale_harmony_duration_hint_melody')
                        : t('chorale_harmony_duration_hint_degrees')}
+                  {' '}({t('chorale_harmony_duration_all')})
                 </span>
               </label>
               <div className="flex gap-1">
