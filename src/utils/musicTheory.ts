@@ -6907,6 +6907,24 @@ export function applyHarmonyRules(
 
                     if (!_passing7th && (unknownIn || leapIn || stepIn || prepared) && stepOut) {
                         (cur as any).isAppoggiatura = true;
+                        // IL NOME NON È IL MECCANISMO.
+                        //
+                        // `isAppoggiatura` fa due mestieri: da' un nome all'ornamento E dice
+                        // all'identificazione d'accordo di sostituirlo con la sua risoluzione
+                        // (`_appoggResolution`). Il secondo serve anche qui; il primo e'
+                        // SBAGLIATO quando la nota e' preparata, perche' un'appoggiatura per
+                        // definizione non lo e': `prepared` vuol dire che la precedente della
+                        // stessa voce e' la stessa altezza, cioe' una preparazione, cioe' un
+                        // RITARDO.
+                        //
+                        // Non si toglie `prepared` dalla condizione: provato, i casi scendono
+                        // da 126 a 52 ma la regressione va da 11 a 48 fallimenti, perche'
+                        // salta la sostituzione. Si segna e basta, e chi mostra la lettera
+                        // legge questo e scrive R invece di A.
+                        //
+                        // `detectSuspensions` gira DOPO e puo' ancora riconoscerlo come
+                        // ritardo vero: questa e' la rete per quando rinuncia.
+                        if (prepared) (cur as any).preparata = true;
                         // Store resolution note info so downstream chord-ID can
                         // substitute the ornament with its resolution pitch.
                         if (next && Number.isFinite(next.midi)) {
@@ -7274,7 +7292,24 @@ export function applyHarmonyRules(
             }
         };
 
-        const MIN_SUSP_DURATION = 1.0; // beats: S should last at least one beat
+        // QUANTO DEVE DURARE UN RITARDO — e perche' resta un quarto FISSO.
+        //
+        // E' la prima causa di ritardi non riconosciuti (33 casi su 122 misurati
+        // sul corpus): meta' dei ritardi preparati dura meno di un quarto, e la
+        // soglia e' assoluta mentre il movimento non lo e' — in 6/8 il valore
+        // che porta l'ornamento e' la croma.
+        //
+        // PROVATO A LEGARLA AL METRO (`min(1, 4/denominatore)`, che allenta e
+        // basta): i ritardi riconosciuti salgono da 785 a 798, ma la regressione
+        // va da 11 a 15 fallimenti, e i quattro nuovi sono TUTTI in 3/8 e 6/8 —
+        // cioe' proprio dove la soglia si allentava. Guardati: su «Delamont C68
+        // 2b» il grado `ii` con le cifre `9 7` SPARISCE e resta un'etichetta
+        // vuota. Riconoscere piu' ritardi toglie quelle note dall'insieme
+        // strutturale, e l'accordo non si identifica piu'.
+        //
+        // Quindi non e' la soglia da sola: prima va reso robusto cio' che
+        // identifica l'accordo quando un ritardo gli porta via una nota.
+        const MIN_SUSP_DURATION = 1.0; // movimenti da un quarto
         const MAX_RESOLUTION_WINDOW = 4.0; // beats: search for resolution within this window
         const ORNAMENT_DUR = 0.5; // notes shorter than this may be ornaments
 

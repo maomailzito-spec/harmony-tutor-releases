@@ -224,6 +224,8 @@ export function computeHarmonyLabelsBySystemCore(_in: HarmonyLabelsInput): any[]
                     if (src.isPassing) pn.isPassing = true;
                     if (src.isNeighbor) pn.isNeighbor = true;
                     if (src.isAppoggiatura) pn.isAppoggiatura = true;
+            // Serve a chi sceglie la LETTERA: un'appoggiatura preparata e' un ritardo.
+            if (src.preparata) pn.preparata = true;
                     if (src.isAnticipation) pn.isAnticipation = true;
                     if (src.isEscape) pn.isEscape = true;
                     if (src.isCambiata) pn.isCambiata = true;

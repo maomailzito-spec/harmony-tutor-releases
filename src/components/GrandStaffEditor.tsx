@@ -22301,7 +22301,13 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                             );
                                                                             if (isTrueSuspensionOnset || n?.ornamentOverride === 'suspension') return 'R';
                                                                             if (n?.isCambiata || n?.ornamentOverride === 'cambiata') return 'C';
-                                                                            if (n?.isAppoggiatura || n?.ornamentOverride === 'appoggiatura') return 'A';
+                                                                            // UN'APPOGGIATURA PREPARATA E' UN RITARDO, e va detto col suo
+                                // nome. La bandiera arriva da `detectOrnaments`: la nota prima,
+                                // nella stessa voce, era la stessa altezza. Un marchio messo A
+                                // MANO dall'utente vince comunque, com'e' giusto.
+                                if (n?.isAppoggiatura && (n as any)?.preparata
+                                    && n?.ornamentOverride !== 'appoggiatura') return 'R';
+                                if (n?.isAppoggiatura || n?.ornamentOverride === 'appoggiatura') return 'A';
                                                                             if (n?.isAnticipation || n?.ornamentOverride === 'anticipation') return 'Ant';
                                                                             if (n?.isEscape || n?.ornamentOverride === 'escape') return 'S';
                                                                             if (n?.isPassing || n?.ornamentOverride === 'passing') return 'P';
