@@ -649,7 +649,8 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
         const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
         const vincoliInterni: SopranoConstraint[] = innerFromScore
           .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
-          .map(n => ({ midi: n.midi, measure: (n.measureIndex ?? 0) - insertMeasure, beat: n.beat ?? 1 }));
+          .map(n => ({ midi: n.midi, measure: (n.measureIndex ?? 0) - insertMeasure, beat: n.beat ?? 1,
+                       corona: !!(n as any).isFermata }));
         progression = autoHarmonize(vincoliInterni, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
       }
       if (progression.length === 0 && ((useMelody && sopranoFromScore.length > 0) || (useBass && bassFromScore.length > 0))) {
@@ -676,6 +677,9 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             midi: n.midi,
             measure: n.measureIndex ?? 0,
             beat: n.beat ?? 1,
+            // La CORONA dice al generatore dove finisce una frase, e quindi dove
+            // l'armonia deve posarsi. Senza, quel punto lo puo' solo indovinare.
+            corona: !!(n as any).isFermata,
           }));
           // Se c'è ANCHE il basso, entra nella SCELTA dell'armonia e non solo nella
           // scrittura: è la voce che dice pure il rivolto.

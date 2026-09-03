@@ -177,6 +177,14 @@ export type SopranoConstraint = {
   midi: number;
   measure: number;
   beat: number;
+  /** La CORONA su questa nota: dice che li' finisce una frase.
+   *
+   *  E' l'unico modo affidabile per saperlo. Le corone il modello le prevede da
+   *  sempre e nessun brano del corpus ne ha; i segnali dedotti sbagliano troppo
+   *  — la nota lunga di soprano individua un punto dove gli autori chiudono
+   *  davvero solo nel 42,4% dei casi (`scripts/dove-finisce-una-frase.ts`). Chi
+   *  scrive la musica sa dove finisce una frase; il generatore no. */
+  corona?: boolean;
 };
 
 /** A single SATB voicing (MIDI values). */
@@ -3621,6 +3629,9 @@ const NOTA_INSPIEGATA = 8;
 /** Un gruppo di melodia da armonizzare: le classi d'altezza che ci suonano sopra, e dove sta. */
 type GruppoMelodia = {
   pcs: number[]; measure: number; beat: number; sopranoMidi?: number;
+  /** Qui finisce una frase (c'e' una corona): l'armonia deve POSARSI, con le
+   *  stesse regole della chiusura finale. */
+  chiudeFrase?: boolean;
   /** Le note VERE del gruppo, in ordine e parallele a `pcs`. Per decidere se una
    *  nota che l'accordo non contiene sia di passaggio o sbagliata non basta la
    *  classe d'altezza: serve sapere da dove si arriva e dove si va. */
@@ -3763,8 +3774,14 @@ function scegliProgressioneDellaFrase(args: {
           //
           // Se il divieto non lasciasse nessuna posa cade da se': c'e' gia' il
           // ripiego in fondo al ciclo. Un modello PROPONE, non impone.
-          if (i === n - 1 && inv !== 0) continue;
-          if (i === n - 2 && sc.gradoDiatonico === 4 && inv !== 0) continue;
+          // La fine del brano e' una chiusura certa. Una CORONA dice che lo e'
+          // anche quel punto — e lo dice chi la musica la scrive, che e' l'unica
+          // fonte attendibile qui: dedurre le fini di frase dalla durata
+          // sbaglia piu' di meta' delle volte.
+          const chiude = (i === n - 1) || !!gruppi[i].chiudeFrase;
+          const primaDiChiusura = (i === n - 2) || !!gruppi[i + 1]?.chiudeFrase;
+          if (chiude && inv !== 0) continue;
+          if (primaDiChiusura && sc.gradoDiatonico === 4 && inv !== 0) continue;
         // IL BASSO DATO NON È UNA PREFERENZA. Se c'è, l'accordo deve contenerlo E averlo
         // proprio al basso: il rivolto è già la scelta di quale nota ci va. Senza questo
         // filtro il basso veniva ignorato nella scelta dell'armonia e poi imposto nella
@@ -4309,6 +4326,8 @@ export function autoHarmonize(
   // ── Group melody notes by harmonic rhythm slots ─────────────────────
   type MelodyGroup = {
     pcs: number[]; measure: number; beat: number; sopranoMidi?: number;
+    /** Qui finisce una frase (c'e' una corona). */
+    chiudeFrase?: boolean;
     /** Le note vere del gruppo, parallele a `pcs`: le legge `quantoSiSpiega`
      *  per capire se una nota scoperta sia di passaggio o sbagliata. */
     note?: { midi: number; measure: number; beat: number }[];
@@ -4369,6 +4388,7 @@ export function autoHarmonize(
       const gr = groupMap.get(slotIndex)!;
       gr.pcs.push(((m.midi % 12) + 12) % 12);
       gr.note!.push({ midi: m.midi, measure: m.measure, beat: m.beat });
+      if (m.corona) gr.chiudeFrase = true;
       if (gr.sopranoMidi == null) gr.sopranoMidi = m.midi;
     }
     groups = [...groupMap.values()]
@@ -4383,6 +4403,7 @@ export function autoHarmonize(
       // sapere se sale o scende, e una classe d'altezza non lo dice.
       sopranoMidi: m.midi,
       note: [{ midi: m.midi, measure: m.measure, beat: m.beat }],
+      chiudeFrase: !!m.corona,
     }));
   }
 
