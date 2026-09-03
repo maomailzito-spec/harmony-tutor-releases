@@ -17,6 +17,7 @@ import {
   applyHarmonyRules, getActiveNotesTimeline, getKeySignature, getRomanAnalysis,
 } from '../src/utils/musicTheory';
 import { autoHarmonize, type SopranoConstraint } from '../src/engine/choralRealization';
+import { giudicaCadenza } from '../src/engine/cadenze';
 
 const REL_MIN: Record<string, string> = {
   C: 'A', G: 'E', D: 'B', A: 'F#', E: 'C#', B: 'G#', 'F#': 'D#',
@@ -27,7 +28,7 @@ const nudo = (r: string) => String(r).replace(/\s+/g, '');
 const strutturale = (n: any) => n && !n.isRest
   && !n.isPassing && !n.isNeighbor && !n.isAnticipation && !n.isAppoggiatura && !n.isEscape;
 
-let uguali = 0, diverse = 0, ultimoUguale = 0;
+let uguali = 0, diverse = 0, ultimoUguale = 0, buoneA = 0, buoneG = 0;
 for (const f of process.argv.slice(2)) {
   let d: any;
   try { d = JSON.parse(readFileSync(f, 'utf8')); } catch { continue; }
@@ -66,7 +67,14 @@ for (const f of process.argv.slice(2)) {
   const ok = cA === cG;
   if (ok) uguali++; else diverse++;
   if (autore.length && gen.length && autore[autore.length - 1] === gen[gen.length - 1]) ultimoUguale++;
-  console.log(`${(f.split('/').pop() || '').padEnd(28)} autore ${cA.padEnd(16)} generatore ${cG.padEnd(16)} ${ok ? '=' : '≠'}`);
+  // IL GIUDIZIO, che e' un'altra cosa dalla somiglianza: non «uguale
+  // all'autore» ma «la formula c'e' ed e' completa».
+  const gA = giudicaCadenza(autore), gG = giudicaCadenza(gen);
+  if (gA.benFormata) buoneA++; if (gG.benFormata) buoneG++;
+  console.log(`${(f.split('/').pop() || '').padEnd(26)}`
+    + ` autore ${cA.padEnd(14)} ${(gA.specie + (gA.benFormata ? ' ✓' : ' ✗')).padEnd(13)}`
+    + ` | generatore ${cG.padEnd(14)} ${(gG.specie + (gG.benFormata ? ' ✓' : ' ✗'))}`);
 }
 console.log(`\ncadenza finale (ultime tre armonie) uguale all'autore: ${uguali} su ${uguali + diverse}`);
-console.log(`ultimo accordo uguale: ${ultimoUguale} su ${uguali + diverse}\n`);
+console.log(`ultimo accordo uguale: ${ultimoUguale} su ${uguali + diverse}`);
+console.log(`\nCADENZE BEN FORMATE   autori: ${buoneA} su ${uguali + diverse}   generatore: ${buoneG} su ${uguali + diverse}\n`);
