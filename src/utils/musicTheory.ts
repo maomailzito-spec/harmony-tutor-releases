@@ -5202,7 +5202,10 @@ export function applyHarmonyRules(
 ): HarmonyAnalysisResult {
     const DEBUG_ANALYSIS = (() => {
         try {
-            return String(((import.meta as any)?.env?.VITE_ANALYSIS_DEBUG ?? '')).trim() === '1';
+            if (String(((import.meta as any)?.env?.VITE_ANALYSIS_DEBUG ?? '')).trim() === '1') return true;
+        } catch { /* fuori da Vite */ }
+        try {
+            return String(((globalThis as any)?.process?.env?.VITE_ANALYSIS_DEBUG ?? '')).trim() === '1';
         } catch {
             return false;
         }
