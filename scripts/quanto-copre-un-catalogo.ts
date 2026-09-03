@@ -114,7 +114,28 @@ function misura(progressioni: string[][]) {
     console.log(`── successioni di ${L} gradi ──  ${totale} occorrenze, ${ordinati.length} motivi diversi`);
     console.log(`   i primi 10 coprono ${pc(copre(10))}   i primi 20 ${pc(copre(20))}   i primi 50 ${pc(copre(50))}`);
     console.log(`   visti UNA volta sola: ${(100 * ordinati.filter(([, v]) => v === 1).length / ordinati.length).toFixed(0)}% dei motivi`);
-    console.log(`   i piu' frequenti: ${ordinati.slice(0, 6).map(([k, v]) => `${k} ×${v}`).join('   ')}\n`);
+    console.log(`   i piu' frequenti: ${ordinati.slice(0, 6).map(([k, v]) => `${k} ×${v}`).join('   ')}`);
+
+    // LE ROTAZIONI SONO LO STESSO MODELLO. Contando a finestra scorrevole, un
+    // unico ciclo `T–S–D–T` produce anche `S–D–T–S` e `D–T–S–D`: sono lo stesso
+    // percorso visto da tre punti di partenza. Raccogliendole, si vede quanti
+    // modelli DISTINTI ci sono davvero — che e' il numero che conta per capire
+    // se un catalogo va scritto o si estrae.
+    const canonica = (k: string) => {
+      const parti = k.split('–');
+      let best = k;
+      for (let r = 1; r < parti.length; r++) {
+        const g = parti.slice(r).concat(parti.slice(0, r)).join('–');
+        if (g < best) best = g;
+      }
+      return best;
+    };
+    const classi = new Map<string, number>();
+    for (const [k, v] of ordinati) classi.set(canonica(k), (classi.get(canonica(k)) || 0) + v);
+    const cl = [...classi.entries()].sort((a, b) => b[1] - a[1]);
+    const copreCl = (n2: number) => cl.slice(0, n2).reduce((s, [, v]) => s + v, 0);
+    console.log(`   a meno di rotazione: ${cl.length} modelli distinti — i primi 5 coprono ${pc(copreCl(5))}, i primi 10 ${pc(copreCl(10))}`);
+    console.log(`   ${cl.slice(0, 5).map(([k, v]) => `${k} ×${v}`).join('   ')}\n`);
   }
 }
 
