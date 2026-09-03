@@ -25,7 +25,7 @@ function main() {
   const dir = path.resolve(__dirname, '..', 'tests');
   const files = fs.readdirSync(dir).filter(f => /\.(json|htp)$/.test(f)).sort();
 
-  let brani = 0, appogg = 0, preparate = 0, ritardi = 0, conLegatura = 0, senzaLegatura = 0, bandiera = 0;
+  let brani = 0, appogg = 0, preparate = 0, ritardi = 0, conLegatura = 0, senzaLegatura = 0, bandiera = 0, ritardoLegato = 0, ritardoRibattuto = 0;
   const perDurata: Record<string, number> = {};
   const esempi: string[] = [];
 
@@ -61,7 +61,19 @@ function main() {
       linea.sort((a, b) => ((a.measureIndex ?? 0) - (b.measureIndex ?? 0)) || ((a.beat ?? 1) - (b.beat ?? 1)));
       for (let i = 0; i < linea.length; i++) {
         const n = linea[i];
-        if (n.isSuspension) ritardi++;
+        if (n.isSuspension) {
+          ritardi++;
+          // LA DEROGA DEL RILEVATORE: accetta come ritardo anche una nota
+          // RIBATTUTA sul cambio d'armonia (`reattackSamePitchAtChange`), col
+          // commento che negli esercizi le legature si omettono spesso. Qui si
+          // conta quanto capita, perche' e' una convenzione didattica e chi
+          // insegna deve poterla decidere sui numeri.
+          const pr = linea[i - 1];
+          if (pr && pr.midi === n.midi) {
+            if (pr.isTiedToNext || n.isTiedFromPrev) ritardoLegato++;
+            else ritardoRibattuto++;
+          }
+        }
         if ((n as any).preparata && n.isAppoggiatura) bandiera++;
         if (!n.isAppoggiatura) continue;
         appogg++;
@@ -89,7 +101,10 @@ function main() {
   console.log(`     di cui LEGATE (ritardo vero, va detto R): ${conLegatura}`);
   console.log(`     di cui RIBATTUTE (appoggiatura, resta A):  ${senzaLegatura}`);
   console.log(`     la lettera che CAMBIA da A a R:            ${bandiera}`);
-  console.log(`note marcate ritardo      : ${ritardi}\n`);
+  console.log(`note marcate ritardo      : ${ritardi}`);
+  console.log(`  di quelli con la stessa altezza prima:`);
+  console.log(`     LEGATI (ritardo in senso stretto):        ${ritardoLegato}`);
+  console.log(`     RIBATTUTI (la deroga del rilevatore):     ${ritardoRibattuto}   ${pc(ritardoRibattuto, ritardoLegato + ritardoRibattuto)}\n`);
   console.log('le preparate, per durata:');
   for (const [k, v] of Object.entries(perDurata).sort((a, b) => b[1] - a[1])) {
     console.log(`   ${k.padEnd(28)} ${String(v).padStart(5)}   ${pc(v, preparate)}`);
