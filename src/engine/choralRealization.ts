@@ -3778,6 +3778,14 @@ function scegliProgressioneDellaFrase(args: {
           // anche quel punto — e lo dice chi la musica la scrive, che e' l'unica
           // fonte attendibile qui: dedurre le fini di frase dalla durata
           // sbaglia piu' di meta' delle volte.
+          // UN BRANO NON SI APRE SU UNA QUARTA E SESTA. Il 6/4 e' instabile per
+          // definizione: e' una figura di CADENZA — prepara la dominante e si
+          // risolve — non un punto di partenza. Misurato: il generatore apriva
+          // con `I6/4` due volte su sette. E' lo stesso principio della regola
+          // gia' qui sopra, per cui una tonicizzazione non apre un brano:
+          // certi accordi PROMETTONO, e una promessa non si mette all'inizio.
+          if (i === 0 && inv === 2) continue;
+
           const chiude = (i === n - 1) || !!gruppi[i].chiudeFrase;
           const primaDiChiusura = (i === n - 2) || !!gruppi[i + 1]?.chiudeFrase;
           if (chiude && inv !== 0) continue;
