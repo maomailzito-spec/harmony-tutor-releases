@@ -6924,7 +6924,16 @@ export function applyHarmonyRules(
                         //
                         // `detectSuspensions` gira DOPO e puo' ancora riconoscerlo come
                         // ritardo vero: questa e' la rete per quando rinuncia.
-                        if (prepared) (cur as any).preparata = true;
+                        //
+                        // SERVE LA LEGATURA, non basta la stessa altezza prima. Il ritardo e'
+                        // TENUTO attraverso il cambio d'armonia; se la nota viene RIBATTUTA la
+                        // dissonanza e' ARTICOLATA, e allora e' appoggiatura. Prova a mano:
+                        // togliendo la legatura si deve vedere A, rimettendola R.
+                        //
+                        // Misurato: delle 126 preparate solo 18 sono legate. Senza questo
+                        // controllo si scriveva R su 108 appoggiature vere.
+                        const _legata = !!(prev as any)?.isTiedToNext || !!(cur as any)?.isTiedFromPrev;
+                        if (prepared && _legata) (cur as any).preparata = true;
                         // Store resolution note info so downstream chord-ID can
                         // substitute the ornament with its resolution pitch.
                         if (next && Number.isFinite(next.midi)) {

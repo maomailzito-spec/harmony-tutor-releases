@@ -25,7 +25,7 @@ function main() {
   const dir = path.resolve(__dirname, '..', 'tests');
   const files = fs.readdirSync(dir).filter(f => /\.(json|htp)$/.test(f)).sort();
 
-  let brani = 0, appogg = 0, preparate = 0, ritardi = 0;
+  let brani = 0, appogg = 0, preparate = 0, ritardi = 0, conLegatura = 0, senzaLegatura = 0, bandiera = 0;
   const perDurata: Record<string, number> = {};
   const esempi: string[] = [];
 
@@ -62,12 +62,15 @@ function main() {
       for (let i = 0; i < linea.length; i++) {
         const n = linea[i];
         if (n.isSuspension) ritardi++;
+        if ((n as any).preparata && n.isAppoggiatura) bandiera++;
         if (!n.isAppoggiatura) continue;
         appogg++;
         const prima = linea[i - 1];
         // PREPARATA: la precedente della stessa voce e' la stessa altezza.
         if (!prima || prima.midi !== n.midi) continue;
         preparate++;
+        const legata = !!prima.isTiedToNext || !!n.isTiedFromPrev;
+        if (legata) conLegatura++; else senzaLegatura++;
         const dv = durataDi(n);
         const chiave = dv < 1 ? `sotto il movimento (${dv})` : `${dv} movimenti`;
         perDurata[chiave] = (perDurata[chiave] || 0) + 1;
@@ -83,6 +86,9 @@ function main() {
   console.log(`\n${brani} brani letti\n`);
   console.log(`note marcate APPOGGIATURA : ${appogg}`);
   console.log(`  di cui PREPARATE (la precedente della stessa voce e' la stessa altezza): ${preparate}  ${pc(preparate, appogg)}`);
+  console.log(`     di cui LEGATE (ritardo vero, va detto R): ${conLegatura}`);
+  console.log(`     di cui RIBATTUTE (appoggiatura, resta A):  ${senzaLegatura}`);
+  console.log(`     la lettera che CAMBIA da A a R:            ${bandiera}`);
   console.log(`note marcate ritardo      : ${ritardi}\n`);
   console.log('le preparate, per durata:');
   for (const [k, v] of Object.entries(perDurata).sort((a, b) => b[1] - a[1])) {
