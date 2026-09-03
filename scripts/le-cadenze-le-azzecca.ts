@@ -29,6 +29,7 @@ const strutturale = (n: any) => n && !n.isRest
   && !n.isPassing && !n.isNeighbor && !n.isAnticipation && !n.isAppoggiatura && !n.isEscape;
 
 let uguali = 0, diverse = 0, ultimoUguale = 0, buoneA = 0, buoneG = 0;
+let metaA = 0, metaG = 0, metaViste = 0;
 for (const f of process.argv.slice(2)) {
   let d: any;
   try { d = JSON.parse(readFileSync(f, 'utf8')); } catch { continue; }
@@ -45,6 +46,7 @@ for (const f of process.argv.slice(2)) {
     (d.harmonyOverrides || []).length ? d.harmonyOverrides : undefined);
   const linea = getActiveNotesTimeline(res.analyzedNotes || d.notes, ts, d.timeSignatureChanges || []);
   const autore: string[] = [];
+  const autoreMis: number[] = [];
   let prec = '';
   for (const ev of (linea || [])) {
     const st = (ev.notes as any[]).filter(strutturale);
@@ -52,7 +54,11 @@ for (const f of process.argv.slice(2)) {
     const ra = getRomanAnalysis(st as any, tonica, minore);
     if (!ra?.roman) continue;
     const g = nudo(ra.roman);
-    if (g && g !== prec) { autore.push(g); prec = g; }
+    if (g && g !== prec) {
+      autore.push(g);
+      autoreMis.push(Math.floor((ev.absBeat ?? 0) / bpm));
+      prec = g;
+    }
   }
 
   const sop = (res.analyzedNotes || d.notes)
@@ -60,7 +66,9 @@ for (const f of process.argv.slice(2)) {
     .sort((a: any, b: any) => ((a.measureIndex ?? 0) - (b.measureIndex ?? 0)) || ((a.beat ?? 1) - (b.beat ?? 1)));
   const v: SopranoConstraint[] = sop.map((n: any) => ({
     midi: n.midi, measure: n.measureIndex ?? 0, beat: n.beat ?? 1, pitch: n.pitch }));
-  const gen = autoHarmonize(v, tonica, minore, Number(process.env.RITMO || 0) || 0, bpm).map(c => nudo(c.roman));
+  const progGen = autoHarmonize(v, tonica, minore, Number(process.env.RITMO || 0) || 0, bpm);
+  const gen = progGen.map(c => nudo(c.roman));
+  const genMis = progGen.map(c => c.measure ?? 0);
 
   const cA = autore.slice(-3).join('–') || '—';
   const cG = gen.slice(-3).join('–') || '—';
@@ -71,10 +79,29 @@ for (const f of process.argv.slice(2)) {
   // all'autore» ma «la formula c'e' ed e' completa».
   const gA = giudicaCadenza(autore), gG = giudicaCadenza(gen);
   if (gA.benFormata) buoneA++; if (gG.benFormata) buoneG++;
+
+  // LA SEMICADENZA DI META'. Il generatore divide il brano in antecedente e
+  // conseguente a meta' delle battute: si taglia con la stessa regola, cosi'
+  // si giudica il punto che LUI considera una chiusura.
+  const ultimaMis = Math.max(...genMis, ...autoreMis, 0);
+  if (ultimaMis + 1 >= 6) {
+    const mezzo = (ultimaMis + 1) / 2;
+    const tagliaA = autore.filter((_, k) => autoreMis[k] < mezzo);
+    const tagliaG = gen.filter((_, k) => genMis[k] < mezzo);
+    if (tagliaA.length >= 2 && tagliaG.length >= 2) {
+      metaViste++;
+      const mA = giudicaCadenza(tagliaA), mG = giudicaCadenza(tagliaG);
+      if (mA.benFormata) metaA++; if (mG.benFormata) metaG++;
+      console.log(`${''.padEnd(26)} a meta' ${tagliaA.slice(-3).join('–').padEnd(13)}`
+        + ` ${(mA.specie + (mA.benFormata ? ' ✓' : ' ✗')).padEnd(13)}`
+        + ` | ${''.padEnd(11)}${tagliaG.slice(-3).join('–').padEnd(14)} ${(mG.specie + (mG.benFormata ? ' ✓' : ' ✗'))}`);
+    }
+  }
   console.log(`${(f.split('/').pop() || '').padEnd(26)}`
     + ` autore ${cA.padEnd(14)} ${(gA.specie + (gA.benFormata ? ' ✓' : ' ✗')).padEnd(13)}`
     + ` | generatore ${cG.padEnd(14)} ${(gG.specie + (gG.benFormata ? ' ✓' : ' ✗'))}`);
 }
 console.log(`\ncadenza finale (ultime tre armonie) uguale all'autore: ${uguali} su ${uguali + diverse}`);
 console.log(`ultimo accordo uguale: ${ultimoUguale} su ${uguali + diverse}`);
-console.log(`\nCADENZE BEN FORMATE   autori: ${buoneA} su ${uguali + diverse}   generatore: ${buoneG} su ${uguali + diverse}\n`);
+console.log(`\nCADENZE FINALI ben formate   autori: ${buoneA} su ${uguali + diverse}   generatore: ${buoneG} su ${uguali + diverse}`);
+console.log(`SEMICADENZE  ben formate     autori: ${metaA} su ${metaViste}   generatore: ${metaG} su ${metaViste}\n`);
