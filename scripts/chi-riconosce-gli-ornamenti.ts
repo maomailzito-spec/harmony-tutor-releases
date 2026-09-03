@@ -32,13 +32,21 @@ function ornamentalePerIlGeneratore(prima: any, qui: any, dopo: any, pcsAccordo?
   if (!prima || !qui || !dopo) return false;
   const entra = qui.midi - prima.midi;
   const esce = dopo.midi - qui.midi;
-  const perGrado = Math.abs(entra) >= 1 && Math.abs(entra) <= 2
-                && Math.abs(esce) >= 1 && Math.abs(esce) <= 2;
-  if (!perGrado) return false;
-  if (pcsAccordo) {
-    const dentro = (m: number) => pcsAccordo.includes(((m % 12) + 12) % 12);
-    if (!dentro(prima.midi) || !dentro(dopo.midi)) return false;
+  const risolvePerGrado = Math.abs(esce) >= 1 && Math.abs(esce) <= 2;
+  // SULL'ACCENTO conta la sola risoluzione: e' un'appoggiatura, cioe' un
+  // ritardo non preparato, e come ci si arrivi non fa parte della definizione.
+  const b = Number(qui.beat) || 1;
+  const sullAccento = Math.abs(b - Math.round(b)) < 0.01 && (b === 1 || b === 3);
+  if (sullAccento) {
+    if (!risolvePerGrado) return false;
+    if (pcsAccordo && !pcsAccordo.includes(((dopo.midi % 12) + 12) % 12)) return false;
+    return true;
   }
+  const perGrado = Math.abs(entra) >= 1 && Math.abs(entra) <= 2 && risolvePerGrado;
+  if (!perGrado) return false;
+  const dentro = (m: number) => !pcsAccordo || pcsAccordo.includes(((m % 12) + 12) % 12);
+  if (pcsAccordo && !dentro(prima.midi)) return false;
+  if (pcsAccordo && !dentro(dopo.midi)) return false;
   const diPassaggio = (entra > 0) === (esce > 0);
   const diVolta = dopo.midi === prima.midi;
   return diPassaggio || diVolta;

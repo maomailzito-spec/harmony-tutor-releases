@@ -3554,10 +3554,29 @@ function scontoDellaQuartaSesta(forzaQui: number, gradoQui: number, gradoDopo: n
   return 0;
 }
 
-/** Quanto si spiega un'appoggiatura, cioe' un'estranea sull'ATTACCO dell'armonia.
- *  Meno di 1 perche' e' figura piu' impegnativa di una nota di passaggio in
- *  mezzo al tempo: ammessa, non gratuita. */
-const APPOGGIATURA_SI_SPIEGA = 0.6;
+/**
+ * QUANTO SI SCUSA UN'APPOGGIATURA, cioe' un'estranea sull'accento.
+ *
+ * Il criterio per RICONOSCERLA e' quello giusto (vedi `quantoSiSpiega`): conta
+ * la risoluzione per grado, non come ci si arriva. Ma riconoscerla non basta a
+ * saperla SCRIVERE: il generatore non ha modo di garantire che sia ben formata
+ * — la giusta dissonanza sul basso, nessuno scontro con le altre voci — e
+ * finche' non ce l'ha, concedersela costa.
+ *
+ * Misurato (sei corali di Bach, ritmo di minima), al crescere della licenza:
+ *
+ *     peso    errori    e cosa cresce
+ *      0        29      —
+ *      0,2      31      —
+ *      0,35     38      R-18 scontri cromatici, R-17c tritoni irrisolti
+ *      0,5      41      idem, peggio
+ *
+ * Non e' il checker che fraintende un'appoggiatura legittima: sono guasti veri.
+ * Scegliendo un accordo che NON contiene la nota dell'accento, il realizzatore
+ * ci scrive sotto voci che la contraddicono. Peso basso: la figura resta
+ * possibile ma rara, com'e' giusto finche' non la si sa costruire.
+ */
+const APPOGGIATURA_SI_SPIEGA = 0.2;
 
 /**
  * L'ALTALENA: due accordi che si scambiano il posto quattro volte (`I-V-I-V`).
@@ -3683,38 +3702,39 @@ function scegliProgressioneDellaFrase(args: {
   const quantoSiSpiega = (k: number, apreIlGruppo: boolean, pcsAccordo: number[], ultimaDelGruppo: boolean): number => {
     const qui = piatta[k];
     const prima = piatta[k - 1], dopo = piatta[k + 1];
-    // Senza un prima e un dopo non si giudica: la prima e l'ultima nota di un
-    // brano non si possono spiegare come ornamento, vanno rette.
-    if (!qui || !prima || !dopo) return 0;
-    const entra = qui.midi - prima.midi;
-    const esce = dopo.midi - qui.midi;
-    const perGrado = Math.abs(entra) >= 1 && Math.abs(entra) <= 2
-                  && Math.abs(esce) >= 1 && Math.abs(esce) <= 2;
-    if (!perGrado) return 0;                  // ci si arriva o se ne esce per salto
-
-    // UN ORNAMENTO COLLEGA DUE NOTE DELL'ACCORDO. E' la definizione, e finora
-    // non era scritta da nessuna parte: si guardava solo la LINEA — grado
-    // congiunto in entrata e in uscita — senza mai chiedersi rispetto a quale
-    // armonia. Cosi' qualunque scala diventava una fila di ornamenti: misurato
-    // contro l'analisi dell'applicazione, il generatore dichiarava ornamentale
-    // il 40,8% delle note di melodia contro l'8,6% vero, e l'87,5% di quelle
-    // che dichiarava erano note d'accordo.
-    //
-    // Da dove si PARTE dev'essere nota di QUESTO accordo. Dove si ARRIVA pure,
-    // salvo quando la nota chiude il gruppo: li' il seguito appartiene gia'
-    // all'armonia dopo, ed e' giusto che ci appartenga.
+    // Il DOPO serve sempre: e' la risoluzione, e senza non si giudica niente.
+    if (!qui || !dopo) return 0;
     const dentro = (m: number) => pcsAccordo.includes(((m % 12) + 12) % 12);
-    if (!dentro(prima.midi)) return 0;
-    if (!ultimaDelGruppo && !dentro(dopo.midi)) return 0;
+    const esce = dopo.midi - qui.midi;
+    const risolvePerGrado = Math.abs(esce) >= 1 && Math.abs(esce) <= 2;
 
-    const diPassaggio = (entra > 0) === (esce > 0);   // stessa direzione
-    const diVolta = dopo.midi === prima.midi;         // torna da dov'era venuta
     if (apreIlGruppo) {
-      // Sull'ATTACCO dell'armonia l'unica estranea che regge e' l'appoggiatura:
-      // e' ammessa, ma e' una figura piu' impegnativa di una nota di passaggio
-      // in mezzo al tempo, e non deve costare come niente.
+      // APPOGGIATURA — cioe' un ritardo NON PREPARATO: sta sull'accento, non e'
+      // nota d'accordo, e risolve per grado su una nota che lo e'.
+      //
+      // COME CI SI ARRIVA NON CONTA, ed e' il punto che avevo sbagliato: avevo
+      // scritto che l'appoggiatura «si prende per salto», scambiando una
+      // tendenza per la definizione. Misurato sulle 175 che l'analisi trova nel
+      // repertorio: entrata per grado 49,1%, per salto 32,6%, stessa nota
+      // 18,3% — sparpagliata. Quello che non varia e' l'USCITA: per grado nel
+      // 95,4% dei casi. Il tratto che definisce e' la risoluzione.
+      //
+      // Chiedere il grado congiunto anche in ENTRATA, com'era prima, escludeva
+      // meta' delle appoggiature vere.
+      if (!risolvePerGrado) return 0;
+      if (!ultimaDelGruppo && !dentro(dopo.midi)) return 0;
       return APPOGGIATURA_SI_SPIEGA;
     }
+
+    // PASSAGGIO e VOLTA: qui il grado congiunto serve da tutte e due le parti,
+    // perche' sono figure che COLLEGANO — e collegano due note dell'accordo.
+    if (!prima) return 0;
+    const entra = qui.midi - prima.midi;
+    if (Math.abs(entra) < 1 || Math.abs(entra) > 2 || !risolvePerGrado) return 0;
+    if (!dentro(prima.midi)) return 0;
+    if (!ultimaDelGruppo && !dentro(dopo.midi)) return 0;
+    const diPassaggio = (entra > 0) === (esce > 0);   // stessa direzione
+    const diVolta = dopo.midi === prima.midi;         // torna da dov'era venuta
     return (diPassaggio || diVolta) ? 1 : 0;
   };
 
