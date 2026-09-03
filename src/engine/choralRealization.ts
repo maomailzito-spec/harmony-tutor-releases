@@ -3559,6 +3559,25 @@ function scontoDellaQuartaSesta(forzaQui: number, gradoQui: number, gradoDopo: n
  *  mezzo al tempo: ammessa, non gratuita. */
 const APPOGGIATURA_SI_SPIEGA = 0.6;
 
+/**
+ * L'ALTALENA: due accordi che si scambiano il posto quattro volte (`I-V-I-V`).
+ *
+ * Ogni singolo passaggio e' idiomatico — anzi, `I|V → I` e' la successione di
+ * tre accordi PIU' attestata del corpus — ma l'insieme e' morto. E' il «quinto
+ * grado ribattuto per quattro battute» che l'utente ha sentito sul Delachi.
+ *
+ * Per questo NON si cura coi trigrammi, e non e' un'ipotesi: un trigramma vede
+ * tre accordi e l'altalena ne vuole quattro, e per giunta premierebbe proprio
+ * `I-V-I` e `V-I-V`. E' una regola — l'armonia deve ANDARE AVANTI — non una
+ * statistica.
+ *
+ * Che sia un difetto vero e' misurato, non supposto: su nove brani il
+ * generatore altalena nel 18,0% dei suoi accordi contro il 3,8% degli autori.
+ * (Le retrocessioni invece NON vanno toccate: ne fa gia' meno degli autori,
+ * 7,2% contro 11,5%.)
+ */
+const ALTALENA = 4;
+
 /** Quanto costa una nota che l'accordo non regge e che non si spiega. Prima
  *  costava solo il premio mancato (fino a 5/n); cosi' e' un addebito vero.
  *
@@ -3830,7 +3849,25 @@ function scegliProgressioneDellaFrase(args: {
         if (prec >= INFINITO) continue;
         const t = costoDiPassaggio(i, prima[j], pose[k]);
         if (t >= INFINITO) continue;
-        const tot = prec + t + posa;
+        // L'ALTALENA si vede solo guardando QUATTRO accordi, e questa ricerca e'
+        // del primo ordine: sa solo qual e' il precedente. Si risale allora il
+        // cammino migliore che entra in (i-1, j) usando i puntatori all'indietro,
+        // che per le righe gia' chiuse sono definitivi. E' l'approssimazione
+        // consueta per un termine di secondo ordine: non garantisce l'ottimo, ma
+        // non costa niente e non tocca la struttura.
+        let castigo = 0;
+        if (i >= 3) {
+          const j2 = daDove[i - 1][j];
+          if (j2 >= 0) {
+            const j3 = daDove[i - 2][j2];
+            if (j3 >= 0
+                && posePerGruppo[i - 2][j2]?.acc === pose[k].acc
+                && posePerGruppo[i - 3][j3]?.acc === prima[j].acc) {
+              castigo = ALTALENA;
+            }
+          }
+        }
+        const tot = prec + t + posa + castigo;
         if (tot < riga[k]) { riga[k] = tot; via[k] = j; }
       }
     }

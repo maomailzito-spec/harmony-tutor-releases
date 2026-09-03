@@ -15,7 +15,7 @@
  *   npx tsx scripts/banco-corali.ts  "<file.htp>"  [altri.htp …]
  */
 import { readFileSync } from 'fs';
-import { applyHarmonyRules, getKeySignature } from '../src/utils/musicTheory';
+import { applyHarmonyRules, getActiveNotesTimeline, getKeySignature, getRomanAnalysis } from '../src/utils/musicTheory';
 import { autoHarmonize, realizeChorale, contiVeto, azzeraContiVeto, type SopranoConstraint, type ChoralConfig } from '../src/engine/choralRealization';
 import { bonusTransizione } from '../src/engine/corpusProgressione';
 
@@ -67,12 +67,53 @@ const V: Record<number, string> = { 1: 'S', 2: 'A', 3: 'T', 4: 'B' };
  * generatore le armonizzava con accordi di Sol minore. Ne uscivano 58 errori e trentuno
  * scontri cromatici che il generatore non aveva nessuna colpa di aver scritto.
  */
+/** Dalla tonica minore alla radice MAGGIORE relativa: serve all'armatura, che
+ *  `getKeySignature` vuole sempre in maggiore. */
+const RELATIVE_MAGGIORI: Record<string, string> = {
+  A: 'C', E: 'G', B: 'D', 'F#': 'A', 'C#': 'E', 'G#': 'B', 'D#': 'F#',
+  D: 'F', G: 'Bb', C: 'Eb', F: 'Ab', Bb: 'Db', Eb: 'Gb',
+};
+
 const RELATIVE_MINORI: Record<string, string> = {
   'C': 'A', 'G': 'E', 'D': 'B', 'A': 'F#', 'E': 'C#', 'B': 'G#', 'F#': 'D#', 'C#': 'A#',
   'F': 'D', 'Bb': 'G', 'Eb': 'C', 'Ab': 'F', 'Db': 'Bb', 'Gb': 'Eb', 'Cb': 'Ab',
 };
 
 type Esito = { errori: number; avvisi: number; perRegola: Record<string, number>; dettaglio: string[] };
+
+/**
+ * LA PROGRESSIONE COM'E' SCRITTA DALL'AUTORE.
+ *
+ * Senza, «altalene» e «retrocessioni» sono numeri senza termine di paragone:
+ * 55 altalene e' tanto, o e' quanto ne fa Bach? Si e' scoperto misurandolo che
+ * il generatore altalena CINQUE VOLTE piu' degli autori ma retrocede MENO —
+ * cioe' uno dei due numeri andava spinto giu' e l'altro no, e a occhio si
+ * sarebbe curato quello sbagliato.
+ */
+function progressioneDAutore(note: any[], tonica: string, minore: boolean, ts: any,
+                             cambiMetro: any[], contesti: any[],
+                             ornamenti: any[] | undefined, armonie: any[] | undefined): string[] {
+  try {
+    const res: any = applyHarmonyRules(
+      note, getKeySignature(minore ? RELATIVE_MAGGIORI[tonica] || tonica : tonica, 'Major') as any,
+      tonica, minore, contesti || [], ts, undefined, ornamenti, armonie,
+    );
+    const linea = getActiveNotesTimeline(res.analyzedNotes || note, ts, cambiMetro || []);
+    const strutturale = (x: any) => x && !x.isRest
+      && !x.isPassing && !x.isNeighbor && !x.isAnticipation && !x.isAppoggiatura && !x.isEscape;
+    const gradi: string[] = [];
+    let prec = '';
+    for (const ev of (linea || [])) {
+      const st = (ev.notes as any[]).filter(strutturale);
+      if (st.length < 2) continue;
+      const ra = getRomanAnalysis(st as any, tonica, minore);
+      if (!ra?.roman) continue;
+      const g = String(ra.roman).replace(/\s+/g, '').replace(/[0-9]+$/, '');
+      if (g && g !== prec) { gradi.push(g); prec = g; }
+    }
+    return gradi;
+  } catch { return []; }
+}
 
 function controlla(note: any[], tonica: string, minore: boolean, ts: any): Esito {
   const ks = getKeySignature(tonica, minore ? 'Minor' : 'Major');
@@ -91,6 +132,7 @@ function controlla(note: any[], tonica: string, minore: boolean, ts: any): Esito
 }
 
 let totOrig = 0, totGen = 0, totAlt = 0, totRetro = 0;
+let totAltA = 0, totRetroA = 0, totAccG = 0, totAccA = 0;
 for (const f of process.argv.slice(2)) {
   const d = JSON.parse(readFileSync(f, 'utf8'));
   const note = (d.notes || []).filter((n: any) => !n.isRest);
@@ -127,6 +169,14 @@ for (const f of process.argv.slice(2)) {
   const generato = realizeChorale(progressione, config);
   const p = piattezza(progressione, minore);
   totAlt += p.altalena; totRetro += p.retro;
+  // Lo stesso metro sulla progressione D'AUTORE: e' il paragone che mancava.
+  const gradiAutore = progressioneDAutore(note, tonica, minore, ts,
+    d.timeSignatureChanges || [], d.analysisContexts || [],
+    (d.ornamentOverrides || []).length ? d.ornamentOverrides : undefined,
+    (d.harmonyOverrides || []).length ? d.harmonyOverrides : undefined);
+  const pa = piattezza(gradiAutore.map(g => ({ roman: g })) as any, minore);
+  totAltA += pa.altalena; totRetroA += pa.retro;
+  totAccG += progressione.length; totAccA += gradiAutore.length;
   const vetoDelBrano = { ...contiVeto, perRegola: { ...contiVeto.perRegola } };
   const noteGen = (generato.notes || []).filter((n: any) => !n.isRest);
 
@@ -149,7 +199,8 @@ for (const f of process.argv.slice(2)) {
   if (solo.length) console.log('   in piu\' rispetto all\'originale: ' + solo.map(([r, n2]) => `${r}+${n2}`).join('  '));
   // Il veto ha lavorato? E' una domanda diversa da «il risultato e' migliore»: se i conti
   // sono a zero il problema non e' la severita' del checker, e' che non lo stiamo chiamando.
-  console.log(`   condotta: ${p.altalena} altalene, ${p.retro} retrocessioni, ${p.vocabolario} gradi diversi`);
+  console.log(`   condotta: ${p.altalena} altalene, ${p.retro} retrocessioni, ${p.vocabolario} gradi diversi`
+            + `   (l'autore: ${pa.altalena} / ${pa.retro} / ${pa.vocabolario} su ${gradiAutore.length} accordi)`);
   console.log(`   veto: ${vetoDelBrano.controllati} controlli, ${vetoDelBrano.fermati} respinti` +
     (vetoDelBrano.fermati ? ` → ${vetoDelBrano.risolti} risolti, ${vetoDelBrano.migliorati} attenuati` +
       `${vetoDelBrano.passiIndietro ? `, ${vetoDelBrano.passiIndietro} passi indietro` : ''}` +
@@ -159,4 +210,7 @@ for (const f of process.argv.slice(2)) {
 }
 console.log(`\n${'═'.repeat(74)}`);
 console.log(`TOTALE   originali: ${totOrig} errori   ·   generatore: ${totGen} errori`);
-console.log(`CONDOTTA generatore: ${totAlt} altalene   ·   ${totRetro} retrocessioni`);
+const perc = (a: number, b: number) => b ? (100 * a / b).toFixed(1) + '%' : '—';
+console.log(`CONDOTTA                accordi   altalene           retrocessioni`);
+console.log(`  generatore     ${String(totAccG).padStart(11)}   ${(totAlt + ' (' + perc(totAlt, totAccG) + ')').padEnd(18)} ${totRetroA >= 0 ? (totRetro + ' (' + perc(totRetro, totAccG) + ')') : ''}`);
+console.log(`  autori         ${String(totAccA).padStart(11)}   ${(totAltA + ' (' + perc(totAltA, totAccA) + ')').padEnd(18)} ${totRetroA + ' (' + perc(totRetroA, totAccA) + ')'}`);
