@@ -3680,7 +3680,7 @@ function scegliProgressioneDellaFrase(args: {
 
   /** Quanto una nota estranea si spiega da se': 1 = del tutto, 0 = per niente
    *  (allora e' una nota sbagliata, e deve costare). */
-  const quantoSiSpiega = (k: number, apreIlGruppo: boolean): number => {
+  const quantoSiSpiega = (k: number, apreIlGruppo: boolean, pcsAccordo: number[], ultimaDelGruppo: boolean): number => {
     const qui = piatta[k];
     const prima = piatta[k - 1], dopo = piatta[k + 1];
     // Senza un prima e un dopo non si giudica: la prima e l'ultima nota di un
@@ -3691,6 +3691,22 @@ function scegliProgressioneDellaFrase(args: {
     const perGrado = Math.abs(entra) >= 1 && Math.abs(entra) <= 2
                   && Math.abs(esce) >= 1 && Math.abs(esce) <= 2;
     if (!perGrado) return 0;                  // ci si arriva o se ne esce per salto
+
+    // UN ORNAMENTO COLLEGA DUE NOTE DELL'ACCORDO. E' la definizione, e finora
+    // non era scritta da nessuna parte: si guardava solo la LINEA — grado
+    // congiunto in entrata e in uscita — senza mai chiedersi rispetto a quale
+    // armonia. Cosi' qualunque scala diventava una fila di ornamenti: misurato
+    // contro l'analisi dell'applicazione, il generatore dichiarava ornamentale
+    // il 40,8% delle note di melodia contro l'8,6% vero, e l'87,5% di quelle
+    // che dichiarava erano note d'accordo.
+    //
+    // Da dove si PARTE dev'essere nota di QUESTO accordo. Dove si ARRIVA pure,
+    // salvo quando la nota chiude il gruppo: li' il seguito appartiene gia'
+    // all'armonia dopo, ed e' giusto che ci appartenga.
+    const dentro = (m: number) => pcsAccordo.includes(((m % 12) + 12) % 12);
+    if (!dentro(prima.midi)) return 0;
+    if (!ultimaDelGruppo && !dentro(dopo.midi)) return 0;
+
     const diPassaggio = (entra > 0) === (esce > 0);   // stessa direzione
     const diVolta = dopo.midi === prima.midi;         // torna da dov'era venuta
     if (apreIlGruppo) {
@@ -3760,7 +3776,7 @@ function scegliProgressioneDellaFrase(args: {
       for (let j = 0; j < noteDelGruppo.length; j++) {
         const pc = ((noteDelGruppo[j].midi % 12) + 12) % 12;
         if (sc.pcs.includes(pc)) continue;
-        spiegate += quantoSiSpiega(base + j, j === 0);
+        spiegate += quantoSiSpiega(base + j, j === 0, sc.pcs, j === noteDelGruppo.length - 1);
       }
     }
     const retto = coperte + spiegate;
