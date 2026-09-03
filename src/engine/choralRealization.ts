@@ -3750,6 +3750,21 @@ function scegliProgressioneDellaFrase(args: {
       // Una tonicizzazione non apre un brano e non lo chiude: è un accordo che PROMETTE.
       if (sc.bersaglio >= 0 && (i === 0 || i === n - 1)) continue;
       for (const inv of sc.rivolti) {
+          // ── LA CADENZA SI POSA. ────────────────────────────────────────────
+          // Misurato sulle cadenze finali: il generatore sa DOVE arrivare
+          // (ultimo accordo giusto 7 volte su 9) ma non COME — tre volte ci
+          // arriva con una dominante RIVOLTATA, `I–V6/5–I`, che chiude senza
+          // posarsi perche' il basso non fa il salto di quinta.
+          //
+          // Il difetto e' il RIVOLTO, non il grado: si vieta quello e basta,
+          // senza imporre QUALE cadenza fare. Cosi' restano possibili la
+          // plagale, la d'inganno e la sospesa — che sono cadenze anche loro,
+          // e imporre `V→I` le avrebbe cancellate.
+          //
+          // Se il divieto non lasciasse nessuna posa cade da se': c'e' gia' il
+          // ripiego in fondo al ciclo. Un modello PROPONE, non impone.
+          if (i === n - 1 && inv !== 0) continue;
+          if (i === n - 2 && sc.gradoDiatonico === 4 && inv !== 0) continue;
         // IL BASSO DATO NON È UNA PREFERENZA. Se c'è, l'accordo deve contenerlo E averlo
         // proprio al basso: il rivolto è già la scelta di quale nota ci va. Senza questo
         // filtro il basso veniva ignorato nella scelta dell'armonia e poi imposto nella
