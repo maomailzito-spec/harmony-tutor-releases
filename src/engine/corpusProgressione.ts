@@ -46,6 +46,7 @@
 import statsJson from '../data/progressionStatsByMode.json';
 import melodiaJson from '../data/armoniaSottoMelodia.json';
 import bassoJson from '../data/armoniaSottoIlBasso.json';
+import contestoJson from '../data/armoniaNelContesto.json';
 
 type MappaBigrammi = { [da: string]: { [a: string]: number } };
 type PerModo = {
@@ -634,4 +635,43 @@ export function pesoSottoIlBasso(
     const suo = tav[nomeCorpus] ?? 0;
     const media = totale / conti.length;
     return fiducia(totale) * ((suo - media) / massimo) * 10;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHE ARMONIA, SAPENDO ANCHE COSA C'E' INTORNO
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * La terza tavola, e la prima che guarda oltre la nota singola: al grado di
+ * melodia aggiunge la FUNZIONE dell'accordo prima e di quello dopo.
+ *
+ * Serve a un difetto preciso, visto dall'utente su una generazione: sotto un Si
+ * (secondo grado) fra due toniche il generatore metteva `ii` dove l'autore
+ * scrive `vii°` — cioe' `I–ii–I` invece di `I–V–I`, senza cogliere la funzione
+ * di dominante. E non e' che sbagliasse: non aveva modo di saperlo, perche'
+ * tutti i suoi pesi guardano la nota e mai il contesto.
+ *
+ *     sapendo la sola nota (2° grado, forte)   V 38%   ii 30%
+ *     sapendo di stare FRA DUE TONICHE          V 74%   ii 17%
+ *
+ * Il contesto quadruplica il rapporto. Su 150 contesti abbastanza popolati, la
+ * prima scelta vale in media il 49%, e in 44 di essi almeno il 60%.
+ *
+ * NB serve conoscere anche l'accordo DOPO, che il cammino minimo non sa quando
+ * sceglie: questa tavola si legge in una RILETTURA, a progressione fatta.
+ */
+export function nelContesto(
+    isMinor: boolean,
+    semitoniDallaTonica: number,
+    funzionePrima: string,
+    funzioneDopo: string,
+): Record<string, number> | null {
+    const grado = NOME_GRADO_MELODIA[((semitoniDallaTonica % 12) + 12) % 12];
+    const k = `${isMinor ? 'min' : 'MAG'}|${grado}|${funzionePrima}|${funzioneDopo}`;
+    const tav = (contestoJson as any)?.tav?.[k];
+    if (!tav) return null;
+    const totale = Object.values(tav).reduce((a: number, b: any) => a + Number(b), 0) as number;
+    if (totale < 12) return null;
+    const fuori: Record<string, number> = {};
+    for (const [nome, conto] of Object.entries(tav)) fuori[nome] = Number(conto) / totale;
+    return fuori;
 }

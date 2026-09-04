@@ -20,7 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
-import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio, pesoSottoLaMelodia, pesoSottoIlBasso } from './corpusProgressione';
+import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio, pesoSottoLaMelodia, pesoSottoIlBasso, nelContesto } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -3731,10 +3731,10 @@ function scegliProgressioneDellaFrase(args: {
   curaLaCondotta: boolean;
   /** Il costo scritto a mano fra due gradi, per quando il corpus è spento. */
   transizione: (da: number, a: number, forteArrivo: boolean) => number;
-}): Posa[] {
+}): { scelte: Posa[]; pose: Posa[][] } {
   const { gruppi, schede, forze, chiusure, transizione, curaLaCondotta, tonicaPc, minore, daBasso } = args;
   const n = gruppi.length;
-  if (n === 0) return [];
+  if (n === 0) return { scelte: [], pose: [] };
 
   const bassoDi = (p: Posa) => 48 + schede[p.acc].pcs[p.inv % schede[p.acc].pcs.length];
   const chiusures = (i: number) => chiusure[i] ?? null;
@@ -4064,7 +4064,10 @@ function scegliProgressioneDellaFrase(args: {
     k = daDove[i][k];
     if (k < 0 && i > 0) k = 0;
   }
-  return fuori;
+  // Si restituiscono anche le POSE AMMESSE: la rilettura nel contesto deve
+  // poter cambiare un accordo solo con uno che era gia' ammesso li' — cioe' che
+  // regge la melodia e rispetta i vincoli di basso, cadenza e apertura.
+  return { scelte: fuori, pose: posePerGruppo };
 }
 
 // ─── Auto-Harmonization ────────────────────────────────────────────────────
@@ -4601,10 +4604,62 @@ export function autoHarmonize(
       }
     }
 
-    const scelte = scegliProgressioneDellaFrase({
+    const { scelte, pose: posePerGruppoScelte } = scegliProgressioneDellaFrase({
       gruppi: groups, schede, forze, chiusure: chiusureDeiGruppi, curaLaCondotta, transizione,
       tonicaPc: tonicPc, minore: isMinor, daBasso: !!opts?.daBasso,
     });
+    // ── LA RILETTURA NEL CONTESTO ─────────────────────────────────────────
+    // Il cammino minimo sceglie sapendo la nota e l'accordo PRECEDENTE. Non sa
+    // cosa verra' dopo, e certe scelte si giudicano solo di li': sotto un
+    // secondo grado FRA DUE TONICHE il repertorio mette la dominante nel 74%
+    // dei casi e il `ii` nel 17%, mentre sapendo la sola nota sono 38% e 30%.
+    // E' il caso che l'utente ha visto sul Delachi — `I–ii–I` invece di
+    // `I–V–I`: non un errore di calcolo, una domanda che nessuno faceva.
+    //
+    // Si rilegge a progressione fatta, come il RIPASSO fa con le disposizioni.
+    // CONSERVATIVA per costruzione, che e' la lezione del ripasso (innescare
+    // sulle licenze rompeva musica pulita): si cambia solo se il contesto e'
+    // abbastanza popolato, se l'alternativa e' NETTAMENTE piu' attesa, e se
+    // quell'accordo era gia' fra le pose ammesse — cioe' regge la melodia e
+    // rispetta i vincoli di cadenza e di basso.
+    // NON col basso dato: li' `sopranoMidi` porta la nota di BASSO, e questa
+    // tavola e' condizionata al grado di MELODIA. Interrogarla con la nota
+    // sbagliata portava gli errori del basso dato da 65 a 81 — misurato.
+    // Servirebbe la tavola gemella condizionata al basso; per ora il basso
+    // dato ha gia' una prima scelta molto piu' sicura (57,3% contro 43,1%) e
+    // di questa rilettura ha meno bisogno.
+    if (usaCorpus && totalGroups >= 3 && !opts?.daBasso) {
+      const FN: Record<number, string> = {};
+      for (let g = 0; g < 7; g++) FN[g] = g === 0 || g === 5 || g === 2 ? 'T' : (g === 3 || g === 1 ? 'S' : 'D');
+      const funzioneDi = (acc: number): string => {
+        const s = schede[acc];
+        if (s.bersaglio >= 0) return 'D/';
+        return FN[s.gradoDiatonico] ?? '?';
+      };
+      for (let i = 1; i < totalGroups - 1; i++) {
+        const sopMidi = groups[i].sopranoMidi;
+        if (sopMidi == null || tonicPc == null) continue;
+        const grado = (((sopMidi % 12) + 12) % 12 - tonicPc + 12) % 12;
+        const atteso = nelContesto(isMinor, grado, funzioneDi(scelte[i - 1].acc), funzioneDi(scelte[i + 1].acc));
+        if (!atteso) continue;
+        const nomeOra = schede[scelte[i].acc].nomeCorpus;
+        const quotaOra = (nomeOra && atteso[nomeOra]) || 0;
+        // Il migliore FRA QUELLI CHE ERANO AMMESSI in quel punto.
+        let miglioreAcc = -1, miglioreQuota = 0;
+        for (const p of posePerGruppoScelte[i]) {
+          const nome = schede[p.acc].nomeCorpus;
+          const q = (nome && atteso[nome]) || 0;
+          if (q > miglioreQuota) { miglioreQuota = q; miglioreAcc = p.acc; }
+        }
+        // NETTAMENTE piu' atteso: almeno la meta' dei casi, e almeno il doppio
+        // di quello scelto. Sotto questa soglia si lascia stare.
+        if (miglioreAcc < 0 || miglioreAcc === scelte[i].acc) continue;
+        if (miglioreQuota < 0.5 || miglioreQuota < quotaOra * 2) continue;
+        const rivolto = posePerGruppoScelte[i].find(p => p.acc === miglioreAcc);
+        if (rivolto) scelte[i] = { acc: miglioreAcc, inv: rivolto.inv };
+      }
+    }
+
     for (let i = 0; i < totalGroups; i++) {
       const { acc, inv } = scelte[i];
       const ex = datiExtra(acc);
