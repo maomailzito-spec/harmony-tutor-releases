@@ -4285,12 +4285,29 @@ function shouldUseSeventh(
   isFirst: boolean,
   isLast: boolean,
   nextDeg: number,
-  isMinor: boolean
+  isMinor: boolean,
+  /** L'accordo sta su un tempo FORTE.
+   *
+   *  E' il fattore piu' forte che il corpus abbia su questa scelta, e finora
+   *  questa funzione non lo guardava affatto. Misurato sui brani d'autore:
+   *
+   *      settima sul tempo forte    17%
+   *      settima sul tempo debole   38%
+   *
+   *  e il generatore ne metteva il 34,4% sul FORTE contro il 10,0% degli
+   *  autori sugli stessi brani — piu' di tre volte. La settima sul battere
+   *  irrigidisce: l'accordo che porta l'accento deve poggiare, non pendere. */
+  forte = false,
 ): boolean {
   // Last chord: never add seventh (needs stability)
   if (isLast) return false;
   // First chord: only add seventh on V (dominant preparation rare but okay)
   if (isFirst && deg !== 4) return false;
+
+  // SUL BATTERE SI E' PARSIMONIOSI. Non un divieto — la dominante col
+  // settimo grado sul battere esiste — ma il resto no: gli autori la settima
+  // sull'accento la mettono nel 17% dei casi, e quasi mai fuori da V e vii°.
+  if (forte && deg !== 4 && deg !== 6) return false;
 
   // V → always use seventh (V7 is the most idiomatic seventh chord)
   if (deg === 4) return true;
@@ -4689,6 +4706,7 @@ export function autoHarmonize(
         i === 0, i === totalGroups - 1,
         i + 1 < totalGroups ? (datiExtra(scelte[i + 1].acc) ? -1 : scelte[i + 1].acc) : -1,
         isMinor,
+        forze[i] >= 0.5,
       );
       const invUsato = Math.min(inv, useSeventh ? 3 : 2);
       result.push({
