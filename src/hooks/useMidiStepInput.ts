@@ -13,11 +13,19 @@ import { useEffect, useRef, useCallback, useState } from 'react';
  * avanza la playhead — e un accordo di quattro note diventava una MELODIA di
  * quattro note nella stessa voce.
  *
- * LA FINESTRA si sente: sotto i 30 ms un accordo suonato non proprio insieme si
- * spezza in due; sopra i 100 si avverte il ritardo fra il tasto e la nota che
- * compare. Cinquanta e' il compromesso consueto.
+ * LA FINESTRA, e qual e' il limite VERO. Il ritardo fra il tasto e la nota che
+ * compare non conta: questo e' inserimento a PASSI, non una registrazione —
+ * nessuno sta suonando a tempo, e cio' che conta e' che le note entrino giuste.
+ * Quindi il limite non e' di sopra ma di sotto: se la finestra fosse stretta,
+ * un accordo suonato con la mano non perfettamente insieme si spezzerebbe in
+ * due inserimenti, che e' l'errore vero.
+ *
+ * Il vincolo dall'altra parte e' un altro, e non e' il ritardo: due note che si
+ * vogliono SEPARATE, suonate in rapida successione, si fonderebbero in un
+ * accordo. A 120 ms bisogna battere piu' di otto note al secondo perche'
+ * succeda — piu' veloce di come si scrive a passi.
  */
-const FINESTRA_ACCORDO_MS = 50;
+const FINESTRA_ACCORDO_MS = 120;
 
 export type UseMidiStepInputArgs = {
   /** Le note premute insieme, in ordine di arrivo. Una sola nota e' un accordo
