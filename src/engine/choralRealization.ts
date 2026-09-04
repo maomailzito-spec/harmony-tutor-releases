@@ -3641,6 +3641,11 @@ const SOTTO_LA_MELODIA = 0.5;
  * Da 6 in su si scende SOTTO il 3,8% degli autori, che non e' un traguardo:
  * un generatore meno oscillante di Bach non e' piu' musicale, e' piu' rigido.
  */
+/** Quanto si scoraggia il passo che genera quinte parallele quando il basso e'
+ *  DATO: due accordi in stato fondamentale col basso che si muove per grado.
+ *  Non un divieto — con moto contrario e' scrivibile, e gli autori lo scrivono. */
+const PARALLELE_COL_BASSO_DATO = 6;
+
 const ALTALENA = 5;
 
 /** Quanto costa una nota che l'accordo non regge e che non si spiega. Prima
@@ -3948,6 +3953,33 @@ function scegliProgressioneDellaFrase(args: {
     let c = 0;
     if (sda.gradoDiatonico >= 0 && sa.gradoDiatonico >= 0) {
       c -= transizione(sda.gradoDiatonico, sa.gradoDiatonico, forze[i] >= 0.5);
+    }
+
+    // ── COL BASSO DATO, LE PARALLELE SI EVITANO QUI O NON SI EVITANO PIU'.
+    //
+    // Col canto dato il realizzatore puo' sempre schivare una quinta parallela
+    // cambiando il RIVOLTO, cioe' spostando il basso. Col basso DATO quella via
+    // non c'e': la nota grave e' scritta, e una scelta d'armonia sbagliata
+    // diventa una parallela inevitabile — il veto se la trova davanti quando
+    // non puo' piu' farci niente.
+    //
+    // Il caso classico e' due triadi in stato fondamentale col basso che si
+    // muove per GRADO: fondamentale e quinta si muovono insieme, e la quinta
+    // parallela nasce da se' a meno che le parti superiori facciano moto
+    // contrario. Qui si scoraggia, non si vieta: con un moto contrario ben
+    // fatto e' scrivibile, e infatti gli autori la usano.
+    //
+    // Misurato: instradando il basso nel motore grande le parallele in piu'
+    // degli autori erano passate da 3 a 8.
+    if (daBasso && i > 0) {
+      const bassoPrima = gruppi[i - 1].bassoPc, bassoOra = gruppi[i].bassoPc;
+      if (bassoPrima != null && bassoOra != null) {
+        const passo = Math.min(((bassoOra - bassoPrima) + 12) % 12, ((bassoPrima - bassoOra) + 12) % 12);
+        const inFondamentale = (p: Posa, s: SchedaAccordo) => s.pcs[p.inv % s.pcs.length] === s.pcs[0];
+        if (passo >= 1 && passo <= 2 && inFondamentale(da, sda) && inFondamentale(a, sa)) {
+          c += PARALLELE_COL_BASSO_DATO;
+        }
+      }
     }
     // Ripetere lo stesso accordo: sciatto, SALVO quando a ripetersi è la melodia — lì
     // restare (cambiando semmai rivolto) è la soluzione naturale, e cambiare per forza
