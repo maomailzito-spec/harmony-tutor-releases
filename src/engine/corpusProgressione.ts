@@ -45,6 +45,7 @@
  */
 import statsJson from '../data/progressionStatsByMode.json';
 import melodiaJson from '../data/armoniaSottoMelodia.json';
+import bassoJson from '../data/armoniaSottoIlBasso.json';
 
 type MappaBigrammi = { [da: string]: { [a: string]: number } };
 type PerModo = {
@@ -597,4 +598,40 @@ export function pesoSottoLaMelodia(
     const media = totale / conti.length;
     const f = fiducia(totale);
     return f * ((suo - media) / massimo) * 10;
+}
+
+/**
+ * Quanto ci si aspetta QUESTA armonia sopra QUEL basso.
+ *
+ * Gemella di `pesoSottoLaMelodia`, e serve al caso che nella didattica viene
+ * per primo: il basso dato. Il basso e' MENO AMBIGUO del canto — misurato sul
+ * repertorio, sapendo il suo grado la prima scelta vale il 57,3% contro il
+ * 43,1% della melodia — perche' e' legato direttamente alla funzione, mentre
+ * una nota di melodia puo' essere qualunque membro di molti accordi.
+ *
+ * Il quinto grado lo mostra meglio di ogni spiegazione:
+ *     al SOPRANO   V 38%   I 38%    ← perfettamente ambiguo
+ *     al BASSO     V 71%   I 17%
+ *
+ * La tavola tiene il solo GRADO, senza cifre: col basso dato il rivolto non e'
+ * da scegliere — la nota al basso E' il basso — e il filtro delle pose lo fissa
+ * gia'. Resta da decidere quale armonia, e a quella la tavola risponde.
+ */
+export function pesoSottoIlBasso(
+    isMinor: boolean,
+    semitoniDallaTonica: number,
+    forte: boolean,
+    nomeCorpus: string,
+): number {
+    const tavole = bassoJson as unknown as { MAG: TavolaMelodia; min: TavolaMelodia };
+    const grado = NOME_GRADO_MELODIA[((semitoniDallaTonica % 12) + 12) % 12];
+    const tav = (isMinor ? tavole.min : tavole.MAG)?.[grado]?.[forte ? 'forte' : 'debole'];
+    if (!tav) return 0;
+    const conti = Object.values(tav);
+    const totale = conti.reduce((a, b) => a + b, 0);
+    if (totale < 20) return 0;
+    const massimo = Math.max(...conti, 1);
+    const suo = tav[nomeCorpus] ?? 0;
+    const media = totale / conti.length;
+    return fiducia(totale) * ((suo - media) / massimo) * 10;
 }

@@ -20,7 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
-import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio, pesoSottoLaMelodia } from './corpusProgressione';
+import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio, pesoSottoLaMelodia, pesoSottoIlBasso } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -3713,6 +3713,10 @@ function scegliProgressioneDellaFrase(args: {
    *  canta il soprano, che e' la chiave della tavola «armonia sotto la nota». */
   tonicaPc?: number;
   minore?: boolean;
+  /** Si sta armonizzando un BASSO dato invece di un canto: cambia la tavola a
+   *  cui si chiede «che armonia sotto questa nota», perche' il basso e' un'altra
+   *  domanda — e una molto meno ambigua. */
+  daBasso?: boolean;
   schede: SchedaAccordo[];
   /** Quanto è forte il movimento su cui cade ciascun gruppo (0…1). */
   forze: number[];
@@ -3723,7 +3727,7 @@ function scegliProgressioneDellaFrase(args: {
   /** Il costo scritto a mano fra due gradi, per quando il corpus è spento. */
   transizione: (da: number, a: number, forteArrivo: boolean) => number;
 }): Posa[] {
-  const { gruppi, schede, forze, chiusure, transizione, curaLaCondotta, tonicaPc, minore } = args;
+  const { gruppi, schede, forze, chiusure, transizione, curaLaCondotta, tonicaPc, minore, daBasso } = args;
   const n = gruppi.length;
   if (n === 0) return [];
 
@@ -3896,8 +3900,15 @@ function scegliProgressioneDellaFrase(args: {
     // ma nel posto sbagliato, perche' nessuna statistica era condizionata alla
     // melodia. Resta un PESO — il 43% dice che suggerisce, non impone.
     if (tonicaPc != null && sc.nomeCorpus && gruppi[i].sopranoMidi != null) {
-      const gradoSop = (((gruppi[i].sopranoMidi! % 12) + 12) % 12 - tonicaPc + 12) % 12;
-      c -= SOTTO_LA_MELODIA * pesoSottoLaMelodia(!!minore, gradoSop, forze[i] >= 0.5, sc.nomeCorpus);
+      const gradoNota = (((gruppi[i].sopranoMidi! % 12) + 12) % 12 - tonicaPc + 12) % 12;
+      // Due tavole, perche' sono due domande diverse: che armonia SOTTO una
+      // melodia, che armonia SOPRA un basso. La seconda e' molto meno ambigua
+      // (prima scelta 57,3% contro 43,1%), e il quinto grado lo mostra: al
+      // soprano e' V 38% / I 38%, al basso V 71%.
+      const quanto = daBasso
+        ? pesoSottoIlBasso(!!minore, gradoNota, forze[i] >= 0.5, sc.nomeCorpus)
+        : pesoSottoLaMelodia(!!minore, gradoNota, forze[i] >= 0.5, sc.nomeCorpus);
+      c -= SOTTO_LA_MELODIA * quanto;
     }
 
     const retto = coperte + spiegate;
@@ -4295,6 +4306,12 @@ export function autoHarmonize(
      *  accordi con un basso estraneo. Il basso non è una nota in più da coprire — dice anche
      *  il RIVOLTO — quindi entra come vincolo duro sulle pose possibili. */
     bassoDato?: SopranoConstraint[];
+    /** Si sta armonizzando un BASSO DATO e non un canto: la linea passata in
+     *  `melody` e' il basso. Cambia solo la tavola del corpus a cui si chiede
+     *  che armonia ci si aspetta li' — tutto il resto (cadenze, altalena,
+     *  cammino minimo sulla frase, veto) e' identico, ed e' il motivo per cui
+     *  conviene passare di qui invece di far crescere un secondo motore. */
+    daBasso?: boolean;
   }
 ): RomanChord[] {
   if (melody.length === 0) return [];
@@ -4554,7 +4571,7 @@ export function autoHarmonize(
 
     const scelte = scegliProgressioneDellaFrase({
       gruppi: groups, schede, forze, chiusure: chiusureDeiGruppi, curaLaCondotta, transizione,
-      tonicaPc: tonicPc, minore: isMinor,
+      tonicaPc: tonicPc, minore: isMinor, daBasso: !!opts?.daBasso,
     });
     for (let i = 0; i < totalGroups; i++) {
       const { acc, inv } = scelte[i];
@@ -4742,121 +4759,26 @@ export function autoHarmonizeFromBass(
   harmonicRhythmBeats: number = 0,
   beatsPerMeasure: number = 4
 ): RomanChord[] {
+  // ORA PASSA DAL MOTORE GRANDE, e non e' un dettaglio di forma.
+  //
+  // Qui c'erano 123 righe che non usavano NIENTE di quanto costruito per il
+  // canto dato: ne' il peso condizionato alla nota, ne' il termine contro
+  // l'altalena, ne' le regole di cadenza, ne' il cammino minimo sulla frase.
+  // Era rimasta la versione vecchia mentre l'altra strada cresceva — e il
+  // basso dato, nella didattica, viene PRIMA del canto dato.
+  //
+  // Non serviva portare le funzioni nuove qui dentro: `autoHarmonize` sa gia'
+  // trattare un basso dato — il filtro delle pose pretende che l'accordo lo
+  // contenga E ce l'abbia proprio al basso, quindi il RIVOLTO lo fissa da se'.
+  // Basta passargli la linea due volte: come nota da armonizzare e come
+  // vincolo. `daBasso` cambia solo la tavola del corpus, perche' «che armonia
+  // sopra questo basso» e' un'altra domanda da «che armonia sotto questa nota»
+  // — e molto meno ambigua: prima scelta 57,3% contro 43,1%.
   if (bassLine.length === 0) return [];
-
-  const tonicPc = noteNameToPc(tonic);
-  const scale = buildScale(tonic, isMinor);
-  const naturalScale = isMinor ? buildNaturalMinorScale(tonic) : scale;
-  const romanLabels = isMinor ? DIATONIC_ROMANS_MINOR : DIATONIC_ROMANS_MAJOR;
-
-  // Build PC sets for each diatonic triad
-  const triadPcSets: number[][] = [];
-  for (let deg = 0; deg < 7; deg++) {
-    const useScale = isMinor && (deg !== 4 && deg !== 6) ? naturalScale : scale;
-    const root = useScale[deg];
-    const third = useScale[(deg + 2) % 7];
-    const fifth = useScale[(deg + 4) % 7];
-    triadPcSets.push([
-      (tonicPc + root.semiFromRoot) % 12,
-      (tonicPc + third.semiFromRoot) % 12,
-      (tonicPc + fifth.semiFromRoot) % 12,
-    ]);
-  }
-
-  // Tonal weights: prefer I, V, IV
-  const baseWeight: Record<number, number> = {
-    0: 10, 1: 5, 2: 2, 3: 8, 4: 9, 5: 6, 6: 3,
-  };
-
-  // Inversion preference: root position strongly preferred, 6/4 penalized
-  const invWeight = [10, 6, -5]; // [root, 1st inv, 2nd inv (6/4)]
-
-  // Group bass notes by harmonic rhythm
-  type BassGroup = { pcs: number[]; measure: number; beat: number };
-  let groups: BassGroup[];
-
-  if (harmonicRhythmBeats > 0) {
-    const absBeat = (m: SopranoConstraint) => m.measure * beatsPerMeasure + (m.beat - 1);
-    const groupMap = new Map<number, BassGroup>();
-    for (const m of bassLine) {
-      const ab = absBeat(m);
-      const slotIndex = Math.floor(ab / harmonicRhythmBeats);
-      if (!groupMap.has(slotIndex)) {
-        const slotAbsBeat = slotIndex * harmonicRhythmBeats;
-        const slotMeasure = Math.floor(slotAbsBeat / beatsPerMeasure);
-        const slotBeat = (slotAbsBeat % beatsPerMeasure) + 1;
-        groupMap.set(slotIndex, { pcs: [], measure: slotMeasure, beat: slotBeat });
-      }
-      groupMap.get(slotIndex)!.pcs.push(m.midi % 12);
-    }
-    groups = [...groupMap.entries()].sort((a, b) => a[0] - b[0]).map(e => e[1]);
-  } else {
-    groups = bassLine.map(m => ({ pcs: [m.midi % 12], measure: m.measure, beat: m.beat }));
-  }
-
-  const result: RomanChord[] = [];
-  let prevDeg = -1;
-  const totalGroups = groups.length;
-
-  for (let i = 0; i < totalGroups; i++) {
-    const group = groups[i];
-    // Use first (or most common) PC as the bass pitch class
-    const bassPc = group.pcs[0];
-
-    // Find all candidates: which degree has this PC as root/3rd/5th?
-    type Candidate = { deg: number; inv: number; score: number };
-    const candidates: Candidate[] = [];
-
-    for (let deg = 0; deg < 7; deg++) {
-      const pcs = triadPcSets[deg];
-      let inv = -1;
-      if (pcs[0] === bassPc) inv = 0; // root position
-      else if (pcs[1] === bassPc) inv = 1; // 1st inversion
-      else if (pcs[2] === bassPc) inv = 2; // 2nd inversion
-      if (inv < 0) continue;
-
-      let score = (baseWeight[deg] ?? 1) + (invWeight[inv] ?? 0);
-
-      // Penalize repeating same degree
-      if (deg === prevDeg) score -= 3;
-
-      // Cadential bonuses
-      if (i === totalGroups - 1 && deg === 0) score += 12; // end on I
-      if (i === totalGroups - 2 && deg === 4) score += 8; // penultimate V
-      // Penalize 6/4 except cadential I6/4 before V
-      if (inv === 2) {
-        if (deg === 0 && i + 1 < totalGroups) {
-          // Check if next bass is V (dominant) — then cadential I6/4 is OK
-          const nextPc = groups[i + 1].pcs[0];
-          const dominantRoot = triadPcSets[4][0];
-          if (nextPc === dominantRoot) score += 8; // cadential 6/4 bonus
-        }
-      }
-
-      candidates.push({ deg, inv, score });
-    }
-
-    if (candidates.length === 0) {
-      // Fallback: I root position
-      result.push({ roman: romanLabels[0], measure: group.measure, beat: group.beat, inversion: 0, inversionIsSuggestion: true });
-      prevDeg = 0;
-      continue;
-    }
-
-    candidates.sort((a, b) => b.score - a.score);
-    const best = candidates[0];
-
-    result.push({
-      roman: romanLabels[best.deg] + inversionSuffix(best.inv, false),
-      measure: group.measure,
-      beat: group.beat,
-      inversion: best.inv,
-      inversionIsSuggestion: true,
-    });
-    prevDeg = best.deg;
-  }
-
-  return result;
+  return autoHarmonize(bassLine, tonic, isMinor, harmonicRhythmBeats, beatsPerMeasure, {
+    bassoDato: bassLine,
+    daBasso: true,
+  });
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

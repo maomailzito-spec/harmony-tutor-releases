@@ -13,10 +13,15 @@
  * qui, l'utente non vedrà segnalazioni sullo schermo.
  *
  *   npx tsx scripts/banco-corali.ts  "<file.htp>"  [altri.htp …]
+ *
+ * DAL_BASSO=1 armonizza il BASSO invece del soprano — che nella didattica
+ * e' il caso principale (il basso dato viene prima del canto dato) ed e' anche
+ * il meno ambiguo: sapendo il grado del basso la prima scelta vale il 57,3%
+ * contro il 43,1% della melodia.
  */
 import { readFileSync } from 'fs';
 import { applyHarmonyRules, getActiveNotesTimeline, getKeySignature, getRomanAnalysis } from '../src/utils/musicTheory';
-import { autoHarmonize, realizeChorale, contiVeto, azzeraContiVeto, type SopranoConstraint, type ChoralConfig } from '../src/engine/choralRealization';
+import { autoHarmonize, autoHarmonizeFromBass, realizeChorale, contiVeto, azzeraContiVeto, type SopranoConstraint, type ChoralConfig } from '../src/engine/choralRealization';
 import { bonusTransizione } from '../src/engine/corpusProgressione';
 
 /**
@@ -143,7 +148,10 @@ for (const f of process.argv.slice(2)) {
   const ts = d.timeSignature || { numerator: 4, denominator: 4 };
   const bpm = ts.numerator * (4 / ts.denominator);
 
-  const soprano = note.filter((n: any) => (n.voice ?? 1) === 1)
+  // DAL_BASSO=1: si tiene il BASSO e si fa scrivere il resto. E' l'esercizio
+  // del basso dato, che nella didattica viene prima del canto dato.
+  const voceTenuta = process.env.DAL_BASSO ? 4 : 1;
+  const soprano = note.filter((n: any) => (n.voice ?? 1) === voceTenuta)
     .sort((a: any, b: any) => (a.measureIndex - b.measureIndex) || (a.beat - b.beat));
   const vincoli: SopranoConstraint[] = soprano.map((n: any) => ({
     midi: n.midi, measure: n.measureIndex ?? 0, beat: n.beat ?? 1,
@@ -154,11 +162,14 @@ for (const f of process.argv.slice(2)) {
   // nota = un accordo. Serve a misurare la scrittura elastica: col valore 0 il
   // generatore deve reggere OGNI nota, e le note di passaggio non esistono.
   const ritmo = Number(process.env.RITMO || 0) || 0;
-  const progressione = autoHarmonize(vincoli, tonica, minore, ritmo, bpm, { corpus: !process.env.SENZA_CORPUS, condotta: !process.env.SENZA_CONDOTTA, frase: !process.env.SENZA_FRASE });
+  const progressione = process.env.DAL_BASSO
+    ? autoHarmonizeFromBass(vincoli, tonica, minore, ritmo, bpm)
+    : autoHarmonize(vincoli, tonica, minore, ritmo, bpm, { corpus: !process.env.SENZA_CORPUS, condotta: !process.env.SENZA_CONDOTTA, frase: !process.env.SENZA_FRASE });
   const config: ChoralConfig = {
     tonic: tonica, isMinor: minore, timeSignature: ts,
     rules: { allowParallel5ths: false, allowParallel8ves: false, allowCrossing: false, allowOverlap: false, doubleRoot: true },
-    autoSevenths: true, sopranoMelody: vincoli,
+    autoSevenths: true,
+    ...(process.env.DAL_BASSO ? { bassMelody: vincoli } : { sopranoMelody: vincoli }),
     // SENZA_VETO=1 spegne il veto delle regole: serve al confronto prima/dopo, che va fatto
     // cambiando un interruttore e non l'albero di lavoro.
     vetoRegole: !process.env.SENZA_VETO,
