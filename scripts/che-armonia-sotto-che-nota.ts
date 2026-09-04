@@ -77,14 +77,23 @@ function main() {
       if (st.length < 2) continue;
       const ra = getRomanAnalysis(st as any, tonica, minore);
       if (!ra?.roman) continue;
-      const armonia = String(ra.roman).replace(/\s+/g, '').replace(/[0-9/]+$/, '');
+      // Col basso si tiene anche il RIVOLTO: e' meta' dell'informazione che
+      // porta, e toglierla falserebbe il confronto.
+      const nudo = String(ra.roman).replace(/\s+/g, '');
+      const armonia = process.argv.includes('--basso') ? nudo : nudo.replace(/[0-9/]+$/, '');
       if (!armonia) continue;
-      // la nota che canta il soprano in questo momento
-      const sop = (ev.notes as any[])
-        .filter((n: any) => n && !n.isRest && (Number(n.voice) || 1) === 1)
-        .sort((a: any, b: any) => b.midi - a.midi)[0];
-      if (!sop || !Number.isFinite(sop.midi)) continue;
-      const grado = NOME_GRADO[(((sop.midi % 12) + 12) % 12 - tonicaPc + 12) % 12];
+      // LA VOCE DA GUARDARE. Col soprano si misura l'ambiguita' di chi
+      // armonizza una melodia; col BASSO quella di chi armonizza un basso — e
+      // sono due mestieri diversi, perche' il basso dice anche il rivolto.
+      const daBasso = process.argv.includes('--basso');
+      const cand = (ev.notes as any[]).filter((n: any) => n && !n.isRest
+        && (daBasso ? true : (Number(n.voice) || 1) === 1));
+      if (!cand.length) continue;
+      const nota = daBasso
+        ? cand.reduce((lo: any, n: any) => (n.midi < lo.midi ? n : lo), cand[0])
+        : cand.sort((a: any, b: any) => b.midi - a.midi)[0];
+      if (!nota || !Number.isFinite(nota.midi)) continue;
+      const grado = NOME_GRADO[(((nota.midi % 12) + 12) % 12 - tonicaPc + 12) % 12];
       const dentro = (ev.absBeat ?? 0) % bpm;
       const forte = Math.abs(dentro - Math.round(dentro)) < 0.01
         && (Math.round(dentro) === 0 || (bpm >= 4 && Math.round(dentro) === 2));
