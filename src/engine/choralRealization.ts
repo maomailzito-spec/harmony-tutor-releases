@@ -20,7 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
-import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio } from './corpusProgressione';
+import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio, pesoSottoLaMelodia } from './corpusProgressione';
 
 /**
  * CONTI DI VITA DEL VETO — diagnostica, non logica.
@@ -3587,6 +3587,29 @@ function scontoDellaQuartaSesta(forzaQui: number, gradoQui: number, gradoDopo: n
 const APPOGGIATURA_SI_SPIEGA = 0.2;
 
 /**
+ * QUANTO CONTA CHE ARMONIA SI METTE SOTTO CHE NOTA.
+ *
+ * Moltiplica il peso che il corpus da' a un'armonia dato il grado che canta il
+ * soprano (`pesoSottoLaMelodia`). Scansione su nove brani, a ritmo di minima:
+ *
+ *     peso   errori   altalene    retrocessioni
+ *      0        32     2,6%        8,5%
+ *      0,25     30     3,6%       11,1%
+ *      0,5      19     6,9%        9,2%
+ *      1        21     7,5%       10,1%
+ *      2        19     9,5%        8,8%
+ *     (autori)  69     3,8%       10,1%
+ *
+ * Gli errori crollano ma le altalene risalgono, perche' sotto note simili il
+ * corpus consiglia armonie simili e il generatore comincia a oscillare. La cura
+ * non e' abbassare questo peso — e' ALZARE `ALTALENA`, che era tarato per un
+ * mondo in cui questo termine non c'era. Con 0,5 e altalena 5 si atterra su
+ * 23 errori, 2,9% di altalene e 10,1% di retrocessioni: tutti e tre dentro il
+ * repertorio, e le retrocessioni esattamente sul suo valore.
+ */
+const SOTTO_LA_MELODIA = 0.5;
+
+/**
  * L'ALTALENA: due accordi che si scambiano il posto quattro volte (`I-V-I-V`).
  *
  * Ogni singolo passaggio e' idiomatico — anzi, `I|V → I` e' la successione di
@@ -3602,8 +3625,23 @@ const APPOGGIATURA_SI_SPIEGA = 0.2;
  * generatore altalena nel 18,0% dei suoi accordi contro il 3,8% degli autori.
  * (Le retrocessioni invece NON vanno toccate: ne fa gia' meno degli autori,
  * 7,2% contro 11,5%.)
+ *
+ * ERA 4, ed e' salito a 5 quando e' entrato `SOTTO_LA_MELODIA`: sotto note
+ * simili il corpus consiglia armonie simili, quindi il nuovo termine spinge
+ * verso l'oscillazione e questo va rialzato per compensarlo. Misurato con
+ * melodia 0,5:
+ *
+ *     altalena   errori   altalene
+ *        4         19      6,9%
+ *        5         23      2,9%   ← qui
+ *        6         24      1,6%
+ *        8         25      0,7%
+ *       12         25      0,3%
+ *
+ * Da 6 in su si scende SOTTO il 3,8% degli autori, che non e' un traguardo:
+ * un generatore meno oscillante di Bach non e' piu' musicale, e' piu' rigido.
  */
-const ALTALENA = 4;
+const ALTALENA = 5;
 
 /** Quanto costa una nota che l'accordo non regge e che non si spiega. Prima
  *  costava solo il premio mancato (fino a 5/n); cosi' e' un addebito vero.
@@ -3645,6 +3683,9 @@ type GruppoMelodia = {
 type SchedaAccordo = {
   /** Le classi d'altezza dell'accordo (con la settima in coda, se ce l'ha). */
   pcs: number[];
+  /** Come il CORPUS chiama quest'armonia (`I`, `ii°`, `V/V`): serve a chiedergli
+   *  quanto se l'aspetta sotto una certa nota di melodia. */
+  nomeCorpus?: string;
   /** Quanto quel grado è usato nel corpus, nella scala 0…10 — sul tempo forte e sul debole,
    *  che sono due cose diverse: la dominante spinge dal debole, la tonica atterra sul forte. */
   peso: number;
@@ -3668,6 +3709,10 @@ const INFINITO = 1e9;
  */
 function scegliProgressioneDellaFrase(args: {
   gruppi: GruppoMelodia[];
+  /** La classe d'altezza della TONICA e il modo: servono a leggere il grado che
+   *  canta il soprano, che e' la chiave della tavola «armonia sotto la nota». */
+  tonicaPc?: number;
+  minore?: boolean;
   schede: SchedaAccordo[];
   /** Quanto è forte il movimento su cui cade ciascun gruppo (0…1). */
   forze: number[];
@@ -3678,7 +3723,7 @@ function scegliProgressioneDellaFrase(args: {
   /** Il costo scritto a mano fra due gradi, per quando il corpus è spento. */
   transizione: (da: number, a: number, forteArrivo: boolean) => number;
 }): Posa[] {
-  const { gruppi, schede, forze, chiusure, transizione, curaLaCondotta } = args;
+  const { gruppi, schede, forze, chiusure, transizione, curaLaCondotta, tonicaPc, minore } = args;
   const n = gruppi.length;
   if (n === 0) return [];
 
@@ -3839,6 +3884,22 @@ function scegliProgressioneDellaFrase(args: {
         spiegate += quantoSiSpiega(base + j, j === 0, sc.pcs, j === noteDelGruppo.length - 1);
       }
     }
+    // ── CHE ARMONIA SOTTO CHE NOTA ────────────────────────────────────────
+    // Fino a qui la melodia entrava nella scelta SOLO come test di
+    // appartenenza: «questo accordo contiene la nota?». Ma il grado che canta
+    // il soprano dice molto di piu' — misurato sul repertorio, sapere quel
+    // grado porta la prima scelta dal 18,4% al 43,1%, e in certi casi decide
+    // quasi da solo (la sensibile in minore sul battere e' la dominante
+    // nell'88% dei casi).
+    //
+    // E' l'osservazione dell'utente: le armonie del generatore erano corrette
+    // ma nel posto sbagliato, perche' nessuna statistica era condizionata alla
+    // melodia. Resta un PESO — il 43% dice che suggerisce, non impone.
+    if (tonicaPc != null && sc.nomeCorpus && gruppi[i].sopranoMidi != null) {
+      const gradoSop = (((gruppi[i].sopranoMidi! % 12) + 12) % 12 - tonicaPc + 12) % 12;
+      c -= SOTTO_LA_MELODIA * pesoSottoLaMelodia(!!minore, gradoSop, forze[i] >= 0.5, sc.nomeCorpus);
+    }
+
     const retto = coperte + spiegate;
     c -= (retto / Math.max(1, pcs.length)) * 5;         // e quello che regge più note
     // Il premio pieno resta alla copertura VERA: a parita' di tutto il resto un
@@ -4438,6 +4499,7 @@ export function autoHarmonize(
     const schede: SchedaAccordo[] = [];
     for (let deg = 0; deg < 7; deg++) {
       schede.push({
+        nomeCorpus: nomeCorpus[deg],
         pcs: triadPcSets[deg],
         peso: baseWeight[deg] ?? 1,
         pesoForte: pesiForte[deg] ?? 1,
@@ -4451,6 +4513,7 @@ export function autoHarmonize(
       const ex = extra[e];
       const ps = pesoSecondaria(isMinor, ex.corpus);
       schede.push({
+        nomeCorpus: ex.corpus,
         pcs: triadPcSets[PRIMO_EXTRA + e],
         peso: ps, pesoForte: ps, pesoDebole: ps,
         rivolti: ex.hasSeventh ? [0, 1, 2, 3] : [0, 1, 2],
@@ -4491,6 +4554,7 @@ export function autoHarmonize(
 
     const scelte = scegliProgressioneDellaFrase({
       gruppi: groups, schede, forze, chiusure: chiusureDeiGruppi, curaLaCondotta, transizione,
+      tonicaPc: tonicPc, minore: isMinor,
     });
     for (let i = 0; i < totalGroups; i++) {
       const { acc, inv } = scelte[i];

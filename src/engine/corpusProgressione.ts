@@ -44,6 +44,7 @@
  * non è una conoscenza, è un'impressione.
  */
 import statsJson from '../data/progressionStatsByMode.json';
+import melodiaJson from '../data/armoniaSottoMelodia.json';
 
 type MappaBigrammi = { [da: string]: { [a: string]: number } };
 type PerModo = {
@@ -538,4 +539,62 @@ export function costoDelRaddoppio(inv: number, membro: number, gradoDaTonica: nu
     if (famiglia === 'fondamentale') return 0;
     if (famiglia === 'quinta') return 3;
     return tonale ? 4 : 12;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHE ARMONIA SOTTO CHE NOTA
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * L'unica cosa che il corpus sapeva dire e nessuno gli chiedeva.
+ *
+ * Tutte le altre funzioni qui dentro guardano da accordo ad accordo: quale
+ * grado e' frequente, quale segue quale, quale rivolto, quale raddoppio. La
+ * MELODIA non entrava mai — nel generatore serviva solo a dire «questo accordo
+ * contiene la nota?», che e' un test di appartenenza, non una scelta.
+ *
+ * Ma il grado che canta il soprano dice moltissimo. Misurato sul repertorio
+ * d'autore, su 9316 armonie:
+ *
+ *     senza sapere la melodia   la prima vale 18,4%   le prime due 36,1%
+ *     sapendo il grado          la prima vale 43,1%   le prime due 62,1%
+ *
+ * E in certi casi decide quasi da sola: la sensibile in minore sul battere e'
+ * la dominante nell'88% dei casi; il ♭6 in minore e' il quarto grado nel 64%.
+ *
+ * Resta un PESO e non una regola — 43% vuol dire che suggerisce, non impone.
+ */
+type TavolaMelodia = Record<string, Record<string, Record<string, number>>>;
+const melodia = melodiaJson as unknown as { MAG: TavolaMelodia; min: TavolaMelodia };
+
+/** I gradi come li nomina la tavola: semitoni dalla tonica. */
+const NOME_GRADO_MELODIA = ['1', 'b2', '2', 'b3', '3', '4', '#4', '5', 'b6', '6', 'b7', '7'];
+
+/**
+ * Quanto ci si aspetta QUESTA armonia sotto QUELLA nota di melodia, qui.
+ *
+ * @param semitoniDallaTonica  il grado del soprano, 0…11.
+ * @param nomeCorpus  come il corpus chiama l'armonia (`I`, `ii°`, `V/V`, `♭VII`).
+ * @returns 0 = quanto ci si aspetta normalmente; positivo = il repertorio la
+ *   mette li' piu' spesso; negativo = meno. Zero anche quando il campione e'
+ *   troppo magro per dire qualcosa, che e' il caso dei gradi cromatici rari.
+ */
+export function pesoSottoLaMelodia(
+    isMinor: boolean,
+    semitoniDallaTonica: number,
+    forte: boolean,
+    nomeCorpus: string,
+): number {
+    const grado = NOME_GRADO_MELODIA[((semitoniDallaTonica % 12) + 12) % 12];
+    const tav = (isMinor ? melodia.min : melodia.MAG)?.[grado]?.[forte ? 'forte' : 'debole'];
+    if (!tav) return 0;
+    const conti = Object.values(tav);
+    const totale = conti.reduce((a, b) => a + b, 0);
+    if (totale < 20) return 0;              // troppo poco per dire qualcosa
+    const massimo = Math.max(...conti, 1);
+    const suo = tav[nomeCorpus] ?? 0;
+    // Centrato sulla MEDIA della distribuzione: chi sta sopra la media guadagna,
+    // chi sta sotto perde, e un'armonia mai vista sotto quella nota perde tutto.
+    const media = totale / conti.length;
+    const f = fiducia(totale);
+    return f * ((suo - media) / massimo) * 10;
 }
