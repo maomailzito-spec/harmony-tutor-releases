@@ -11509,62 +11509,6 @@ export function applyHarmonyRules(
         }
     } catch { /* ignore */ }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // R-19 · SINCOPE ARMONICA
-    // ─────────────────────────────────────────────────────────────────────
-    // L'armonia entra sul tempo DEBOLE e scavalca il battere seguente, che si
-    // limita a ripeterla: il cambio cade fuori dall'accento e il tempo forte non
-    // porta niente di nuovo, cosi' la frase perde l'appoggio.
-    //
-    // Segnalata da un utente su una generazione, dove nessuna regola la vedeva:
-    // `I` sul battere, `IV` sul terzo movimento, e ancora `IV` sul battere dopo.
-    //
-    // CHE SIA UN ERRORE E' MISURATO, non deciso a tavolino: su 251 brani d'autore
-    // e 6652 cambi d'armonia, i sincopati sono 42 — lo 0,6%. Non si fa.
-    try {
-        // IL BATTERE, e non il «tempo forte» in genere. Il terzo movimento di
-        // un 4/4 e' un accento secondario e un cambio d'armonia li' e' normale:
-        // il difetto e' che il BATTERE seguente non porti niente di nuovo. Con
-        // la definizione larga (battere piu' terzo movimento) la regola non
-        // scattava proprio sul caso segnalato.
-        const battere = (ab: number) => {
-            const d = ab % beatsPerMeas;
-            return Math.abs(d - Math.round(d)) < 0.01 && Math.round(d) === 0;
-        };
-        const ornamentaleQui = (n: any): boolean => {
-            if (!n) return false;
-            if (n.ornamentOverride && n.ornamentOverride !== 'structural') return true;
-            return !!(n.isPassing || n.isNeighbor || n.isAnticipation || n.isAppoggiatura || n.isEscape);
-        };
-        /** La firma dell'armonia: le classi d'altezza che suonano, ornamenti esclusi. */
-        const firmaArmonia = (ev: any): string => {
-            const st = (ev?.notes || []).filter((n: any) => n && !n.isRest && !ornamentaleQui(n));
-            if (st.length < 3) return '';
-            return ([...new Set(st.map((n: any) => ((((n.midi ?? 0) % 12) + 12) % 12)))] as number[]).sort((a: number, b: number) => a - b).join(',');
-        };
-        for (let i = 1; i < chordEvents.length - 1; i++) {
-            if (battere(chordEvents[i].absBeat)) continue;        // entra sul battere: nessuna sincope
-            const f = firmaArmonia(chordEvents[i]);
-            if (!f || f === firmaArmonia(chordEvents[i - 1])) continue;   // non e' un CAMBIO
-            const j = chordEvents.findIndex((e: any, k: number) => k > i && battere(e.absBeat));
-            if (j < 0) continue;
-            // se cambia prima di arrivare al battere, non ha scavalcato niente
-            let cambiaPrima = false;
-            for (let k = i + 1; k < j; k++) {
-                const g = firmaArmonia(chordEvents[k]);
-                if (g && g !== f) { cambiaPrima = true; break; }
-            }
-            if (cambiaPrima || firmaArmonia(chordEvents[j]) !== f) continue;
-            const note = (chordEvents[j].notes || []).filter((n: any) => n && !n.isRest);
-            addViolation({
-                ruleId: 'R-19',
-                description: "Sincope armonica: l'armonia cambia sul tempo debole e il battere seguente la ripete.",
-                noteIds: note.map((n: any) => n.id).filter(Boolean),
-                severity: 'error',
-            });
-        }
-    } catch { /* ignore */ }
-
     _pmark('10-verticalChecks');
     // =========================================================
     // Horizontal checks (between consecutive chords)

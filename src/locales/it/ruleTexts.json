@@ -614,9 +614,5 @@
   },
   "R-04-WHOLE": {
     "suggestion": "Su semibrevi, un incrocio è quasi sempre una nota finita nella voce sbagliata: la figura senza gambo non mostra a quale parte appartiene. Controlla in che voce sono le note segnalate prima di intervenire sulla condotta — se è un errore d'inserimento, basta scambiare le due voci."
-  },
-  "R-19": {
-    "title": "Sincope armonica (l'armonia cambia sul debole e scavalca il battere)",
-    "body": "L'armonia cambia su un tempo debole e il battere seguente si limita a ripeterla: il cambio cade fuori dall'accento, e il tempo forte non porta niente di nuovo.\nL'orecchio aspetta sul battere l'arrivo dell'armonia nuova; trovandoci una ripetizione, la frase perde l'appoggio e il discorso armonico si sfalsa rispetto al metro. È un difetto diverso dalla sincope RITMICA, che riguarda le note: qui a sincoparsi è l'armonia.\nNel repertorio praticamente non si fa: su 251 brani d'autore e 6652 cambi d'armonia, i sincopati sono lo 0,8%.\nRimedio: portare il cambio d'armonia sul battere, oppure cambiare di nuovo armonia sul battere invece di ripetere quella entrata sul debole."
   }
 }

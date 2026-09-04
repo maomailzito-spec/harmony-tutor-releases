@@ -614,9 +614,5 @@
   },
   "R-04-WHOLE": {
     "suggestion": "With whole notes, a crossing is almost always a note entered in the wrong voice: a stemless figure does not show which part it belongs to. Check the voice of the flagged notes before rewriting the part-writing — if it was an input mistake, simply swap the two voices."
-  },
-  "R-19": {
-    "title": "Harmonic syncopation (harmony changes off the beat and ties over the downbeat)",
-    "body": "The harmony changes on a weak beat and the following downbeat merely repeats it: the change falls outside the accent, and the strong beat brings nothing new.\nThe ear expects the new harmony to arrive on the downbeat; finding a repetition instead, the phrase loses its support and the harmonic discourse drifts out of phase with the metre. This is not rhythmic syncopation, which concerns the notes: here it is the harmony that is syncopated.\nThe repertoire hardly ever does it: across 251 authored pieces and 6652 harmony changes, syncopated ones are 0.8%.\nRemedy: move the harmonic change onto the downbeat, or change harmony again on the downbeat instead of repeating the one that entered on the weak beat."
   }
 }
