@@ -1,15 +1,28 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 /**
- * useMidiStepInput — MIDI step-input for single-voice note entry.
+ * useMidiStepInput — inserimento a passi dalla tastiera MIDI.
  *
- * When enabled, listens for MIDI noteOn messages from any connected
- * MIDI input device and calls `onNoteOn(midiNumber)` for each.
+ * Ascolta i `noteOn` di qualunque dispositivo collegato. Le note che arrivano
+ * INSIEME vengono consegnate insieme: premendo un accordo si riceve un accordo,
+ * non quattro note in fila.
+ *
+ * PERCHE' SERVE UN CESTINO. Un accordo suonato a mano non arriva come un
+ * messaggio: arriva come quattro `noteOn` distinti, a pochi millisecondi l'uno
+ * dall'altro. Senza raccoglierli, ognuno faceva il giro completo — inserisci e
+ * avanza la playhead — e un accordo di quattro note diventava una MELODIA di
+ * quattro note nella stessa voce.
+ *
+ * LA FINESTRA si sente: sotto i 30 ms un accordo suonato non proprio insieme si
+ * spezza in due; sopra i 100 si avverte il ritardo fra il tasto e la nota che
+ * compare. Cinquanta e' il compromesso consueto.
  */
+const FINESTRA_ACCORDO_MS = 50;
 
 export type UseMidiStepInputArgs = {
-  /** Callback invoked with the MIDI note number (0-127) on each noteOn */
-  onNoteOn: (midi: number) => void;
+  /** Le note premute insieme, in ordine di arrivo. Una sola nota e' un accordo
+   *  di una nota: chi riceve decide se trattarla diversamente. */
+  onNoteOn: (midi: number[]) => void;
 };
 
 export function useMidiStepInput({ onNoteOn }: UseMidiStepInputArgs) {
@@ -34,6 +47,17 @@ export function useMidiStepInput({ onNoteOn }: UseMidiStepInputArgs) {
         return;
       }
 
+        // Il cestino: si riempie coi `noteOn` che arrivano vicini e si svuota
+        // quando la finestra si chiude.
+        let cestino: number[] = [];
+        let attesa: ReturnType<typeof setTimeout> | null = null;
+        const consegna = () => {
+          attesa = null;
+          const note = cestino;
+          cestino = [];
+          if (note.length) requestAnimationFrame(() => onNoteOnRef.current(note));
+        };
+
       const handleMessage = (e: Event) => {
         const msg = e as any;
         const data: Uint8Array | undefined = msg?.data;
@@ -41,9 +65,12 @@ export function useMidiStepInput({ onNoteOn }: UseMidiStepInputArgs) {
         const [status, note, velocity] = data;
         // noteOn: 0x90-0x9F with velocity > 0
         if ((status & 0xf0) === 0x90 && velocity > 0 && note >= 0 && note <= 127) {
-          // Dispatch via rAF to avoid calling React state setters from a
-          // non-React event (MIDI message) in the middle of a render cycle.
-          requestAnimationFrame(() => onNoteOnRef.current(note));
+          // Nel cestino; la consegna avviene a finestra chiusa, e passa da
+          // `requestAnimationFrame` per non chiamare uno stato di React da
+          // dentro un evento MIDI, cioe' in mezzo a un render.
+          if (!cestino.includes(note)) cestino.push(note);
+          if (attesa) clearTimeout(attesa);
+          attesa = setTimeout(consegna, FINESTRA_ACCORDO_MS);
         }
       };
 
@@ -69,6 +96,11 @@ export function useMidiStepInput({ onNoteOn }: UseMidiStepInputArgs) {
       midiAccess.addEventListener('statechange', onStateChange);
 
       cleanupRef.current = () => {
+        // Il cestino va svuotato con le orecchie: spegnendo lo step-input con un
+        // accordo ancora dentro, il temporizzatore scatterebbe lo stesso e
+        // scriverebbe note che nessuno ha piu' chiesto.
+        if (attesa) { clearTimeout(attesa); attesa = null; }
+        cestino = [];
         for (const input of inputs) {
           input.removeEventListener('midimessage', handleMessage as EventListener);
         }

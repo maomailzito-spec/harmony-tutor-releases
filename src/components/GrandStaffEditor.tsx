@@ -2624,8 +2624,16 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
     // ── MIDI step-input hook ──
     const insertNoteFromMidiRef = useRef<(midi: number) => void>(() => {});
+    const insertChordFromMidiRef = useRef<(midi: number[]) => void>(() => {});
     const midiStepInput = useMidiStepInput({
-        onNoteOn: (midi) => insertNoteFromMidiRef.current(midi),
+        // UNA NOTA VA NELLA VOCE SCELTA, PIU' NOTE FANNO UN ACCORDO.
+        // Automatico, senza un interruttore in piu': premere un tasto solo
+        // resta l'inserimento di sempre, premerne quattro scrive l'accordo su
+        // tutte le parti. Il MIDI stesso dice quale dei due si intende.
+        onNoteOn: (note) => {
+            if (note.length <= 1) insertNoteFromMidiRef.current(note[0]);
+            else insertChordFromMidiRef.current(note);
+        },
     });
 
     // ── Registrazione MIDI real-time ──────────────────────────────────────────
@@ -15413,7 +15421,11 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     staffClickForInsertRef.current = handleBackgroundClick as any;
 
     // ── MIDI step-input: insert a note at the current playhead position ──
-    const insertNoteFromMidi = useCallback((midiNumber: number) => {
+    const insertNoteFromMidi = useCallback((midiNumber: number, voceForzata?: number) => {
+        // `voceForzata`: la usa l'inserimento d'ACCORDO, che distribuisce le note
+        // sulle parti e non puo' passare dalla voce selezionata in toolbar.
+        // Senza, tutte e quattro finirebbero nella stessa voce.
+        const voceScelta = (voceForzata ?? selectedVoice) as typeof selectedVoice;
         try {
             const beatsPerMeasure = timeSignature.numerator * (4 / timeSignature.denominator);
             const curAbsBeat = playbackCursorAbsBeatRef.current ?? 0;
@@ -15530,7 +15542,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 return;
             }
 
-            const targetClef = clefForVoice(selectedVoice);
+            const targetClef = clefForVoice(voceScelta);
             const props = getNotePropertiesFromMidi(midiNumber, keySignature, targetClef, activeAccidentalRef.current ?? null);
             if (!props || !Number.isFinite(props.midi)) return;
 
@@ -15547,7 +15559,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 startTick,
                 durationTicks,
                 clef: targetClef,
-                voice: selectedVoice,
+                voice: voceScelta,
             };
 
             const overlapEps = TICKS_PER_QUARTER * 0.001;
@@ -15556,7 +15568,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             setRawNotes(prev => {
                 const filtered = prev.filter(n => {
                     if (n.measureIndex !== measureIndex) return true;
-                    if ((n.voice as any) !== (selectedVoice as any)) return true;
+                    if ((n.voice as any) !== (voceScelta as any)) return true;
                     const nStart = typeof (n as any).startTick === 'number' && isFinite((n as any).startTick)
                         ? (n as any).startTick as number
                         : (measureStartTick + Math.round(((n.beat ?? 1) - 1) * TICKS_PER_QUARTER));
@@ -15749,8 +15761,51 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         });
     }, [latestSelectedNoteIds, setAccompanimentTracks, setRawNotes]);
 
+    /**
+     * L'ACCORDO SUONATO ENTRA SU TUTTE LE PARTI IN UNA VOLTA.
+     *
+     * Le note premute insieme arrivano insieme (vedi `useMidiStepInput`) e qui
+     * si distribuiscono per ALTEZZA: la piu' acuta al soprano e giu' fino al
+     * basso. Quali voci esistano lo dice il numero di PARTI scelto in toolbar —
+     * `activeVoicesForPartCount`, che e' la stessa convenzione di tutto il
+     * resto: a tre parti si scrivono le estreme piu' il contralto (1, 2, 4), il
+     * tenore no.
+     *
+     * Se le note sono piu' delle parti si tengono le piu' ESTERNE: sono quelle
+     * che definiscono l'accordo, e le interne le sceglie chi scrive. Se sono
+     * meno, si riempiono le voci dall'alto.
+     *
+     * Non c'e' un modo «accordo» da accendere: una nota sola resta
+     * l'inserimento di sempre nella voce scelta.
+     */
+    const insertChordFromMidi = useCallback((midiNumbers: number[]) => {
+        try {
+            const parti = activeVoicesForPartCount(partCountRef.current);
+            const ordinate = [...new Set(midiNumbers)].sort((a, b) => b - a);   // dal grave in alto: acuto per primo
+            if (ordinate.length === 0) return;
+            // Piu' note che parti: si tengono le estreme, scartando dal mezzo.
+            let scelte = ordinate;
+            if (ordinate.length > parti.length) {
+                const quante = parti.length;
+                scelte = [
+                    ...ordinate.slice(0, Math.ceil(quante / 2)),
+                    ...ordinate.slice(ordinate.length - Math.floor(quante / 2)),
+                ];
+            }
+            // La playhead avanza UNA volta sola: la si legge prima e la si
+            // rimette a ogni nota, cosi' ognuna entra sullo stesso tempo.
+            const partenza = playbackCursorAbsBeatRef.current ?? 0;
+            scelte.forEach((midi, k) => {
+                const voce = parti[Math.min(k, parti.length - 1)];
+                playbackCursorAbsBeatRef.current = partenza;
+                insertNoteFromMidi(midi, voce);
+            });
+        } catch { /* ignore */ }
+    }, [insertNoteFromMidi]);
+
     // Keep the MIDI step-input ref in sync with the latest callback.
     insertNoteFromMidiRef.current = insertNoteFromMidi;
+    insertChordFromMidiRef.current = insertChordFromMidi;
 
     // Mappa batteria: clic su un pezzo → inserisce quella nota GM al cursore (e avanza),
     // riusando lo step-input MIDI. Target = traccia batteria attiva, o la prima visibile.
