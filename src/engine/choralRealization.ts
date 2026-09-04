@@ -3646,6 +3646,10 @@ const SOTTO_LA_MELODIA = 0.5;
  *  Non un divieto — con moto contrario e' scrivibile, e gli autori lo scrivono. */
 const PARALLELE_COL_BASSO_DATO = 6;
 
+/** Quanto costa ripetere la stessa armonia dall'ultimo tempo di una battuta al
+ *  battere della successiva: e' la sincope armonica di R-16. */
+const SCAVALCA_LA_STANGHETTA = 4;
+
 const ALTALENA = 5;
 
 /** Quanto costa una nota che l'accordo non regge e che non si spiega. Prima
@@ -3953,6 +3957,23 @@ function scegliProgressioneDellaFrase(args: {
     let c = 0;
     if (sda.gradoDiatonico >= 0 && sa.gradoDiatonico >= 0) {
       c -= transizione(sda.gradoDiatonico, sa.gradoDiatonico, forze[i] >= 0.5);
+    }
+
+    // ── LA SINCOPE ARMONICA: l'armonia non scavalca la stanghetta. ──────────
+    // Se l'accordo che sta sull'ultimo tempo di una battuta e' lo STESSO che
+    // sta sul battere della successiva, il cambio d'armonia e' caduto sul
+    // debole e il battere non porta niente di nuovo: e' la «regola della
+    // stanghetta» (R-16), e nel repertorio non si fa — 54 casi su 6652 cambi,
+    // lo 0,8%.
+    //
+    // Col basso DATO capita da se': se la nota grave si ripete attraverso la
+    // stanghetta, l'accordo piu' ovvio si ripete con lei. La via d'uscita c'e'
+    // ed e' a portata — cambiare rivolto, o grado sopra lo stesso basso — ma
+    // qualcuno deve chiederla. Si scoraggia, non si vieta: un'armonia tenuta
+    // attraverso la stanghetta e' scrivibile, ed e' scritta.
+    if (i > 0 && gruppi[i].measure > gruppi[i - 1].measure
+        && Math.abs(gruppi[i].beat - 1) < 1e-6 && da.acc === a.acc && da.inv === a.inv) {
+      c += SCAVALCA_LA_STANGHETTA;
     }
 
     // ── COL BASSO DATO, LE PARALLELE SI EVITANO QUI O NON SI EVITANO PIU'.
@@ -4622,13 +4643,11 @@ export function autoHarmonize(
     // abbastanza popolato, se l'alternativa e' NETTAMENTE piu' attesa, e se
     // quell'accordo era gia' fra le pose ammesse — cioe' regge la melodia e
     // rispetta i vincoli di cadenza e di basso.
-    // NON col basso dato: li' `sopranoMidi` porta la nota di BASSO, e questa
-    // tavola e' condizionata al grado di MELODIA. Interrogarla con la nota
-    // sbagliata portava gli errori del basso dato da 65 a 81 — misurato.
-    // Servirebbe la tavola gemella condizionata al basso; per ora il basso
-    // dato ha gia' una prima scelta molto piu' sicura (57,3% contro 43,1%) e
-    // di questa rilettura ha meno bisogno.
-    if (usaCorpus && totalGroups >= 3 && !opts?.daBasso) {
+    // Vale per tutti e due i mestieri: col canto dato si legge la tavola del
+    // soprano, col basso dato quella del basso. Sono due domande diverse, e con
+    // quella sbagliata il danno e' misurabile — leggere la tavola del soprano
+    // con una nota di basso portava gli errori da 65 a 81.
+    if (usaCorpus && totalGroups >= 3) {
       const FN: Record<number, string> = {};
       for (let g = 0; g < 7; g++) FN[g] = g === 0 || g === 5 || g === 2 ? 'T' : (g === 3 || g === 1 ? 'S' : 'D');
       const funzioneDi = (acc: number): string => {
@@ -4640,7 +4659,7 @@ export function autoHarmonize(
         const sopMidi = groups[i].sopranoMidi;
         if (sopMidi == null || tonicPc == null) continue;
         const grado = (((sopMidi % 12) + 12) % 12 - tonicPc + 12) % 12;
-        const atteso = nelContesto(isMinor, grado, funzioneDi(scelte[i - 1].acc), funzioneDi(scelte[i + 1].acc));
+        const atteso = nelContesto(isMinor, grado, funzioneDi(scelte[i - 1].acc), funzioneDi(scelte[i + 1].acc), !!opts?.daBasso);
         if (!atteso) continue;
         const nomeOra = schede[scelte[i].acc].nomeCorpus;
         const quotaOra = (nomeOra && atteso[nomeOra]) || 0;

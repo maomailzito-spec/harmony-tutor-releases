@@ -47,6 +47,7 @@ import statsJson from '../data/progressionStatsByMode.json';
 import melodiaJson from '../data/armoniaSottoMelodia.json';
 import bassoJson from '../data/armoniaSottoIlBasso.json';
 import contestoJson from '../data/armoniaNelContesto.json';
+import contestoBassoJson from '../data/armoniaNelContestoBasso.json';
 
 type MappaBigrammi = { [da: string]: { [a: string]: number } };
 type PerModo = {
@@ -664,10 +665,16 @@ export function nelContesto(
     semitoniDallaTonica: number,
     funzionePrima: string,
     funzioneDopo: string,
+    /** La nota data e' un BASSO e non un canto: si legge l'altra tavola. Sono
+     *  due domande diverse, e con la tavola sbagliata il danno e' misurabile —
+     *  interrogare quella del soprano con una nota di basso portava gli errori
+     *  del basso dato da 65 a 81. La versione del basso e' anche piu' decisa:
+     *  prima scelta 57,6% contro 49,0%. */
+    daBasso = false,
 ): Record<string, number> | null {
     const grado = NOME_GRADO_MELODIA[((semitoniDallaTonica % 12) + 12) % 12];
     const k = `${isMinor ? 'min' : 'MAG'}|${grado}|${funzionePrima}|${funzioneDopo}`;
-    const tav = (contestoJson as any)?.tav?.[k];
+    const tav = ((daBasso ? contestoBassoJson : contestoJson) as any)?.tav?.[k];
     if (!tav) return null;
     const totale = Object.values(tav).reduce((a: number, b: any) => a + Number(b), 0) as number;
     if (totale < 12) return null;
