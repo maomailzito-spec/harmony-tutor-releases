@@ -13,7 +13,7 @@ import {
   applyHarmonyRules, getActiveNotesTimeline, getKeySignature, getRomanAnalysis,
 } from '../src/utils/musicTheory';
 import { parseRoman } from '../src/engine/choralRealization';
-import { armoniaDellaRegola } from '../src/engine/regolaDellOttava';
+import { armonieDellaRegola } from '../src/engine/regolaDellOttava';
 
 const REL: Record<string, string> = {
   C: 'A', G: 'E', D: 'B', A: 'F#', E: 'C#', B: 'G#', 'F#': 'D#',
@@ -86,11 +86,11 @@ function main() {
       const perGr = (x: number | null) => x != null && Math.abs(x) >= 1 && Math.abs(x) <= 2;
       if (!perGr(avanti) && !perGr(indietro)) continue;
       const sale = perGr(avanti) ? (avanti as number) > 0 : (indietro as number) < 0;
-      const attesa = armoniaDellaRegola(g, sale);
-      if (!attesa) continue;
+      const attese = armonieDellaRegola(g, sale);
+      if (!attese.length) continue;
       esaminati++;
       perGrado[g][1]++;
-      const ok = attesa.grado === passi[i].deg && attesa.rivolto === passi[i].inv;
+      const ok = attese.some(a => a.grado === passi[i].deg && a.rivolto === passi[i].inv);
       if (ok) { coincide++; perGrado[g][0]++; }
       else {
         const k = `${g + 1}° grado`;
@@ -106,8 +106,7 @@ function main() {
   console.log(`coincidono con la regola dell'ottava: ${coincide}  (${pc(coincide, esaminati)})\n`);
   console.log('per grado del basso:');
   for (let g = 0; g < 7; g++) {
-    const att = armoniaDellaRegola(g, true);
-    const nome = att ? NOMI[att.grado] + (RIV[att.rivolto] || '') : '—';
+    const nome = armonieDellaRegola(g, true).map(a => NOMI[a.grado] + (RIV[a.rivolto] || '')).join('|') || '—';
     const alt = Object.entries(invece[`${g + 1}° grado`] || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
     console.log(`   ${g + 1}°  la regola vuole ${nome.padEnd(6)} ${pc(perGrado[g][0], perGrado[g][1]).padStart(5)} su ${String(perGrado[g][1]).padStart(4)}`
       + (alt.length ? `   invece: ${alt.map(([k, v]) => `${k} ${v}`).join('  ')}` : ''));
