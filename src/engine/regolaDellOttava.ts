@@ -28,10 +28,19 @@
  * V), perche' li' serve preparare la dominante. Quando si adottera' anche
  * quella, si riempie l'altra colonna senza toccare chi la legge.
  *
- * IL MODO MINORE non cambia i GRADI: cambia le note del basso — sale con sesto
- * e settimo alzati, scende con entrambi naturali — e quelle sono un dato, non
- * una scelta. Il V resta sempre maggiore in tutte e due le direzioni: la
- * sensibile non si abbassa mai.
+ * IL MODO MINORE quasi non cambia i GRADI: cambia le note del basso — sale con
+ * sesto e settimo alzati, scende con entrambi naturali — e quelle sono un dato.
+ * Il V resta sempre maggiore SALENDO: la sensibile non si abbassa mai.
+ *
+ * Scendendo pero' il settimo e' NATURALE, e allora `V6` non e' piu' la
+ * dominante maggiore ma il `v6` — stessi grado e rivolto, altra qualita', che
+ * la scala decide da se'. E si apre una seconda strada che i gradi di casa non
+ * sanno dire: la DOMINANTE DEL QUARTO col basso sulla sua settima. Ottava
+ * discendente in la minore, dettata dall'utente:
+ *
+ *     Am · A7/G (o Em/G) · Dm/F · E · E7/D · Am/C · E7/B · Am
+ *      i     V4/2 di iv      iv6   V   V4/2   i6    V4/3   i
+ *            oppure v6
  *
  * ══ STATO: la tavola e' BUONA, ma non serve come preferenza del generatore.
  *
@@ -71,7 +80,16 @@
  *  2 secondo, 3 terzo). La settima non e' un campo: la decide `shouldUseSeventh`,
  *  e la stessa casella copre percio' `V6/4` e `V4/3`, che come POSA sono lo
  *  stesso accordo nello stesso rivolto. */
-export type ArmoniaAttesa = { grado: number; rivolto: number };
+export type ArmoniaAttesa = {
+  grado: number;
+  rivolto: number;
+  /** Quando c'e', l'armonia non e' un grado di casa ma la DOMINANTE di quel
+   *  grado. Serve al settimo discendente in minore: `A7/G` in la minore e' la
+   *  dominante del quarto grado col Sol — la sua settima — al basso, e risolve
+   *  sul `iv6`. E' la stessa figura che in maggiore la regola prescrive sul
+   *  quarto discendente (`V4/2` → `I6`), portata sul settimo. */
+  bersaglio?: number;
+};
 
 /**
  * NON UN'ARMONIA PER GRADO, MA UN INSIEME.
@@ -101,6 +119,9 @@ const V42    = { grado: 4, rivolto: 3 };
 const vi     = { grado: 5, rivolto: 0 };
 const vii    = { grado: 6, rivolto: 0 };
 const vii6   = { grado: 6, rivolto: 1 };   // e `vii°6/5`
+/** La dominante del quarto grado, col basso sulla sua settima: `A7/G` in la
+ *  minore. Alternativa al `v6` sul settimo discendente. */
+const Vdi4_42 = { grado: 4, rivolto: 3, bersaglio: 3 };
 
 /** Salendo, per grado del basso (0 = tonica … 6 = settimo). */
 const SALENDO: ArmoniaAttesa[][] = [
@@ -122,7 +143,8 @@ const SCENDENDO: ArmoniaAttesa[][] = [
   [IV, V42],           // 4°  scendendo la versione con le settime da' `V4/2`
   [V],
   [IV6, vi],
-  [V6, vii],
+  [V6, vii, Vdi4_42],  // 7°  scendendo il settimo e' NATURALE: `v6` (la dominante
+                       //     minore) oppure la dominante di iv con la settima al basso
 ];
 
 /**
