@@ -8727,7 +8727,42 @@ export function applyHarmonyRules(
                 const r = (roman || '').toLowerCase().trim();
                 return r === 'vi' || r === 'vi°' || r === '♭vi' || r === 'bvi' || r === '♭6' || r === 'b6';
             };
-            if (isVLike(aRoman) && isVILike(bRoman)) {
+            // IL SESTO GRADO DI PASSAGGIO NON E' UNA CADENZA.
+            //
+            // Il `V→vi` ha sempre carattere d'inganno — la dominante prepara la
+            // tonica e arriva il sesto grado — ma quello e' un fatto della
+            // COPPIA. La cadenza d'inganno e' quel movimento in posizione
+            // conclusiva, dove ci si aspettava la chiusura. Se il basso passa
+            // ATTRAVERSO il sesto grado — ci entra e ne esce per grado, nella
+            // stessa direzione, come nel `V–vi–vii°–I` — la frase sta
+            // camminando e nessuno si aspettava di chiudere li'.
+            //
+            // E' la stessa definizione che si usa per gli ornamenti di melodia,
+            // applicata al basso; e non ha bisogno di sapere dove finisce la
+            // frase, che e' cio' che il motore non sa (vedi
+            // `scripts/quante-cadenze-segna.ts`).
+            //
+            // Misurato: dei 181 `V→vi` del repertorio d'autore, il 12% ha il
+            // basso che ci passa attraverso — sono i falsi che si tolgono qui.
+            const seiDiPassaggio = (() => {
+                try {
+                    const c = chordEvents[i + 2];
+                    if (!c) return false;
+                    const grave = (ev: ChordEvent) => {
+                        const ns = (ev?.notes || []).filter(n => n && !n.isRest && Number.isFinite((n as any).midi));
+                        if (!ns.length) return null;
+                        return ns.reduce((lo: any, n: any) => (n.midi < lo.midi ? n : lo), ns[0]).midi as number;
+                    };
+                    const ba = grave(a), bb = grave(b), bc = grave(c);
+                    if (ba == null || bb == null || bc == null) return false;
+                    const entra = bb - ba, esce = bc - bb;
+                    const perGrado = Math.abs(entra) >= 1 && Math.abs(entra) <= 2
+                                  && Math.abs(esce) >= 1 && Math.abs(esce) <= 2;
+                    return perGrado && ((entra > 0) === (esce > 0));
+                } catch { return false; }
+            })();
+
+            if (isVLike(aRoman) && isVILike(bRoman) && !seiDiPassaggio) {
                 markCadence(
                     'CAD-DEC',
                     'Cadenza d\'inganno (Deceptive)',
