@@ -4540,6 +4540,34 @@ export function autoHarmonize(
     extra.push({ label: 'ii', corpus: 'ii', target: -1, hasSeventh: false, grado: 1 });
   }
 
+  // ── LE SESTE ECCEDENTI ─────────────────────────────────────────────────
+  // Segnalate dall'utente sul sesto grado discendente in minore: in la minore
+  // `Fr6` e' Fa·La·Si·Re♯, e va al V. Il realizzatore le sapeva gia' scrivere
+  // (`getChordTones`), ma il generatore non le poteva SCEGLIERE: fra le sue
+  // schede non ce n'era nessuna — lo stesso buco del sesto alzato.
+  //
+  // Stanno sempre sul ♭6, che in minore e' il sesto grado naturale e in
+  // maggiore e' alterato; il basso e' quella nota, quindi solo stato
+  // fondamentale. E hanno un OBBLIGO: risolvono sul V, e il `bersaglio` lo
+  // impone come per le tonicizzazioni.
+  //
+  // Sono RARE — 0,92% delle armonie del corpus, con la francese in testa (29
+  // su 44) — e il peso lo prendono da li': se il generatore le usasse spesso
+  // farebbe un altro difetto, non un guadagno.
+  if (usaCorpus) {
+    const g = (semitoni: number) => (tonicPc + semitoni) % 12;
+    const b6 = g(8), terza = g(0), sesta = g(6);
+    for (const [tipo, nome, extraPc] of [
+      ['Fr6', 'Fr+', g(2)],       // francese: quarta eccedente
+      ['Ger6', 'Ger+', g(3)],     // tedesca: quinta giusta
+      ['It6', 'It+', null],       // italiana: tre note sole
+    ] as [string, string, number | null][]) {
+      triadPcSets.push(extraPc == null ? [b6, terza, sesta] : [b6, terza, extraPc, sesta]);
+      seventhPcs.push(sesta);
+      extra.push({ label: tipo, corpus: nome, target: 4, hasSeventh: false });
+    }
+  }
+
   const PRIMO_EXTRA = 7;
   const datiExtra = (deg: number): Extra | null => (deg >= PRIMO_EXTRA ? extra[deg - PRIMO_EXTRA] ?? null : null);
 
@@ -4677,7 +4705,9 @@ export function autoHarmonize(
         peso: ex.grado != null ? (baseWeight[ex.grado] ?? 1) : ps,
         pesoForte: ex.grado != null ? (pesiForte[ex.grado] ?? 1) : ps,
         pesoDebole: ex.grado != null ? (pesiDebole[ex.grado] ?? 1) : ps,
-        rivolti: ex.hasSeventh ? [0, 1, 2, 3] : [0, 1, 2],
+        // Una sesta eccedente sta sul ♭6 e basta: rivoltarla la disfa.
+        rivolti: /^(Fr|Ger|It)6$/.test(ex.label) ? [0]
+               : (ex.hasSeventh ? [0, 1, 2, 3] : [0, 1, 2]),
         bersaglio: ex.target,
         gradoDiatonico: ex.grado ?? -1,
       });
