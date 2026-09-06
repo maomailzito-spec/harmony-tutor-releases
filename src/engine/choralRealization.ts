@@ -621,9 +621,34 @@ export function getChordTones(
   if (isMinor) {
     const needsHarmonic = (parsed.degree === 4 && !parsed.quality.startsWith('minor'))
                        || (parsed.degree === 6 && (parsed.quality === 'diminished' || parsed.quality === 'dim7' || parsed.quality === 'halfDim7'));
+    // LA MINORE ASCENDENTE, cioe' la SESTA alzata.
+    //
+    // `IV` maggiore (Re·Fa♯·La in la minore) e `ii` minore (Si·Re·Fa♯) sono i
+    // due accordi della scala melodica ascendente, ed erano irrealizzabili: qui
+    // si tornava sempre alla naturale, quindi l'etichetta `IV` produceva
+    // Re·FA·La — un accordo in cui il Fa♯ del basso non c'e'. Il realizzatore
+    // non trovava nessuna disposizione e SALTAVA l'accordo.
+    //
+    // La qualita' scritta nell'etichetta e' il segnale: `IV` maiuscolo su un
+    // quarto grado, o `ii` minore su un secondo, in modo minore, dicono che la
+    // sesta e' alzata.
+    const sestaAlzata = (parsed.degree === 3 && !parsed.quality.startsWith('minor')
+                          && parsed.quality !== 'diminished')
+                     || (parsed.degree === 1 && parsed.quality.startsWith('minor'));
     if (!needsHarmonic) {
       // Use natural minor scale for non-dominant/non-leading-tone chords
       effectiveScale = buildNaturalMinorScale(tonic);
+      if (sestaAlzata) {
+        // La sola SESTA sale: il settimo resta come lo vuole il contesto.
+        const su = [...effectiveScale];
+        const sesto = { ...su[5] };
+        sesto.semiFromRoot = (sesto.semiFromRoot + 1) % 12;
+        if (sesto.accidental === 'b') sesto.accidental = '';
+        else if (sesto.accidental === '') sesto.accidental = '#';
+        else sesto.accidental = sesto.accidental + '#';
+        su[5] = sesto;
+        effectiveScale = su;
+      }
     }
   }
 
@@ -4446,7 +4471,13 @@ export function autoHarmonize(
   //
   // Si accodano ai sette diatonici, così che tutto il resto — rivolti, basso, punteggio —
   // continui a lavorare per indice senza sapere che sono cambiati di numero.
-  type Extra = { label: string; corpus: string; target: number; hasSeventh: boolean };
+  type Extra = {
+    label: string; corpus: string; target: number; hasSeventh: boolean;
+    /** Il grado di casa di cui questa carta e' una forma, quando non e' una
+     *  tonicizzazione: serve a farle usare i pesi e le transizioni di quel
+     *  grado, perche' e' quel grado — solo con la sesta alzata. */
+    grado?: number;
+  };
   const extra: Extra[] = [];
   /** Come si scrive il bersaglio dentro l'etichetta: `parseRoman` legge solo lettere romane,
    *  quindi niente `°` né `o` (un `V/iio` non verrebbe riconosciuto). */
@@ -4475,6 +4506,32 @@ export function autoHarmonize(
       extra.push({ label: `V7/${nomeBersaglio[t]}`, corpus: `V/${nomeCorpus[t]}`, target: t, hasSeventh: true });
     }
   }
+  // ── LA MINORE ASCENDENTE, che mancava del tutto ────────────────────────
+  // In minore le schede si costruiscono sulla scala NATURALE, tranne il V e il
+  // vii° che prendono l'armonica (settima alzata). Risultato: il SESTO ALZATO
+  // non compariva in nessun accordo diatonico — in la minore, nessuna carta
+  // conteneva il Fa♯.
+  //
+  // Il guasto si vedeva su una scala che sale al basso: sul Fa♯ l'unica cosa
+  // scrivibile era una dominante secondaria, e il generatore metteva `V/ii` —
+  // Fa♯·La♯·Do♯ — pagando un La♯ che nel brano non c'entra, dove la regola
+  // dell'ottava vuole `iv6`, cioe' Re·Fa♯·La, tre note tutte della scala.
+  //
+  // Non era un errore di scelta: era un buco nel vocabolario. La minore
+  // MELODICA ascendente porta due accordi che mancavano, e sono proprio quelli
+  // che reggono un basso che sale verso la tonica.
+  if (isMinor) {
+    const g = (semitoni: number) => (tonicPc + semitoni) % 12;
+    // IV maggiore (Re·Fa♯·La in la minore): la sottodominante con la sesta alzata.
+    triadPcSets.push([g(5), g(9), g(0)]);
+    seventhPcs.push(g(3));                      // la settima e' il terzo grado
+    extra.push({ label: 'IV', corpus: 'IV', target: -1, hasSeventh: false, grado: 3 });
+    // ii minore (Si·Re·Fa♯): il secondo grado non piu' diminuito.
+    triadPcSets.push([g(2), g(5), g(9)]);
+    seventhPcs.push(g(0));
+    extra.push({ label: 'ii', corpus: 'ii', target: -1, hasSeventh: false, grado: 1 });
+  }
+
   const PRIMO_EXTRA = 7;
   const datiExtra = (deg: number): Extra | null => (deg >= PRIMO_EXTRA ? extra[deg - PRIMO_EXTRA] ?? null : null);
 
@@ -4601,14 +4658,20 @@ export function autoHarmonize(
     }
     for (let e = 0; e < extra.length; e++) {
       const ex = extra[e];
-      const ps = pesoSecondaria(isMinor, ex.corpus);
+      // Chi dichiara un GRADO non e' una tonicizzazione: prende i pesi e le
+      // transizioni del suo grado, perche' e' quel grado in un'altra veste.
+      const ps = ex.grado != null
+        ? (pesiForte[ex.grado] ?? 1)
+        : pesoSecondaria(isMinor, ex.corpus);
       schede.push({
         nomeCorpus: ex.corpus,
         pcs: triadPcSets[PRIMO_EXTRA + e],
-        peso: ps, pesoForte: ps, pesoDebole: ps,
+        peso: ex.grado != null ? (baseWeight[ex.grado] ?? 1) : ps,
+        pesoForte: ex.grado != null ? (pesiForte[ex.grado] ?? 1) : ps,
+        pesoDebole: ex.grado != null ? (pesiDebole[ex.grado] ?? 1) : ps,
         rivolti: ex.hasSeventh ? [0, 1, 2, 3] : [0, 1, 2],
         bersaglio: ex.target,
-        gradoDiatonico: -1,
+        gradoDiatonico: ex.grado ?? -1,
       });
     }
     // `beatsPerMeasure` è già i movimenti da un quarto per battuta.
