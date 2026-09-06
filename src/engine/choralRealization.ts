@@ -675,7 +675,15 @@ export function getChordTones(
 
   // ── Augmented sixth chords: special interval structures ──
   if (parsed.aug6Type) {
-    const rootSemi = (effectiveScale[deg].semiFromRoot + (parsed.chromaticShift || 0) + 12) % 12;
+    // LA SESTA ECCEDENTE STA SEMPRE SUL ♭6, in maggiore come in minore: e' la
+    // sua definizione, non un'alterazione da applicare al grado in vigore.
+    //
+    // Prima si prendeva il sesto grado della scala corrente e gli si applicava
+    // lo `chromaticShift: -1` che `parseRoman` mette. In maggiore torna (La →
+    // La♭); in MINORE no, perche' li' il sesto e' GIA' un ♭6 e abbassarlo di
+    // nuovo dava un doppio bemolle: in la minore `Fr6` usciva Si♭·Fa♭·Re·La♭
+    // invece di Fa·La·Si·Re♯.
+    const rootSemi = 8;   // ♭6 sopra la tonica
     // Root on ♭6, M3 = letter+2 steps, P5/A4 = letter+4 steps, A6 = letter+5 steps (= #4)
     const tones: ScaleDegreeNote[] = [spellNote(deg, rootSemi)];
     tones.push(spellNote((deg + 2) % 7, (rootSemi + 4) % 12));   // M3

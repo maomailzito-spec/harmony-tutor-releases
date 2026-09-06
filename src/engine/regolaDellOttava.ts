@@ -89,6 +89,10 @@ export type ArmoniaAttesa = {
    *  sul `iv6`. E' la stessa figura che in maggiore la regola prescrive sul
    *  quarto discendente (`V4/2` → `I6`), portata sul settimo. */
   bersaglio?: number;
+  /** Sesta eccedente: non e' un grado di casa ne' la dominante di uno. Si scrive
+   *  `Fr6` / `It6` / `Ger6` e sta sempre sul ♭6, che scendendo in minore e' il
+   *  sesto grado naturale. */
+  aug6?: 'fr' | 'it' | 'ger';
 };
 
 /**
@@ -119,6 +123,11 @@ const V42    = { grado: 4, rivolto: 3 };
 const vi     = { grado: 5, rivolto: 0 };
 const vii    = { grado: 6, rivolto: 0 };
 const vii6   = { grado: 6, rivolto: 1 };   // e `vii°6/5`
+/** La SESTA FRANCESE sul sesto grado discendente: in la minore Fa·La·Si·Re♯,
+ *  che va al V. Il basso e' il ♭6, cioe' proprio la nota su cui si sta
+ *  scendendo. Segnalata dall'utente come armonizzazione corrente di quel
+ *  grado, accanto al `iv6`. */
+const Fr6    = { grado: 5, rivolto: 0, aug6: 'fr' as const };
 /** La dominante del quarto grado, col basso sulla sua settima: `A7/G` in la
  *  minore. Alternativa al `v6` sul settimo discendente. */
 const Vdi4_42 = { grado: 4, rivolto: 3, bersaglio: 3 };
@@ -142,7 +151,7 @@ const SCENDENDO: ArmoniaAttesa[][] = [
   [I6],
   [IV, V42],           // 4°  scendendo la versione con le settime da' `V4/2`
   [V],
-  [IV6, vi],
+  [IV6, vi, Fr6],     // 6°  scendendo si apre anche la SESTA FRANCESE, che va al V
   [V6, vii, Vdi4_42],  // 7°  scendendo il settimo e' NATURALE: `v6` (la dominante
                        //     minore) oppure la dominante di iv con la settima al basso
 ];
