@@ -20,6 +20,7 @@
     "R-17c": "Tritone succession",
     "R-N-RES": "Non-chord tone resolution",
     "R-AUG6-RES": "Augmented sixth resolution",
-    "R-CAD64": "Cadential 6/4 resolution"
+    "R-CAD64": "Cadential 6/4 resolution",
+    "R-CAD64-METRO": "Cadential 6/4 placement"
   }
 }

@@ -541,10 +541,11 @@ const ORNAMENT_LABEL_LEADER_STROKE = '#94a3b8';
 // rende lecita questa, e dipingerla di verde direbbe "qui va bene" mentre il pannello
 // d'analisi elenca un avviso. Il verde compare solo quando su quelle note non c'è
 // nient'altro che eccezioni.
-const SEVERITY_PAINT_RANK: Record<'error' | 'warning' | 'chromatic' | 'exception', number> = {
-    error: 4,
-    warning: 3,
-    chromatic: 2,
+const SEVERITY_PAINT_RANK: Record<'error' | 'warning' | 'chromatic' | 'observation' | 'exception', number> = {
+    error: 5,
+    warning: 4,
+    chromatic: 3,
+    observation: 2,
     exception: 1,
 };
 type PaintSeverity = keyof typeof SEVERITY_PAINT_RANK;
@@ -9623,6 +9624,7 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         const getLevel = (v: any): PaintSeverity => {
             const s = (v?.severity || v?.level || v?.type || '').toString().toLowerCase();
             if (s.includes('chromatic')) return 'chromatic';
+            if (s.includes('observation')) return 'observation';
             if (s.includes('exception') || s.includes('green')) return 'exception';
             if (s.includes('warn') || s.includes('yellow')) return 'warning';
             return 'error';
@@ -22134,6 +22136,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                             if (sevLower.includes('warning') && !analysisFilters.showWarning) return false;
                                                                             if ((sevLower.includes('exception') || sevLower.includes('green')) && !analysisFilters.showException) return false;
                                                                             if (sevLower.includes('chromatic') && analysisFilters.showChromatic === false) return false;
+                                                                            if (sevLower.includes('observation') && analysisFilters.showObservation === false) return false;
                                                                             if (sevLower.includes('error') && !analysisFilters.showError) return false;
                                                                             // Also check per-rule disable.
                                                                             const rid = String(c.ruleId || '');
@@ -22164,7 +22167,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                                                                     };
 
                                                                     const connectionStroke = (level: PaintSeverity) =>
-                                                                        level === 'warning' ? '#f59e0b' : level === 'exception' ? '#22c55e' : level === 'chromatic' ? '#8B5CF6' : '#ef4444';
+                                                                        level === 'warning' ? '#f59e0b' : level === 'exception' ? '#22c55e' : level === 'chromatic' ? '#8B5CF6' : level === 'observation' ? '#38bdf8' : '#ef4444';
 
                                                                     // Più regole possono segnare la STESSA coppia di note (tipico: quinte
                                                                     // parallele + ottave nascoste + moto parallelo). Le linee cadrebbero una

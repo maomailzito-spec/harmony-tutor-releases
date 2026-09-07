@@ -20,6 +20,7 @@
     "R-17c": "Successione di tritono",
     "R-N-RES": "Risoluz. nota non armonica",
     "R-AUG6-RES": "Risoluz. 6ª aumentata",
-    "R-CAD64": "Risoluz. accordo cadenzale 6/4"
+    "R-CAD64": "Risoluz. accordo cadenzale 6/4",
+    "R-CAD64-METRO": "Collocazione del 6/4 cadenzale"
   }
 }

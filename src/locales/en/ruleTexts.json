@@ -125,6 +125,11 @@
     "suggestion": "The augmented sixth chord typically resolves to V: the bass descends by semitone (or ascends by semitone depending on the type) while the upper voice ascends by semitone. Ensure both voices move outward toward the fifth of the scale.",
     "titlePrefix": "Atypical resolution of "
   },
+  "R-CAD64-METRO": {
+    "body": "A cadential 6/4 can be perfectly built — the sixth falling to the fifth, the fourth to the third — and still sit in the wrong place. In the compound cadence the 6/4 falls on the STRONG beat and the dominant on the weak one: it is not the succession of chords that makes the cadence, it is the metrical relation between the two.\nWith the terms reversed — the 6/4 on the last beat of the bar, the dominant on the following downbeat and longer as well — the same succession no longer works as a cadence. This is an observation about placement, not a voice-leading error: the writing is correct, the figure is not.\nThe check fires ONLY on the cadential 6/4, recognised by the following chord having the same bass and dominant function. The passing 6/4 (bass moving by step) and the neighbour 6/4 (bass held, the previous chord returning) want the weak beat instead, and are left alone.",
+    "suggestion": "Move the 6/4 to the strong beat and its resolution to the weak one, giving the 6/4 a duration no shorter than that of the dominant it resolves to.",
+    "title": "Cadential 6/4 placed the wrong way round"
+  },
   "R-CAD64": {
     "body": "The second inversion of the tonic chord in cadential position (I6/4) is one of the most codified chords in classical harmonic theory. It is not an independent tonic chord but a preparation for the dominant: the two \"dissonances\" (the fourth and the sixth above the bass) must descend by step to the third and fifth of the dominant.\nWhen this chord does not resolve to V — or its notes do not descend in the expected direction — the cadential function is completely defeated.",
     "suggestion": "The cadential I6/4 must resolve to V: the sixth descends to the fifth, the fourth descends to the third of the dominant. The bass remains stationary on the fifth of the scale. Ensure that the next chord is actually the dominant.",

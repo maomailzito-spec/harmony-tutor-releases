@@ -195,7 +195,7 @@ export type RuleViolation = {
     description: string;
     suggestion?: string;
     noteIds: string[];
-    severity: 'error' | 'warning' | 'exception' | 'chromatic';
+    severity: 'error' | 'warning' | 'exception' | 'chromatic' | 'observation';
 };
 
 export type AnalysisContext = {

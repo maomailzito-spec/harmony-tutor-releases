@@ -125,6 +125,11 @@
     "suggestion": "L'accordo di sesta aumentata risolve tipicamente su V: il basso scende di semitono (o sale di semitono a seconda del tipo) mentre la voce superiore sale di semitono. Assicurati che entrambe le voci si muovano verso l'esterno verso la quinta della scala.",
     "titlePrefix": "Risoluzione atipica di "
   },
+  "R-CAD64-METRO": {
+    "body": "Il 6/4 cadenziale può essere costruito benissimo — la sesta scende sulla quinta, la quarta scende sulla terza — e stare nel posto sbagliato. Nella cadenza composta il 6/4 cade sul tempo FORTE e la dominante su quello debole: non è la successione degli accordi a fare la cadenza, è la relazione metrica fra i due.\nInvertiti i termini — il 6/4 sull'ultimo movimento della battuta, la dominante sul battere seguente e per giunta più lunga — la stessa successione non funziona più come cadenza. È un rilievo di collocazione, non un errore di condotta delle parti: la scrittura è corretta, la figura no.\nIl controllo scatta SOLO sul 6/4 cadenzale, riconosciuto dal fatto che l'accordo seguente ha lo stesso basso e funzione di dominante. Il 6/4 di passaggio (basso in moto congiunto) e quello di volta (basso fermo, l'accordo di prima che ritorna) vogliono al contrario il tempo debole, e non vengono toccati.",
+    "suggestion": "Sposta il 6/4 sul tempo forte e la sua risoluzione su quello debole, dando al 6/4 durata non inferiore a quella della dominante su cui risolve.",
+    "title": "6/4 cadenziale collocato al contrario"
+  },
   "R-CAD64": {
     "body": "Il secondo rivolto dell'accordo di tonica in posizione cadenzale (I6/4) è uno degli accordi più codificati della teoria armonica classica. Non è un accordo di tonica autonomo, ma una preparazione della dominante: le due \"dissonanze\" (la quarta e la sesta rispetto al basso) devono scendere per grado congiunto alla terza e alla quinta della dominante.\nQuando questo accordo non risolve su V — o le sue note non scendono nella direzione attesa — la funzione cadenzale viene completamente vanificata.",
     "suggestion": "Il I6/4 cadenziale deve risolvere su V: la sesta scende alla quinta, la quarta scende alla terza della dominante. Il basso rimane fermo sulla quinta della scala. Assicurati che l'accordo successivo sia effettivamente la dominante.",

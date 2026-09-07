@@ -8482,6 +8482,109 @@ export function applyHarmonyRules(
             }
         };
 
+        // ── IL 6/4 E LA SUA COLLOCAZIONE ────────────────────────────
+        //
+        // Le tre specie di 6/4 hanno requisiti metrici OPPOSTI: il cadenzale vuole il tempo
+        // forte, quello di passaggio e quello di volta vogliono il debole. Un controllo che
+        // parta dalla figura senza classificarla prima segnalerebbe come sbagliati tutti i
+        // 6/4 di passaggio del repertorio.
+        //
+        // La classificazione si fa sui RAPPORTI e non sulle etichette: la stessa figura si
+        // cifra diversamente secondo la convenzione attiva (numerazione dalla fondamentale
+        // o scuola romana, che il programma offre come preferenza), e un criterio appeso al
+        // numero romano cambierebbe verdetto al cambiare di un'impostazione di lettura.
+        //
+        //   cadenzale     l'accordo dopo ha LO STESSO BASSO e funzione di dominante
+        //   di passaggio  il basso ci arriva e ne esce per grado congiunto, nella stessa direzione
+        //   di volta      il basso sta fermo e l'accordo dopo è LO STESSO di quello prima
+
+        /** L'insieme delle classi d'altezza: serve a dire «lo stesso accordo», per il 6/4 di volta. */
+        const improntaAccordo = (ev: ChordEvent): string => {
+            const pcs = (ev.notes || [])
+                .filter(n => n && !(n as any).isRest && Number.isFinite((n as any).midi))
+                .map(n => mod12((n as any).midi));
+            return Array.from(new Set(pcs)).sort((x, y) => x - y).join('.');
+        };
+
+        /** PESO METRICO, non «forte o debole».
+         *
+         *  Qui serve un CONFRONTO — questo sta più in basso di quello — e un booleano non
+         *  basta: in 3/4 il secondo e il terzo movimento sono tutt'e due «non forti» per il
+         *  resto del motore, ma il terzo è più debole del primo, ed è esattamente lì che una
+         *  cadenza composta si rovescia nel suo contrario.
+         *
+         *    3 = battere    2 = appoggio secondario (3° in 4/4, le pulsazioni dei metri composti)
+         *    1 = altro movimento intero        0 = suddivisione
+         */
+        const pesoMetrico = (ev: ChordEvent): number => {
+            const cambi = ((opts as any)?.timeSignatureChanges || [])
+                .filter((c: any) => c && Number.isFinite(Number(c.measureIndex)))
+                .sort((x: any, y: any) => Number(x.measureIndex) - Number(y.measureIndex));
+            let ts: TimeSignature = timeSignature as TimeSignature;
+            for (const c of cambi) {
+                if (Number((c as any).measureIndex) <= (ev.measureIndex ?? 0)) {
+                    ts = { numerator: Number((c as any).numerator), denominator: Number((c as any).denominator) } as TimeSignature;
+                }
+            }
+            if (!ts || !Number.isFinite(ts.numerator) || !Number.isFinite(ts.denominator)) return 0;
+            const b0 = Number(ev.beat) - 1;
+            if (!Number.isFinite(b0)) return 0;
+            if (Math.abs(b0 - Math.round(b0)) > 1e-6) return 0;
+            if (Math.abs(b0) < 1e-6) return 3;
+            const composto = ts.denominator === 8 && ts.numerator % 3 === 0 && ts.numerator > 3;
+            if (composto) return Math.abs(b0 % 1.5) < 1e-6 ? 2 : 1;
+            if (ts.denominator === 4 && ts.numerator === 4 && Math.abs(b0 - 2) < 1e-6) return 2;
+            return 1;
+        };
+
+        /** DOVE COMINCIA DAVVERO un'armonia.
+         *
+         *  Misurato sul repertorio: la prima versione della regola segnalava Bach, e a torto.
+         *  Gli eventi nascono dagli attacchi e dalle fini delle note, quindi un 6/4 che si
+         *  forma per gradi — la sesta che entra dopo la quarta, come nel 6/4 scritto con la
+         *  sospensione, che è il modo in cui Bach lo scrive di solito — si presenta come due
+         *  o tre eventi di fila. Guardando l'ULTIMO, il 6/4 sembra entrare su una suddivisione
+         *  debole mentre in realtà sta sul battere già da mezzo movimento.
+         *
+         *  Si torna indietro finché il basso è LA STESSA NOTA e le classi d'altezza sono un
+         *  sottoinsieme di quelle di qui: cioè finché quel che si sente è la stessa armonia
+         *  ancora incompleta. */
+        const iniziaDove = (idx: number): number => {
+            const pcsDi = (ev: ChordEvent) => new Set((ev.notes || [])
+                .filter(n => n && !(n as any).isRest && Number.isFinite((n as any).midi))
+                .map(n => mod12((n as any).midi)));
+            const pcsQui = pcsDi(chordEvents[idx]);
+            const bassoQui = getLowestNote(chordEvents[idx]);
+            if (!bassoQui) return idx;
+            let k = idx;
+            while (k > 0) {
+                const prima = chordEvents[k - 1];
+                const bassoPrima = getLowestNote(prima);
+                if (!bassoPrima || (bassoPrima as any).id !== (bassoQui as any).id) break;
+                let dentro = true;
+                pcsDi(prima).forEach(x => { if (!pcsQui.has(x)) dentro = false; });
+                if (!dentro) break;
+                k--;
+            }
+            return k;
+        };
+
+        /** Quanto DURA davvero un'armonia: fino al primo evento che cambia accordo.
+         *  Gli eventi nascono dagli attacchi e dalle fini delle note, quindi un accordo tenuto
+         *  si spezza in più eventi: misurando da un evento al successivo si conterebbe una
+         *  minima puntata come una semiminima, e il confronto delle durate direbbe il falso. */
+        const duraFinoAlCambio = (idx: number): number => {
+            const qui = improntaAccordo(chordEvents[idx]);
+            for (let k = idx + 1; k < chordEvents.length; k++) {
+                if (improntaAccordo(chordEvents[k]) !== qui) return chordEvents[k].absBeat - chordEvents[idx].absBeat;
+            }
+            const ultimo = chordEvents[chordEvents.length - 1];
+            const coda = (ultimo.notes || [])
+                .map(n => Number((n as any).durationTicks) || 0)
+                .reduce((m, v) => Math.max(m, v), 0) / 480;
+            return (ultimo.absBeat + coda) - chordEvents[idx].absBeat;
+        };
+
         for (let i = 0; i < chordEvents.length - 1; i++) {
             const a = chordEvents[i];
             const b = chordEvents[i + 1];
@@ -8585,6 +8688,68 @@ export function applyHarmonyRules(
                             noteIds: withEndpoints((a.notes || []).slice(0, 4).map(n => n.id), aBass?.id, bBass?.id),
                         });
                         addResolutionConnection(a, b, 'R-CAD64', 'warning');
+                    } else {
+                        // ── DOVE STA IL 6/4 CADENZALE ────────────────────────
+                        //
+                        // La figura può essere costruita benissimo — sesta che scende sulla
+                        // quinta, quarta che scende sulla terza — e stare nel posto sbagliato.
+                        // Nella cadenza composta il 6/4 sta sul tempo FORTE e la dominante su
+                        // quello debole: non è la successione degli accordi a fare la cadenza,
+                        // è la relazione metrica fra i due. Invertiti i termini, la stessa
+                        // successione non funziona più come cadenza.
+                        //
+                        // Due condizioni, e basta che ne cada una. Quella sulla DURATA è la
+                        // più solida perché non dipende dal metro: prende anche i casi in cui
+                        // la posizione metrica è ambigua.
+                        const bassoFermo = !!bBass && !!aBass
+                            && mod12((bBass as any).midi) === mod12((aBass as any).midi);
+                        // Il 6/4 va guardato da DOVE COMINCIA, non dall'ultima fetta.
+                        const inizio = iniziaDove(i);
+                        // IL BASSO DEVE ARRIVARCI.
+                        //
+                        // Nel 6/4 cadenzale il basso ENTRA sulla dominante insieme alla figura:
+                        // è quell'arrivo a fare la cadenza. Se la dominante suonava già prima
+                        // come accordo suo, il 6/4 è una volta o un'appoggiatura sopra una
+                        // dominante ferma — e lì il tempo debole è la collocazione giusta.
+                        // (Misurato: era il falso positivo della cantata 45 di Bach, dove un
+                        // 6/4 sta fra due V7 sullo stesso Si.)
+                        const primaDelSei = inizio > 0 ? chordEvents[inizio - 1] : null;
+                        const bassoPrima = primaDelSei ? getLowestNote(primaDelSei) : null;
+                        const dominanteGiaLi = !!bassoPrima && !!aBass
+                            && mod12((bassoPrima as any).midi) === mod12((aBass as any).midi);
+                        // `ok` qui sopra accetta qualunque romano che cominci per «v», e
+                        // quindi anche `vi` e `vii°`. Per il verdetto sulla RISOLUZIONE di
+                        // R-CAD64 è una maglia larga che tace e non disturba nessuno; per una
+                        // segnalazione nuova no: un I6/4 che va al `vi` non è una cadenza
+                        // composta e non va giudicato come tale. (Misurato: era il falso
+                        // positivo del corale 19 di Bach.)
+                        const vaSullaDominante = /^v(?!i)/i.test(bRoman);
+                        if (bassoFermo && !dominanteGiaLi && vaSullaDominante) {
+                            // La durata della RISOLUZIONE si conta fino all'evento seguente e
+                            // non fino al cambio d'armonia: una dominante ribattuta o tenuta
+                            // oltre la cadenza è un prolungamento normale, e contandolo tutto
+                            // ogni cadenza con la dominante estesa risultava «troppo breve».
+                            // (Misurato: era il falso positivo del Dubois n.2 p.71.)
+                            const dopo = chordEvents[i + 2];
+                            const duraRisoluzione = dopo ? dopo.absBeat - b.absBeat : duraFinoAlCambio(i + 1);
+                            const piuDebole = pesoMetrico(chordEvents[inizio]) < pesoMetrico(b);
+                            const piuBreve = (b.absBeat - chordEvents[inizio].absBeat) < duraRisoluzione - 1e-6;
+                            if (piuDebole || piuBreve) {
+                                const motivo = piuDebole && piuBreve
+                                    ? 'sta in posizione metrica più debole della sua risoluzione e dura meno'
+                                    : piuDebole
+                                        ? 'sta in posizione metrica più debole della sua risoluzione'
+                                        : 'dura meno della sua risoluzione';
+                                addViolation({
+                                    ruleId: 'R-CAD64-METRO',
+                                    severity: 'observation',
+                                    description: `6/4 cadenziale collocato al contrario: ${motivo}`,
+                                    suggestion: 'Il 6/4 cadenziale dovrebbe cadere sul tempo forte e risolvere su quello debole, con durata non inferiore alla propria risoluzione. Costruito bene ma collocato così, ha i due termini della cadenza composta invertiti e non funziona come cadenza.',
+                                    noteIds: withEndpoints((a.notes || []).slice(0, 4).map(n => n.id), aBass?.id, bBass?.id),
+                                });
+                                addResolutionConnection(a, b, 'R-CAD64-METRO', 'observation');
+                            }
+                        }
                     }
                 }
             }
@@ -14032,8 +14197,15 @@ export function applyHarmonyRules(
         }
     } catch { /* ignore */ }
 
-    // Sort violations by severity (error -> warning -> exception) then by rule id for readability.
-    const sevRank: Record<RuleViolation['severity'], number> = { error: 0, warning: 1, exception: 2 };
+    // L'ordine con cui le violazioni arrivano al pannello: prima quello che è sbagliato, in
+    // fondo i marcatori neutri.
+    //
+    // Qui mancava `chromatic`, che pure esiste da tempo: la tabella non lo elencava e il
+    // confronto restituiva NaN, cioè un comparatore che non ordina — i rilievi cromatici
+    // finivano dove capitava. Il tipo non se n'era accorto perche' l'unione di `severity`
+    // non li comprendeva. Aggiungendo `observation` l'unione si e' allargata e il buco e'
+    // venuto fuori da solo.
+    const sevRank: Record<RuleViolation['severity'], number> = { error: 0, warning: 1, chromatic: 2, observation: 3, exception: 4 };
     violations.sort((a, b) => {
         const sd = sevRank[a.severity] - sevRank[b.severity];
         if (sd !== 0) return sd;

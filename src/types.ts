@@ -537,7 +537,7 @@ export type ErrorConnection = {
   noteId2: string;
   // Optional metadata to keep connection coloring tied to the originating rule.
   // If absent, the editor may derive severity from violations/endpoints.
-  severity?: 'error' | 'warning' | 'exception';
+  severity?: 'error' | 'warning' | 'exception' | 'chromatic' | 'observation';
   ruleId?: string;
 };
 
@@ -546,7 +546,11 @@ export type RuleViolation = {
     description: string;
     suggestion?: string;
     noteIds: string[];
-    severity: 'error' | 'warning' | 'exception';
+    /** `observation` è la quarta categoria, accanto a `chromatic`: un RILIEVO, non un errore
+     *  di condotta delle parti né un semplice consiglio di stile. Ci finisce quello che è
+     *  scritto correttamente ma collocato in modo che non svolga la funzione che dichiara —
+     *  il 6/4 cadenziale sul tempo debole ne è il caso capostipite. */
+    severity: 'error' | 'warning' | 'exception' | 'chromatic' | 'observation';
     /**
      * Nota davvero IN CAUSA, quando `noteIds` ne contiene anche altre solo per poter
      * disegnare il tratteggio (che vuole due estremi). Il clic sulla partitura apre di
