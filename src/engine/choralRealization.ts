@@ -20,6 +20,7 @@ import { TICKS_PER_QUARTER, DURATION_VALUES } from '../constants';
 import type { StyleProfile } from './choralStyleProfile';
 import { getInversionBonus, getMotionBonus, getContraryMotionBonus } from './choralStyleProfile';
 import { veto, confronta, type EsitoVeto } from './vetoRegole';
+import { pesoMetrico } from '../utils/figureArmoniche';
 import { pesiDeiGradi, bonusTransizione, pesoSecondaria, costoMotoEstremi, pesiDiChiusura, costoDelRaddoppio, pesoSottoLaMelodia, pesoSottoIlBasso, nelContesto } from './corpusProgressione';
 
 /**
@@ -2536,11 +2537,38 @@ export function realizeChorale(
         const nextParsed = parseRoman(sortedProg[i + 1].roman);
         if (nextParsed.degree === 4) inv = 1;
       }
-      // I6/4 cadenzale: I before V → 2nd inversion (cadential 6/4)
-      // Only for diatonic V (not secondary dominants), and never on the first chord.
+      // ── I6/4 CADENZALE: il I prima del V va in secondo rivolto ────────────
+      //
+      // Ma NON dovunque càpiti. Il 6/4 cadenzale non può stare in posizione metrica più
+      // debole della sua risoluzione né durare meno: nella cadenza composta il 6/4 sta sul
+      // tempo forte e la dominante su quello debole, e non è la successione degli accordi
+      // a fare la cadenza — è la relazione metrica fra i due. Invertiti i termini, la
+      // stessa successione non funziona più come cadenza.
+      //
+      // Qui era una regola SENZA condizioni: ogni `I` seguito da `V` diventava 6/4, anche
+      // sull'ultimo movimento della battuta con la dominante lunga sul battere dopo. È
+      // esattamente il difetto che l'utente ha trovato in un corale scritto da un modello
+      // linguistico, e il generatore lo poteva produrre da sé.
+      //
+      // Non è una preferenza da pesare nel costo: è una condizione della figura, come lo
+      // è che il 6/4 abbia il quinto grado al basso. Quindi vincolo, non sconto.
+      //
+      // Il peso metrico viene da `utils/figureArmoniche.ts`, lo stesso che usa l'analisi:
+      // il criterio è uno e sta scritto in un posto solo. (`figuraSeiQuattro` invece non
+      // serve qui: lavora sulle note, e a questo punto le note non ci sono ancora — c'è
+      // solo la progressione dei gradi.)
       if (parsed.degree === 0 && i > 0 && i + 1 < sortedProg.length) {
         const nextParsed = parseRoman(sortedProg[i + 1].roman);
-        if (nextParsed.degree === 4 && nextParsed.secondaryTarget == null) inv = 2;
+        if (nextParsed.degree === 4 && nextParsed.secondaryTarget == null) {
+          const mov = timeSignature.numerator * (4 / timeSignature.denominator);
+          const abs = (c: { measure: number; beat: number }) => c.measure * mov + (c.beat - 1);
+          const dopo = sortedProg[i + 2];
+          const duraIlSei = abs(sortedProg[i + 1]) - abs(chord);
+          const duraLaDominante = dopo ? abs(dopo) - abs(sortedProg[i + 1]) : duraIlSei;
+          const staBene = pesoMetrico(chord.beat, timeSignature) >= pesoMetrico(sortedProg[i + 1].beat, timeSignature)
+            && duraIlSei >= duraLaDominante - 1e-6;
+          if (staBene) inv = 2;
+        }
       }
 
       // ── Bass-line smoothness: auto-select inversion using corpus stats + proximity ──
