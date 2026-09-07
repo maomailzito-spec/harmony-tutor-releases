@@ -1,6 +1,7 @@
 // `metroAllaBattuta` arriva con un altro nome: dentro `applyHarmonyRules` ne esiste
 // gia' uno locale, dichiarato piu' avanti, che coprirebbe questo.
 import { figuraSeiQuattro, pesoMetrico, metroAllaBattuta as metroDellaBattuta } from './figureArmoniche';
+import { haFunzioneDiDominante, eIlQuintoGrado } from './gradiRomani';
 /**
  * Restituisce una timeline di eventi armonici: per ogni punto significativo (inizio/fine nota),
  * fornisce tutte le note attive in quell'istante (considerando le note prolungate).
@@ -8531,7 +8532,7 @@ export function applyHarmonyRules(
 
             // Augmented sixth chords: It+/Fr+/Ger+ should resolve to V.
             if (aRoman === 'It+' || aRoman === 'Fr+' || aRoman === 'Ger+' || aRoman === 'Sw+') {
-                const ok = bRoman.toLowerCase().startsWith('v');
+                const ok = eIlQuintoGrado(bRoman);
                 if (!ok) {
                     addViolation({
                         ruleId: 'R-AUG6-RES',
@@ -8602,9 +8603,12 @@ export function applyHarmonyRules(
                 const bassPc = bass ? mod12(bass.midi) : null;
                 // Cadential 6/4 is (tonic 6/4) over the dominant bass.
                 // Don't treat generic 6/4 sonorities over V-bass (incl. suspensions) as cadential.
-                const looksCad64 = bassPc === dominantPc && aRoman.toLowerCase().startsWith('i');
+                // `startsWith('i')` prenderebbe anche `ii`, `iii`, `iv` — la trappola che il
+                // commento di `isILike` qui sotto segnala da tempo. Sopra il basso di dominante
+                // un 6/4 può essere solo il primo grado, quindi il confronto è esatto.
+                const looksCad64 = bassPc === dominantPc && /^i$/i.test(aRoman.trim());
                 if (looksCad64) {
-                    const ok = bRoman.toLowerCase().startsWith('v');
+                    const ok = eIlQuintoGrado(bRoman);
                     if (!ok) {
                         addViolation({
                             ruleId: 'R-CAD64',
@@ -8732,7 +8736,7 @@ export function applyHarmonyRules(
             addResolutionConnection(a, b, ruleId, 'exception');
         };
 
-        const isVLike = (roman: string) => (roman || '').toLowerCase().startsWith('v');
+        const isVLike = (roman: string) => haFunzioneDiDominante(roman);
         // IMPORTANT: do not treat "IV" as "I" ("iv" starts with "i").
         // `romanAt(...)` returns the numeral (figures are separate), so exact match is safe.
         const isILike = (roman: string) => (roman || '').toLowerCase() === 'i';
@@ -9374,8 +9378,7 @@ export function applyHarmonyRules(
                     if (!(bRomanGlobal === (isMinor ? 'i' : 'I'))) return false;
 
                     const aRomanGlobal = String(_gRA(a.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
-                    const aLow = aRomanGlobal.toLowerCase();
-                    if (!(aLow.startsWith('v') || aLow.startsWith('vii'))) return false;
+                    if (!haFunzioneDiDominante(aRomanGlobal)) return false;
 
                     return true;
                 } catch {
@@ -9455,8 +9458,7 @@ export function applyHarmonyRules(
                         const c = getNextInWindow(j, Number(b.absBeat), 2.01);
                         if (!c) continue;
                         const cRom = String(_gRA(c.notes || [], tonic, true)?.roman || '').replace(/\s+/g, '');
-                        const cLow = cRom.toLowerCase();
-                        const cLooksV = cLow.startsWith('v');
+                        const cLooksV = haFunzioneDiDominante(cRom);
                         if (!cLooksV) continue;
 
                         const ctxAtB0 = getContextAtAbsBeatInferred(Number(a.absBeat));
@@ -9640,8 +9642,7 @@ export function applyHarmonyRules(
 
                     // If b is not I/i, still allow inference when b is dominant-function and
                     // we see a clear I/i in the lookahead window.
-                    const bLow = String(bRoman || '').toLowerCase();
-                    const bIsDomLike = bLow.startsWith('v') || bLow.startsWith('vii');
+                    const bIsDomLike = haFunzioneDiDominante(bRoman);
                     const hasTonicSoon = isMinorCand ? hasTonicSoonMin : hasTonicSoonMaj;
                     const hasTonicAfterB = (() => {
                         try {
@@ -9670,8 +9671,7 @@ export function applyHarmonyRules(
                                 const info = chordRootPcAndBassPc(ev);
                                 if (info.rootPc == null) continue;
                                 const roman = String(_gRA(ev.notes || [], tonic, isMinorCand)?.roman || '');
-                                const r0 = String(roman || '').replace(/\s+/g, '').toLowerCase();
-                                const functional = r0.startsWith('v') || r0.startsWith('vii');
+                                const functional = haFunzioneDiDominante(roman);
                                 const domToTonic = mod12(Number(info.rootPc) - tonicPc) === 7;
                                 const score = (domToTonic ? 3 : 0) + (functional ? 2 : 0) + (roman.includes('/') ? 1 : 0);
                                 if (!best || score > best.score) best = { ev, info, roman, score };
@@ -9683,12 +9683,10 @@ export function applyHarmonyRules(
                     })();
 
                     const aRoman = String((pickPrevForCand?.roman ?? _gRA(a.notes || [], tonic, isMinorCand)?.roman) || '');
-                    const aLooksFunctionalToTonic = (() => {
-                        const r = String(aRoman || '').replace(/\s+/g, '').toLowerCase();
-                        // For inferring an actual context change, require a strong dominant pull.
-                        // Predominants like ii/iv are too permissive and create false positives.
-                        return r.startsWith('v') || r.startsWith('vii');
-                    })();
+                    // Per dedurre un cambio di contesto serve una spinta di dominante VERA:
+                    // le predominanti (ii, iv) sono troppo permissive. E il sesto grado non
+                    // è una dominante, per quanto il suo romano cominci per «v».
+                    const aLooksFunctionalToTonic = haFunzioneDiDominante(aRoman);
 
                     const rootMotionIsDomToTonic = (() => {
                         try {
@@ -10052,8 +10050,7 @@ export function applyHarmonyRules(
                         const p = (i - 1) >= 0 ? chordEvents[i - 1] : null;
                         if (p && Number.isFinite(p.absBeat) && (a.absBeat - p.absBeat) <= 1.01) {
                             const pr = String(_gRA(p.notes || [], inferredTonic, inferredIsMinor)?.roman || '').replace(/\s+/g, '');
-                            const prLow = pr.toLowerCase();
-                            const ok = prLow.startsWith('v') || prLow.startsWith('vii');
+                            const ok = haFunzioneDiDominante(pr);
                             if (ok) startAbsBeat = p.absBeat;
                         }
                     }
@@ -10100,8 +10097,7 @@ export function applyHarmonyRules(
                     if (hasManualCtxHere) continue;
 
                     const rB = String(_gRA(b.notes || [], keyTonic, isMinor)?.roman || '').replace(/\s+/g, '');
-                    const rBLow = rB.toLowerCase();
-                    const bLooksFunctional = rBLow.startsWith('v') || rBLow.startsWith('vii');
+                    const bLooksFunctional = haFunzioneDiDominante(rB);
                     if (!bLooksFunctional) continue;
 
                     let foundTonic = false;
@@ -10211,8 +10207,7 @@ export function applyHarmonyRules(
                                     let hits = 0;
                                     for (const ev of window as any[]) {
                                         const r = String(_gRA(ev?.notes || [], tonic, isMinorCand)?.roman || '').replace(/\s+/g, '');
-                                        const low = r.toLowerCase();
-                                        if (low.startsWith('v') || low.startsWith('vii')) hits++;
+                                        if (haFunzioneDiDominante(r)) hits++;
                                     }
                                     return hits;
                                 } catch {
@@ -10567,7 +10562,7 @@ export function applyHarmonyRules(
                         const b = chordEvents[j];
                         if ((b.absBeat - a.absBeat) > maxLookaheadBeats + 1e-6) break;
                         const bRoman = String(romanAtWithInferredCtx(b) || '').trim().toLowerCase();
-                        if (bRoman.startsWith('v')) {
+                        if (eIlQuintoGrado(bRoman)) {
                             ok = true;
                             break;
                         }
