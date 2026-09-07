@@ -8724,7 +8724,32 @@ export function applyHarmonyRules(
                         // composta e non va giudicato come tale. (Misurato: era il falso
                         // positivo del corale 19 di Bach.)
                         const vaSullaDominante = /^v(?!i)/i.test(bRoman);
-                        if (bassoFermo && !dominanteGiaLi && vaSullaDominante) {
+                        // IL 6/4 CHE PREPARA UN RITARDO.
+                        //
+                        // Letto dall'utente sul Delachi n.2 p.36, che era l'unico caso di
+                        // repertorio rimasto: «sembra quasi che abbia messo il 6/4 per
+                        // preparare il ritardo sul V». Ed e' cosi'. In la♭, 3/2: il La♭ del
+                        // contralto suona gia' dalla prima battuta e CONTINUA nella seconda,
+                        // dove diventa la quarta che risolve sul Sol al terzo movimento.
+                        //
+                        // Le due dissonanze del 6/4 non risolvono insieme: la sesta va alla
+                        // quinta sulla stanghetta, la quarta resta e risolve dopo. Il 6/4
+                        // allora non e' l'accento della cadenza — e' la PREPARAZIONE del
+                        // ritardo, ed e' esattamente per questo che sta sul tempo debole:
+                        // una dissonanza preparata si prepara sul debole.
+                        //
+                        // (E' la stessa distinzione fra appoggiatura e ritardo che il motore
+                        // fa gia' sulle note singole: qui applicata alla figura intera.)
+                        const quartaOSesta = (n: any) => {
+                            const i = mod12(n.midi - (aBass as any).midi);
+                            return i === 5 || i === 8 || i === 9;
+                        };
+                        const preparaUnRitardo = (a.notes || [])
+                            .filter(n => n && !(n as any).isRest && Number.isFinite((n as any).midi))
+                            .filter(quartaOSesta)
+                            .some(n => (b.notes || []).some(m => m && !(m as any).isRest
+                                && (m as any).midi === (n as any).midi));
+                        if (bassoFermo && !dominanteGiaLi && vaSullaDominante && !preparaUnRitardo) {
                             // La durata della RISOLUZIONE si conta fino all'evento seguente e
                             // non fino al cambio d'armonia: una dominante ribattuta o tenuta
                             // oltre la cadenza è un prolungamento normale, e contandolo tutto
