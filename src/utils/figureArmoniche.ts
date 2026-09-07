@@ -86,8 +86,14 @@ export function pesoMetrico(beat: number, ts: TimeSignature): number {
 
     const mov = Math.round(m);
     if (mov === 0) return 3;
-    if (composto) return 1;
-    if (ts.denominator === 4 && ts.numerator === 4 && mov === 2) return 2;
+    // IL MEZZO DELLA BATTUTA è un appoggio secondario, in qualunque metro che si divida in
+    // due: il terzo movimento in 4/4, il secondo in 2/2 e in 2/4, il quarto in 6/4, la
+    // seconda pulsazione nei composti. Il conto si fa sui MOVIMENTI e non sui quarti —
+    // contandoli in quarti, in 3/2 risultava «mezzo» un movimento che non esiste.
+    const movPerBattuta = composto
+        ? (ts.numerator / 3)
+        : ts.numerator * (4 / ts.denominator) / (4 / ts.denominator);
+    if (movPerBattuta % 2 === 0 && mov === movPerBattuta / 2) return 2;
     return 1;
 }
 

@@ -651,7 +651,8 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           .filter(n => (n.measureIndex ?? 0) >= insertMeasure)
           .map(n => ({ midi: n.midi, measure: (n.measureIndex ?? 0) - insertMeasure, beat: n.beat ?? 1,
                        corona: !!(n as any).isFermata }));
-        progression = autoHarmonize(vincoliInterni, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
+        progression = autoHarmonize(vincoliInterni, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure,
+          { timeSignature: localTs });
       }
       if (progression.length === 0 && ((useMelody && sopranoFromScore.length > 0) || (useBass && bassFromScore.length > 0))) {
         const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
@@ -670,7 +671,7 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
             measure: n.measureIndex ?? 0,
             beat: n.beat ?? 1,
           }));
-          progression = autoHarmonizeFromBass(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
+          progression = autoHarmonizeFromBass(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure, localTs);
         } else {
           // Soprano (or both): use soprano auto-harmonize
           const constraints: SopranoConstraint[] = rebaseSop.map(n => ({
@@ -685,8 +686,8 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           // scrittura: è la voce che dice pure il rivolto.
           progression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure,
             (useBass && rebaseBass.length > 0)
-              ? { bassoDato: rebaseBass.map(n => ({ midi: n.midi, measure: n.measureIndex ?? 0, beat: n.beat ?? 1 })) }
-              : undefined);
+              ? { timeSignature: localTs, bassoDato: rebaseBass.map(n => ({ midi: n.midi, measure: n.measureIndex ?? 0, beat: n.beat ?? 1 })) }
+              : { timeSignature: localTs });
         }
         setProgressionText(progression.map(c => c.roman).join(' - '));
         setGradiDelGeneratore(true);
@@ -851,7 +852,8 @@ const RomanProgressionEditor: React.FC<RomanProgressionEditorProps> = ({
           beat: n.beat ?? 1,
         }));
       const beatsPerMeasure = localTs.numerator * (4 / localTs.denominator);
-      const autoProgression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure);
+      const autoProgression = autoHarmonize(constraints, localTonic, localMinor, harmonicRhythmBeats, beatsPerMeasure,
+        { timeSignature: localTs });
 
       // Build text representation with per-chord duration from melody note lengths.
       // Compute each chord's duration from the gap to the next chord (or end of measure).

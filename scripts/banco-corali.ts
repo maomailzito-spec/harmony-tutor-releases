@@ -163,8 +163,8 @@ for (const f of process.argv.slice(2)) {
   // generatore deve reggere OGNI nota, e le note di passaggio non esistono.
   const ritmo = Number(process.env.RITMO || 0) || 0;
   const progressione = process.env.DAL_BASSO
-    ? autoHarmonizeFromBass(vincoli, tonica, minore, ritmo, bpm)
-    : autoHarmonize(vincoli, tonica, minore, ritmo, bpm, { corpus: !process.env.SENZA_CORPUS, condotta: !process.env.SENZA_CONDOTTA, frase: !process.env.SENZA_FRASE });
+    ? autoHarmonizeFromBass(vincoli, tonica, minore, ritmo, bpm, ts)
+    : autoHarmonize(vincoli, tonica, minore, ritmo, bpm, { corpus: !process.env.SENZA_CORPUS, condotta: !process.env.SENZA_CONDOTTA, frase: !process.env.SENZA_FRASE, timeSignature: ts });
   const config: ChoralConfig = {
     tonic: tonica, isMinor: minore, timeSignature: ts,
     rules: { allowParallel5ths: false, allowParallel8ves: false, allowCrossing: false, allowOverlap: false, doubleRoot: true },

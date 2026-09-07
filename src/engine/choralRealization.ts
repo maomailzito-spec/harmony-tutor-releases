@@ -3593,12 +3593,19 @@ const COSTO_RIVOLTO = [0, 1.5, 6, 3];
  * movimento di mezzo è forte a sua volta, ma meno; il resto è debole, e ciò che cade fra un
  * movimento e l'altro è più debole ancora.
  */
-function forzaMetrica(beat: number, movPerBattuta: number): number {
-  if (Math.abs(beat - Math.round(beat)) > 0.01) return 0.1;   // fra un movimento e l'altro
-  const b = Math.round(beat);
-  if (b === 1) return 1;
-  if (movPerBattuta % 2 === 0 && b === movPerBattuta / 2 + 1) return 0.6;  // il mezzo, nei metri pari
-  return 0.3;
+function forzaMetrica(beat: number, ts: TimeSignature): number {
+  // IL CONTO PASSA DALL'UNITÀ DI MOVIMENTO, non dal quarto. Prima stava sul quarto, e in
+  // ogni metro dove il movimento non è la semiminima la graduatoria usciva storta:
+  //
+  //   3/2   il quarto movimento — una suddivisione dentro la seconda minima — prendeva
+  //         0,6, e la terza minima, che è un movimento vero, 0,3: rovesciati;
+  //   6/8   la seconda pulsazione (il secondo quarto puntato) prendeva 0,1, cioè il valore
+  //         più debole della battuta, meno delle crome che la suddividono.
+  //
+  // Il criterio è quello di `pesoMetrico` in `utils/figureArmoniche.ts`, che è anche quello
+  // dell'analisi: qui cambia solo la scala, perché nel costo del Viterbi serve un numero
+  // continuo da 0 a 1 e non un rango.
+  return [0.1, 0.3, 0.6, 1][pesoMetrico(beat, ts)] ?? 0.1;
 }
 
 /**
@@ -4446,6 +4453,13 @@ export function autoHarmonize(
      *  cammino minimo sulla frase, veto) e' identico, ed e' il motivo per cui
      *  conviene passare di qui invece di far crescere un secondo motore. */
     daBasso?: boolean;
+    /** IL METRO, per sapere quale sia l'unità di movimento.
+     *
+     *  `beatsPerMeasure` conta i quarti, e da sei quarti non si distingue il 3/2 dal 6/4:
+     *  sono due battute che pulsano diversamente, e `forzaMetrica` ha bisogno di saperlo.
+     *  Facoltativo per non cambiare la firma a chi già chiama; senza, si ricostruisce il
+     *  metro più probabile, che per i valori consueti è quello giusto. */
+    timeSignature?: TimeSignature;
   }
 ): RomanChord[] {
   if (melody.length === 0) return [];
@@ -4740,9 +4754,12 @@ export function autoHarmonize(
         gradoDiatonico: ex.grado ?? -1,
       });
     }
-    // `beatsPerMeasure` è già i movimenti da un quarto per battuta.
-    const movPerBattuta = beatsPerMeasure;
-    const forze = groups.map(g => forzaMetrica(g.beat, movPerBattuta));
+    // Il metro dichiarato, o quello che si ricava dal numero di quarti per battuta.
+    const metro: TimeSignature = opts?.timeSignature
+      ?? (Number.isInteger(beatsPerMeasure)
+        ? { numerator: beatsPerMeasure, denominator: 4 }
+        : { numerator: Math.round(beatsPerMeasure * 2), denominator: 8 });
+    const forze = groups.map(g => forzaMetrica(g.beat, metro));
 
     // ── DOVE FINISCONO LE FRASI ──
     //
@@ -5010,7 +5027,9 @@ export function autoHarmonizeFromBass(
   tonic: string,
   isMinor: boolean,
   harmonicRhythmBeats: number = 0,
-  beatsPerMeasure: number = 4
+  beatsPerMeasure: number = 4,
+  /** Il metro, per l'unità di movimento: da sei quarti non si distingue il 3/2 dal 6/4. */
+  timeSignature?: TimeSignature,
 ): RomanChord[] {
   // ORA PASSA DAL MOTORE GRANDE, e non e' un dettaglio di forma.
   //
@@ -5031,6 +5050,7 @@ export function autoHarmonizeFromBass(
   return autoHarmonize(bassLine, tonic, isMinor, harmonicRhythmBeats, beatsPerMeasure, {
     bassoDato: bassLine,
     daBasso: true,
+    timeSignature,
   });
 }
 
