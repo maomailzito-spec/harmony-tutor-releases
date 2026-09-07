@@ -460,14 +460,28 @@ function clefFromMusicXML(sign: string, line: number | null): ClefType {
 }
 
 function keyRootFromFifths(fifths: number, mode: 'major' | 'minor'): { root: string; isMinor: boolean } {
-  // Represent roots in the app's sharp-name domain; getKeySignature() can still emit flat signatures.
+  // LE ALTERAZIONI IN CHIAVE DICONO GIÀ QUAL È L'ARMATURA: qui si tratta solo di
+  // chiamarla col nome che usa il resto del programma.
+  //
+  // Prima questa tabella scriveva le armature in bemolle coi nomi col diesis — 'A#' per
+  // Si♭, 'D#' per Mi♭ — dichiarandolo pure («the app's sharp-name domain»). Ma il dominio
+  // dell'applicazione è quello del SELETTORE (`keySignatureOptions.ts`), che offre 'Bb' e
+  // 'Eb', ed è quello in cui è scritta la conversione maggiore→relativa minore. Ne veniva
+  // che OGNI MINORE con l'armatura in bemolle importato da MusicXML veniva analizzato in
+  // un'altra tonalità, e senza dirlo a nessuno: sei armature su quindici, fra cui sol
+  // minore, do minore e fa minore.
+  //
+  // In più i bemolli oltre i quattro finivano sul loro enarmonico col diesis (-5 → 'C#',
+  // sette diesis), che è un'armatura DIVERSA: un'informazione persa che nessuna
+  // normalizzazione a valle può più recuperare. Ora le due metà della tabella sono
+  // distinte, come sono distinte le armature.
   const majorByFifths: Record<number, string> = {
-    [-7]: 'B',
-    [-6]: 'F#',
-    [-5]: 'C#',
-    [-4]: 'G#',
-    [-3]: 'D#',
-    [-2]: 'A#',
+    [-7]: 'Cb',
+    [-6]: 'Gb',
+    [-5]: 'Db',
+    [-4]: 'Ab',
+    [-3]: 'Eb',
+    [-2]: 'Bb',
     [-1]: 'F',
     0: 'C',
     1: 'G',
@@ -478,31 +492,12 @@ function keyRootFromFifths(fifths: number, mode: 'major' | 'minor'): { root: str
     6: 'F#',
     7: 'C#',
   };
-  const minorByFifths: Record<number, string> = {
-    [-7]: 'G#',
-    [-6]: 'D#',
-    [-5]: 'A#',
-    [-4]: 'F',
-    [-3]: 'C',
-    [-2]: 'G',
-    [-1]: 'D',
-    0: 'A',
-    1: 'E',
-    2: 'B',
-    3: 'F#',
-    4: 'C#',
-    5: 'G#',
-    6: 'D#',
-    7: 'A#',
-  };
 
   const safeFifths = Number.isFinite(fifths) ? Math.max(-7, Math.min(7, Math.trunc(fifths))) : 0;
-  if (mode === 'minor') {
-    // The app stores keySignatureRoot as the RELATIVE MAJOR root.
-    // For minor mode, fifths=0 → C major signature → A minor, so root='C'.
-    return { root: majorByFifths[safeFifths] || 'C', isMinor: true };
-  }
-  return { root: majorByFifths[safeFifths] || 'C', isMinor: false };
+  // L'applicazione tiene in `keySignatureRoot` la fondamentale MAGGIORE anche in minore:
+  // l'armatura di do minore e quella di mi♭ maggiore sono la stessa cosa. La tonica vera
+  // si ricava con `tonicaReale`, che è l'unico posto dove sta quella conversione.
+  return { root: majorByFifths[safeFifths] || 'C', isMinor: mode === 'minor' };
 }
 
 function createIdFactory(prefix: string) {

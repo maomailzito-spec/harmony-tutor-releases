@@ -79,7 +79,7 @@ import { usePreference } from '../preferences/usePreference';
 import type { HarmonyAnalysisFiltersPref } from '../preferences/preferencesRegistry';
 import { useMenuStateSync } from '../controllers/useMenuStateSync';
 import { CURRENT_PROJECT_SCHEMA_VERSION, extractProjectExtras, migrateProjectData, DEFAULT_ANALYSIS_LOCK_OPTIONS } from '../storage/projectSchema';
-import { relativeMinors, tonicaReale } from '../utils/relativeMinors';
+import { tonicaReale, radiceDiArmatura } from '../utils/relativeMinors';
 import { structuralNotes } from '../utils/harmonyLabelPipeline';
 import type { AnalysisLockOptions } from '../storage/projectSchema';
 import { recordAnalysedTransitions } from '../engine/progressionSuggester';
@@ -5867,8 +5867,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             };
         }
         if (isMinorMode) {
-            const minorRoot = relativeMinors[keySignatureRoot] || 'A';
-            return { currentTonic: minorRoot, currentQuality: 'Minore' };
+            // `tonicaReale` e non la tabella cruda: normalizza prima di cercare, e le grafie
+            // che una tonalità non ha ('A#' per Si♭) trovano lo stesso la loro relativa.
+            // Qui c'era un `|| 'A'`, cioè la RIPIEGA PEGGIORE che si potesse scegliere: un
+            // brano in sol minore importato da MusicXML veniva analizzato in LA MINORE senza
+            // che niente lo segnalasse, e per giunta gli altri chiamanti ripiegavano
+            // diversamente — due tonalità sbagliate diverse per lo stesso brano.
+            return { currentTonic: tonicaReale(keySignatureRoot, true), currentQuality: 'Minore' };
         }
         return { currentTonic: keySignatureRoot, currentQuality: 'Maggiore' };
     }, [keySignatureRoot, isMinorMode, keyChangeMode, modeInfo]);
@@ -22809,13 +22814,7 @@ fill={(lbl as any).isChromatic ? '#8B5CF6' : 'black'}
                     onUnsuppressInference={handleUnsuppressInference}
                     initialKey={(() => {
                         if (!existingContextForMenu) return keySignatureRoot;
-                        if (!existingContextForMenu.newIsMinor) return existingContextForMenu.newTonic;
-                        // Invert relativeMinors to get the major key signature root.
-                        const inverse = Object.entries(relativeMinors).reduce<Record<string, string>>((acc, [maj, min]) => {
-                            acc[min] = maj;
-                            return acc;
-                        }, {});
-                        return inverse[existingContextForMenu.newTonic] || existingContextForMenu.newTonic;
+                        return radiceDiArmatura(existingContextForMenu.newTonic, existingContextForMenu.newIsMinor);
                     })()}
                     initialIsMinor={existingContextForMenu ? existingContextForMenu.newIsMinor : isMinorMode}
                     initialLabel={existingContextForMenu?.label || ''}
