@@ -168,6 +168,22 @@ const OVERLAY_FREEZE_MS = 350;
 // row instead of at the end of the page, doubling the number of jumps.
 const PLAYBACK_SYSTEM_VISIBLE_RATIO = 0.7;
 
+/**
+ * QUANDO SI PARTE, LA PAGINA NON SI VOLTA.
+ *
+ * Far partire l'esecuzione da metà brano non è voltare pagina: è cominciare a sentire da
+ * dove si sta guardando. Con la soglia di sopra la prima riga suonata veniva trattata come
+ * un cambio di riga qualunque — a inizio esecuzione non c'è nessuna riga precedente — e
+ * bastava che fosse tagliata di un terzo perché venisse portata in cima. Il lettore perdeva
+ * di vista tutto quello che aveva intorno, che è poi il contesto su cui stava ragionando.
+ *
+ * Qui la soglia è quasi zero: all'avvio si scorre SOLO se la riga da suonare è praticamente
+ * fuori schermo — perché lì il contesto non c'è comunque, e senza scorrere non si vedrebbe
+ * suonare niente. Da lì in avanti torna a valere la soglia normale, e le pagine si voltano
+ * come prima.
+ */
+const PLAYBACK_START_SYSTEM_VISIBLE_RATIO = 0.15;
+
 // Posizione diatonica della lettera (Do4 = 0), come in musicTheory.getNotePosition.
 const NOTE_POSITION_BY_LETTER_LOCAL: Record<string, number> = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
 
@@ -10329,6 +10345,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                 // system geometry, and vertical-scroll it into view — all imperative,
                 // NO setState, so playback never re-renders the score.
                 if (si !== activePlaybackSystemRef.current) {
+                    // `-1` vuol dire che l'esecuzione comincia adesso: non si sta passando
+                    // da una riga all'altra, si sta partendo. Sono due cose diverse e vanno
+                    // trattate diversamente (vedi `PLAYBACK_START_SYSTEM_VISIBLE_RATIO`).
+                    const siParteAdesso = activePlaybackSystemRef.current < 0;
                     const prevLine = playheadLineRefs.current[activePlaybackSystemRef.current];
                     if (prevLine) { prevLine.style.visibility = 'hidden'; prevLine.style.willChange = 'auto'; }
                     activePlaybackSystemRef.current = si;
@@ -10351,7 +10371,10 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                         // it to the top, beginning a fresh screenful of systems.
                         const visiblePx = Math.min(sysRect.bottom, contRect.bottom) - Math.max(sysRect.top, contRect.top);
                         const visibleRatio = sysRect.height > 0 ? visiblePx / sysRect.height : 1;
-                        if (visibleRatio < PLAYBACK_SYSTEM_VISIBLE_RATIO) {
+                        const sogliaQui = siParteAdesso
+                            ? PLAYBACK_START_SYSTEM_VISIBLE_RATIO
+                            : PLAYBACK_SYSTEM_VISIBLE_RATIO;
+                        if (visibleRatio < sogliaQui) {
                             const marginTop = 28;
                             const slack = contRect.height - sysRect.height;
                             const headroom = slack > 0 ? Math.min(marginTop, slack / 2) : marginTop;
