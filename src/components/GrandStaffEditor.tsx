@@ -2229,6 +2229,13 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
     const justInsertedNoteRef = useRef<string | null>(null);
     /** Maps expanded playback beats → visual (original) beats for repeat expansion. null = identity. */
     const playbackBeatToVisualBeatRef = useRef<((expandedBeat: number) => number) | null>(null);
+    /** LA STRADA CONTRARIA: dal punto scritto sulla partitura a quello della riproduzione.
+     *
+     *  Ritornelli e corone ALLUNGANO la linea del tempo — un ritornello ripete le sue
+     *  battute, una corona sposta in avanti tutto quel che segue — mentre il cursore resta
+     *  dov'è scritto. Sono due sistemi di coordinate, e senza questa mappa il confronto fra
+     *  l'uno e l'altro sceglie il punto sbagliato da cui partire. */
+    const visualBeatToPlaybackBeatRef = useRef<((visualBeat: number) => number) | null>(null);
     // Inverse of beatToTime() — maps elapsed seconds (since start) to abs beat,
     // accounting for any active tempo curves. Set inside startPlayback; null means
     // linear mapping at the current global BPM (default).
@@ -10702,11 +10709,24 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
                     }
                     return expandedBeat;
                 };
+                // E la strada contraria, che mancava: dal punto SCRITTO a quello suonato.
+                // Si prende il PRIMO passaggio su quella battuta — chi mette il cursore a
+                // metà brano vuole cominciare da lì, non dalla ripetizione.
+                visualBeatToPlaybackBeatRef.current = (visualBeat: number) => {
+                    for (const seg of beatMapSegments) {
+                        if (visualBeat >= seg.origStart - 1e-6 && visualBeat < seg.origStart + seg.length - 1e-6) {
+                            return seg.expandedStart + (visualBeat - seg.origStart);
+                        }
+                    }
+                    return visualBeat;
+                };
             } else {
                 playbackBeatToVisualBeatRef.current = null;
+                visualBeatToPlaybackBeatRef.current = null;
             }
         } else {
             playbackBeatToVisualBeatRef.current = null;
+            visualBeatToPlaybackBeatRef.current = null;
         }
 
         // ── Accompaniment track items ──
@@ -10924,6 +10944,20 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
             playbackBeatToVisualBeatRef.current = repeatMap
                 ? (c: number) => repeatMap(fermataMap(c))
                 : fermataMap;
+            // L'inversa, nell'ordine contrario: prima si disfa il ritornello, poi le corone.
+            const inversaCorone = (p: number): number => {
+                let scarto = 0;
+                for (const f of fermataSegs) {
+                    const attaccoPrima = f.cStart - scarto;
+                    if (p <= attaccoPrima + 1e-9) break;
+                    scarto += (f.cTotalEnd - f.cNaturalEnd);
+                }
+                return p + scarto;
+            };
+            const inversaRitornelli = visualBeatToPlaybackBeatRef.current;
+            visualBeatToPlaybackBeatRef.current = inversaRitornelli
+                ? (v: number) => inversaCorone(inversaRitornelli(v))
+                : inversaCorone;
         }
 
         // Group items by start beat (rounded to avoid float key drift with tuplets).
@@ -10943,14 +10977,28 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
         setIsPlaying(true);
 
         const defaultStartAbsBeat = 0;
-        const startAbsBeat = Number.isFinite(playbackCursorAbsBeatRef.current as any)
+        // IL CURSORE È SCRITTO IN COORDINATE VISUALI, GLI EVENTI IN COORDINATE SUONATE.
+        //
+        // Sono due sistemi diversi appena il brano ha un ritornello o una corona: il primo
+        // ripete le sue battute, la seconda sposta in avanti tutto quel che segue, e la
+        // linea del tempo del suono diventa più lunga di quella scritta. Il punto di
+        // partenza va quindi TRADOTTO, altrimenti il filtro qui sotto confronta un numero
+        // con un altro che conta un'altra cosa.
+        //
+        // Senza la traduzione l'errore è esattamente la lunghezza di quel che si è
+        // allungato prima: su un corale con un ritornello di due battute, mettendo il
+        // cursore alla misura 17 il brano partiva dalla 15.
+        const startVisualBeat = Number.isFinite(playbackCursorAbsBeatRef.current as any)
             ? Math.max(0, playbackCursorAbsBeatRef.current as number)
             : defaultStartAbsBeat;
+        const startAbsBeat = visualBeatToPlaybackBeatRef.current
+            ? Math.max(0, visualBeatToPlaybackBeatRef.current(startVisualBeat))
+            : startVisualBeat;
 
         playbackStartBeatRef.current = startAbsBeat;
 
-        // If playback starts from a point with no note event, move the playhead there immediately.
-        const startPos = getPlayheadPosForAbsBeat(startAbsBeat);
+        // Il disegno vuole invece il punto SCRITTO, che è dove il lettore lo vede.
+        const startPos = getPlayheadPosForAbsBeat(startVisualBeat);
         if (startPos) setPlayheadPosition(startPos);
 
         const maxEndAbsBeat = allItems
@@ -13041,7 +13089,14 @@ const GrandStaffEditor: React.FC<GrandStaffEditorProps> = ({
 
         const ctx = audioService.audioContext;
         if (isPlayingRef.current && ctx && audioPlaybackStartTimeRef.current > 0) {
-            return playbackStartBeatRef.current + ((ctx.currentTime - audioPlaybackStartTimeRef.current) / beatDurationSec);
+            const suonato = playbackStartBeatRef.current + ((ctx.currentTime - audioPlaybackStartTimeRef.current) / beatDurationSec);
+            // Chi chiede «dove siamo» vuole il punto SCRITTO: serve a inserire una battuta,
+            // a posare il caret, a dire quale misura si sta guardando. Durante un ritornello
+            // o dopo una corona il conto del suono è più avanti di quello della partitura, e
+            // senza questa conversione si finiva a lavorare su una misura sbagliata.
+            return playbackBeatToVisualBeatRef.current
+                ? playbackBeatToVisualBeatRef.current(suonato)
+                : suonato;
         }
 
         const cur = playbackCursorAbsBeatRef.current;
