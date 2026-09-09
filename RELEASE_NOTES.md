@@ -1,3 +1,71 @@
+## Novità nella versione 1.9.0
+
+### 🎼 Il realizzatore di corali è stato rifatto
+
+Prima sceglieva un accordo per volta, quello che costava meno lì. Ora **cerca il percorso**: guarda la frase intera e sceglie la successione migliore nel suo insieme, come si fa armonizzando a mano. Su nove corali di Bach ed esercizi del Dubois commette **59 errori contro i 69 delle armonizzazioni originali**.
+
+Che cosa sa fare adesso:
+
+- **i gradi li sceglie il repertorio, non una tabella scritta a mano**: dal corpus il programma ha estratto quanto è frequente ogni passaggio, che armonia sta sotto quale nota del canto, e come cambia la scelta secondo ciò che precede e ciò che segue;
+- **sa dov'è nella battuta.** Metà delle regole dell'armonia parlano di tempo forte e debole, e prima non lo sapeva: ora settima, quarta e sesta, raddoppi e cadenze si giudicano anche dalla posizione metrica;
+- **sa dove finisce una frase** e ce ne posa sopra una cadenza: la **corona** è il segnale;
+- **la quarta e sesta non è un rivolto qualunque**: sono tre accordi che si scrivono uguale — cadenzale, di passaggio, di volta — e ciascuno vuole il suo posto nella battuta;
+- **conosce le seste eccedenti** (italiana, francese, tedesca) e il **sesto grado alzato** del minore ascendente, che prima non aveva accordi;
+- **non gira a vuoto**: un termine impedisce l'oscillazione fra due accordi, e le eccezioni non sono più gratuite;
+- **rilegge quello che ha scritto** conoscendo l'accordo dopo: un `I–ii–I` diventa `I–V–I`;
+- **chiede le regole al correttore vero**, non a una copia.
+
+### 🎹 Armonizzare partendo da qualunque voce
+
+Oltre al canto e al basso dati si può dare **una voce interna** — contralto o tenore — e far scrivere le altre tre. Una voce spenta **resta com'è sul rigo**, e se l'armonia non la contiene il pannello lo dice invece di cancellarla in silenzio.
+
+### 🎛 Il pannello del generatore
+
+**«Valore nota» e «Ritmo armonico» erano lo stesso comando** con due nomi in due angoli diversi: ora è uno solo, **«Durata dell'armonia»**, e la durata del singolo accordo si sceglie anche con le icone delle figure. I **tre stadi** si spengono uno per uno; **«Disposizione»** dice a che punto è del giro e può muovere solo le voci scelte.
+
+### 🔍 Le letture alternative si scelgono sull'etichetta
+
+Cliccando un numero romano si apre un menù compatto **sotto l'etichetta**. Prima bisognava aprire il pannello delle proprietà e cercarci dentro la sezione giusta.
+
+### 👁 Osservazioni: una categoria nuova nel pannello
+
+Accanto a errori, avvisi, eccezioni e cromatismi c'è un quinto colore: ci finisce **ciò che è scritto correttamente ma collocato in modo che non svolga la funzione che dichiara** — non un errore di condotta delle parti, e nemmeno un consiglio di stile.
+
+Il primo caso è il **6/4 cadenzale collocato al contrario**: nella cadenza composta sta sul tempo forte e la dominante su quello debole. Il controllo distingue prima le tre specie, perché quella di passaggio e quella di volta vogliono il debole, e tace quando il 6/4 prepara un ritardo.
+
+### 🎯 Ritardo o appoggiatura: decide la legatura
+
+Un ritardo senza legatura è un'appoggiatura. Prima bastava che la nota fosse preparata perché uscisse la **R**; ora serve la legatura, e togliendola compare la **A**.
+
+### 🧠 Gli ornamenti che il programma impara da te
+
+Le correzioni manuali agli ornamenti non restano nel singolo file: il programma ne estrae una tavola e la consulta per **rompere i pareggi** nei casi dubbi. Su 129 file generalizzano nell'85,9% dei casi.
+
+### 🗂 Menù e preferenze riordinati
+
+Undici comandi stavano **in due posti**, nelle preferenze e nei menù: ora solo nei menù, dove hanno una scorciatoia. Una preferenza si configura una volta, questi si accendono guardando lo spartito.
+
+- **barra degli strumenti** e **barra comandi flottante** sono due interruttori indipendenti — prima il transport compariva solo nascondendo la toolbar — tutti e due in **Vista**, con `⌥T`;
+- nuovo sottomenù **Vista → Righi**: layout dei righi e raggruppamento per famiglia d'orchestra;
+- nella scheda **Analisi** restano in vista le quattro impostazioni che si toccano davvero, le altre otto dietro l'interruttore **«avanzate»**. I **consigli personalizzati** si scrivono ora per tutte le regole.
+
+### 🎹 L'accordo dalla tastiera MIDI entra su tutte le parti
+
+In inserimento passo-passo, un accordo suonato sulla tastiera si distribuisce **sulle voci del coro** secondo il numero di parti impostato nella barra: prima le quattro note diventavano una melodia nella stessa voce. Le voci si selezionano anche a più d'una dai pulsanti, con `⇧`+clic.
+
+### 📥 Import MIDI: la tonalità
+
+Un file MIDI non contiene alterazioni, solo numeri di nota: la grafia dei Do♯ e dei Re♭ la decide l'armatura. Ora il programma **la deduce dalle note** quando il file non la dichiara, la **dice nel dialogo prima di importare**, e non perde più i **cambi d'armatura**.
+
+### 🔧 Correzioni
+
+- **La riproduzione partiva da qualche misura prima del cursore** nei brani con un ritornello o una corona: l'esecuzione allunga la linea del tempo e il punto di partenza non veniva tradotto.
+- **Far partire l'ascolto voltava la pagina**: ora all'avvio la vista resta dov'è.
+- **Sei armature su quindici davano la tonica sbagliata**, in silenzio, nei file importati da MusicXML: ogni minore con l'armatura in bemolle — sol, do, fa, si♭, mi♭, la♭ — veniva analizzato in un'altra tonalità.
+- **«Comincia per v» non vuol dire «è una dominante»**: dodici controlli accettavano anche il sesto grado e producevano cadenze inesistenti — una semicadenza che finiva sul sesto, una cadenza autentica che partiva dal sesto.
+- **Il sesto grado di passaggio non è una cadenza d'inganno**; la sensibile esiste solo nella dominante maggiore; la progressione per quinte aveva il verso invertito.
+- **La sesta eccedente in minore usciva con un doppio bemolle**, e lo stacco dopo `♭VII` era doppio: si misurava con un carattere e se ne disegnava un altro.
+
 ## Novità nella versione 1.8.0
 
 ### 🎺 Strumenti traspositori
