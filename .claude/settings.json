@@ -1,5 +1,14 @@
 {
   "permissions": {
-    "allow": ["Bash(*)", "Read(*)", "Write(*)"]
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Bash(awk -F: '$1>1611 && $1<4020')",
+      "Bash(npx tsx *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(python3 -)",
+      "Bash(~/Desktop/.manual-venv/bin/python3 -)"
+    ]
   }
 }
