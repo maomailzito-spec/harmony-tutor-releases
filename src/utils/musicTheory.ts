@@ -8372,7 +8372,9 @@ export function applyHarmonyRules(
             a: ChordEvent,
             b: ChordEvent,
             ruleId: string,
-            severity: 'error' | 'warning' | 'exception'
+            // Le stesse categorie di `RuleViolation`: il tratteggio sul rigo prende il
+            // colore della severita' che lo ha chiesto, e le due liste devono coincidere.
+            severity: 'error' | 'warning' | 'exception' | 'chromatic' | 'observation'
         ) => {
             const aBass = getLowestNote(a);
             const bBass = getLowestNote(b);
