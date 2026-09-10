@@ -1,3 +1,11 @@
+## Novità nella versione 1.9.1
+
+### 🔧 I menù della barra all'inizio della riga
+
+I due menù a tendina disegnati dal programma — **MIDI** e **Partitura** — si aprivano sempre verso sinistra, allineati al bordo destro del loro pulsante. Per un gruppo che sta in fondo alla barra è la scelta giusta; per uno che sta all'inizio il pannello finiva oltre il bordo della finestra, e se ne leggeva solo una parte.
+
+Ora il lato si sceglie guardando lo spazio disponibile nel momento in cui il menù si apre. Non c'era un lato giusto fisso da usare, perché **la barra si riordina**: lo stesso gruppo può trovarsi a un'estremità o all'altra, ed è la ragione per cui il difetto compariva solo con certe disposizioni.
+
 ## Novità nella versione 1.9.0
 
 ### 🎼 Il realizzatore di corali è stato rifatto
