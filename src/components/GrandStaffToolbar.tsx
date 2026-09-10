@@ -6,6 +6,37 @@ import { INSTRUMENTS, gmToSoundfont, soundfontToGm } from '../constants/instrume
 import { useFloatingPanel } from '../hooks/useFloatingPanel';
 
 /**
+ * DA CHE PARTE SI APRE UN MENÙ DELLA BARRA.
+ *
+ * I due pannelli a tendina (MIDI, Partitura) sono ancorati al bordo DESTRO del loro
+ * pulsante e si estendono verso sinistra. Per un gruppo che sta in fondo alla barra è la
+ * scelta giusta — verso destra uscirebbe dallo schermo — ma per uno che sta all'inizio
+ * succede il contrario: il pannello finisce oltre il bordo sinistro della finestra e si
+ * legge a metà.
+ *
+ * Non esiste un lato giusto fisso, perché LA BARRA SI RIORDINA: lo stesso gruppo può
+ * trovarsi a un'estremità o all'altra. Si guarda quindi lo spazio che c'è, al momento in
+ * cui il menù si apre.
+ */
+function useLatoDelMenu(
+    ref: React.RefObject<HTMLElement>,
+    aperto: boolean,
+    larghezzaPannello = 256,   // `min-w-64`
+): 'sinistra' | 'destra' {
+    const [lato, setLato] = useState<'sinistra' | 'destra'>('destra');
+    useEffect(() => {
+        if (!aperto) return;
+        const el = ref.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        // Ancorato a destra il pannello occuperebbe [r.right − larghezza, r.right]:
+        // se quel bordo cade fuori dalla finestra, si ancora a sinistra.
+        setLato(r.right - larghezzaPannello < 8 ? 'sinistra' : 'destra');
+    }, [aperto, ref, larghezzaPannello]);
+    return lato;
+}
+
+/**
  * COME SI CHIAMANO I GRUPPI, per chi li accende e li spegne.
  *
  * Sulla barra i gruppi non hanno un nome: si riconoscono dalle icone. In un elenco
@@ -580,6 +611,8 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
     // come il file esce verso gli altri programmi, non un'impostazione da cercare altrove.
     const midiGroupRef = useRef<HTMLDivElement>(null);
     const [isMidiGroupOpen, setIsMidiGroupOpen] = useState(false);
+    const latoMenuMidi = useLatoDelMenu(midiGroupRef, isMidiGroupOpen);
+    const latoMenuPartitura = useLatoDelMenu(moreMenuRef, isMoreMenuOpen);
     const [midiExportType, setMidiExportType] = usePreference<string>('midi.exportType');
 
     useEffect(() => {
@@ -1375,7 +1408,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     {tT('midi_label')} ⌄
                 </button>
                 {isMidiGroupOpen && (
-                    <div className="absolute right-0 top-full mt-2 min-w-64 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50">
+                    <div className={`absolute ${latoMenuMidi === 'sinistra' ? 'left-0' : 'right-0'} top-full mt-2 min-w-64 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50`}>
                     <button
                         onClick={async () => {
                             const enabled = isMidiMenuOpen || !!selectedMidiOutput;
@@ -1479,7 +1512,7 @@ const GrandStaffToolbar: React.FC<GrandStaffToolbarProps> = props => {
                     {tT('more_menu_label', { defaultValue: 'Partitura' })} ⌄
                 </button>
                 {isMoreMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 min-w-64 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50">
+                    <div className={`absolute ${latoMenuPartitura === 'sinistra' ? 'left-0' : 'right-0'} top-full mt-2 min-w-64 rounded-md bg-slate-800 border border-slate-700 shadow-lg p-1 z-50`}>
                         <button
                             onClick={() => setStaffSystemMode('grandstaff')}
                             className="w-full flex items-center justify-between rounded-md px-2 py-1 text-left text-xs transition-colors text-gray-200 hover:bg-slate-700"
